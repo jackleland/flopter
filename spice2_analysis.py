@@ -42,7 +42,7 @@ denormaliser = Denormaliser(input_filename)
 # print( tfile.keys() )
 
 # Extract relevant arrays from the matlab file
-dt = np.squeeze(tfile['dt'])
+dt = np.squeeze(tfile['dt']).tolist()
 time = denormaliser(np.squeeze(tfile['t'])[:-1], TIME)
 objects = np.squeeze(tfile['objects'])
 probe_current_e = denormaliser(np.squeeze(tfile['objectscurrente'])[2], CURRENT, additional_arg=dt)
