@@ -45,11 +45,15 @@ denormaliser = Denormaliser(input_filename)
 dt = np.squeeze(tfile['dt']).tolist()
 time = denormaliser(np.squeeze(tfile['t'])[:-1], TIME)
 objects = np.squeeze(tfile['objects'])
-probe_current_e = denormaliser(np.squeeze(tfile['objectscurrente'])[2], CURRENT, additional_arg=dt)
-probe_current_i = denormaliser(np.squeeze(tfile['objectscurrenti'])[2], CURRENT, additional_arg=dt)
+# probe_current_e = denormaliser(np.squeeze(tfile['objectscurrente'])[2], CURRENT, additional_arg=dt)
+# probe_current_i = denormaliser(np.squeeze(tfile['objectscurrenti'])[2], CURRENT, additional_arg=dt)
+#probe_bias = denormaliser(np.squeeze(tfile['ProbePot']), POTENTIAL)
+#qn_potential = denormaliser(np.squeeze(tfile['QnPot']), POTENTIAL)
+probe_current_e = np.squeeze(tfile['objectscurrente'])[2]
+probe_current_i = np.squeeze(tfile['objectscurrenti'])[2]
+probe_bias = np.squeeze(tfile['ProbePot'])
+qn_potential = np.squeeze(tfile['QnPot'])
 probe_current_tot = probe_current_i + probe_current_e
-probe_bias = denormaliser(np.squeeze(tfile['ProbePot']), POTENTIAL)
-qn_potential = denormaliser(np.squeeze(tfile['QnPot']), POTENTIAL)
 density = np.squeeze(tfile['rho'])
 
 # add on zeroes missing from time when diagnostics were not running and then
@@ -96,7 +100,7 @@ e_temp = 6  # eV
 I_0_sam = 32.774
 a_sam = 0.0204
 params = [I_0_sam, a_sam, v_float, e_temp]
-bounds = ([-np.inf, -np.inf, v_float - 0.01, -np.inf],
+bounds = ([-np.inf, 0, v_float - 0.01, -np.inf],
           [np.inf, np.inf, v_float, np.inf])
 
 # Parameters for the simple fitting function (no sheath expansion)
@@ -120,7 +124,7 @@ print_params(fparams_simple, fstdevs_simple, labels=["I_0", "v_float", "T_e"])
 fig = plt.figure()
 # plt.plot(V, I_i, label='Ion')
 # plt.plot(V, I_e, label='Electron')
-plt.plot(V_full, I_full, label='Untrimmed', linestyle='dashed')
+# plt.plot(V_full, I_full, label='Untrimmed', linestyle='dashed')
 plt.plot(V, I, label='Fitted section')
 plt.plot([v_float], [0.0], 'x', label=r'V$_{float}$')
 # plt.plot(V_full, I_fitted, label='Fit')
