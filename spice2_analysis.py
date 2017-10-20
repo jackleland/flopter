@@ -23,20 +23,33 @@ def simple_iv_characteristic_function(v, *parameters):
     return I_0 * (1 - np.exp(-V))
 
 
+def ion_current_sl_function(v, *parameters):
+    I_0 = parameters[0]
+    a = parameters[1]
+    return I_0 + (a*v)
+
+
 def print_params(values, errors, labels=("I_0", "a", "v_float", "T_e")):
     print("FIT PARAMETERS")
     for i in range(len(values)):
         print("{a} = {b} +/- {c}".format(a=labels[i], b=values[i], c=errors[i]))
 
 
+##################################
+#             Extract            #
+##################################
+
 spice_dir = '/home/jleland/Spice/spice2/'
-run_name = 'halfgrid'
-data_dir = spice_dir + 'bin/data/rundata/6-{a}-s/'.format(a=run_name)
+data_mount_dir = 'bin/data/'
+run_name = 'fullgridtest'
+group_name = 'tests/'
+data_dir = spice_dir + data_mount_dir + group_name + run_name + '/'
 input_dir = spice_dir + 'bin/inputs/'
+script_dir = spice_dir + 'bin/scripts/'
 tfile_pre = 't-{a}'.format(a=run_name)
 tfile_suf = '.mat'
 tfile = loadmat(data_dir + tfile_pre + tfile_suf)
-input_filename = input_dir + 'jleland.3.inp'
+input_filename = data_dir + 'jleland.2.inp'
 denormaliser = Denormaliser(input_filename)
 
 # print( tfile.keys() )
@@ -55,6 +68,11 @@ probe_bias = np.squeeze(tfile['ProbePot'])
 qn_potential = np.squeeze(tfile['QnPot'])
 probe_current_tot = probe_current_i + probe_current_e
 density = np.squeeze(tfile['rho'])
+
+
+##################################
+#             Prepare            #
+##################################
 
 # add on zeroes missing from time when diagnostics were not running and then
 # remove 1/256 of data to get an array of size len(probe_current)
@@ -76,16 +94,24 @@ I_i_full = probe_current_i[-full_length:]
 I_e_full = probe_current_e[-full_length:]
 I_full = probe_current_tot[-full_length:]
 
+##################################
+#            Trimming            #
+##################################
 
 # Cutting region definition
-trim_beg = 0.1
-trim_end = 0.5
+trim_beg = 0.05
+trim_end = 0.7
 
 # Cut off the noise in the electron saturation region
 V = V_full[int(full_length*trim_beg):int(full_length*trim_end)]
 I = I_full[int(full_length*trim_beg):int(full_length*trim_end)]
 I_e = I_e_full[int(full_length*trim_beg):int(full_length*trim_end)]
 I_i = I_i_full[int(full_length*trim_beg):int(full_length*trim_end)]
+
+##################################
+#             Fitting            #
+##################################
+
 
 # find the potential where the net current is zero using np.interp
 # v_float = np.interp(0.0, I, V)
@@ -117,18 +143,40 @@ I_fitted_simple = simple_iv_characteristic_function(V, *fparams_simple)
 fstdevs = np.sqrt(np.diag(fcov))
 fstdevs_simple = np.sqrt(np.diag(fcov_simple))
 
+##################################################
+#         Straight Line Fitting Function         #
+##################################################
+
+sl_V = np.power(np.abs(V), 0.75)
+sl_params = [I_0_sam, a_sam]
+sl_bounds = ([-np.inf, 0],
+             [np.inf, np.inf])
+
+sl_fit_params, sl_fit_cov = curve_fit(ion_current_sl_function, sl_V, I_i, p0=sl_params, bounds=sl_bounds)
+sl_I_fitted = ion_current_sl_function(sl_V, *sl_fit_params)
+sl_fstdevs = np.sqrt(np.diag(sl_fit_cov))
+
+##################################
+#             Print              #
+##################################
+
 # print fit parameters to console with errors
 print_params(fparams, fstdevs)
 print_params(fparams_simple, fstdevs_simple, labels=["I_0", "v_float", "T_e"])
+print_params(sl_fit_params, sl_fstdevs, labels=["I_0", "a"])
+
+##################################
+#              Plot              #
+##################################
 
 fig = plt.figure()
-# plt.plot(V, I_i, label='Ion')
+plt.plot(V_full, I_i_full, label='Untrimmed', linestyle='dashed')
+plt.plot(V, I_i, label='Ion')
 # plt.plot(V, I_e, label='Electron')
-# plt.plot(V_full, I_full, label='Untrimmed', linestyle='dashed')
-plt.plot(V, I, label='Fitted section')
+# plt.plot(V, I, label='Fitted section')
 plt.plot([v_float], [0.0], 'x', label=r'V$_{float}$')
 # plt.plot(V_full, I_fitted, label='Fit')
-plt.plot(V, I_fitted_simple, label='Simple')
+# plt.plot(V, I_fitted_simple, label='Simple')
 # plt.plot(V, I_sam, label='Sam\'s Params')
 plt.xlabel('V')
 plt.ylabel('I')
@@ -137,6 +185,14 @@ plt.axvline(x=v_float, color='gray', linewidth=1, linestyle='dashed')
 plt.legend()
 # plt.plot(I)
 # plt.plot(V)
+plt.show()
+
+fig1 = plt.figure()
+plt.plot(sl_V, I_i, 'x')
+plt.plot(sl_V, sl_I_fitted, label='Fitted')
+plt.xlabel(r'$|V|^{3/4}$')
+plt.ylabel(r'$I_i$')
+plt.legend()
 plt.show()
 
 # plt.plot(time, probe_current_tot)
