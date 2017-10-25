@@ -55,51 +55,11 @@ tfile = loadmat(tfile_path)
 afile = loadmat(data_dir + run_name + file_suf)
 input_filename = input_dir + 'jleland.3.inp'
 # input_filename = data_dir + 'jleland.2.inp'
+
+# create flopter objects
 parser = InputParser(input_filename=input_filename)
 denormaliser = Denormaliser(input_parser=parser)
 homogeniser = Spice2Homogeniser(denormaliser=denormaliser, data=tfile)
-
-# print( tfile.keys() )
-
-# # Extract relevant arrays from the matlab file
-# dt = np.squeeze(tfile['dt']).tolist()
-# time = denormaliser(np.squeeze(tfile['t'])[:-1], TIME)
-# objects = np.squeeze(tfile['objects'])
-# # probe_current_e = denormaliser(np.squeeze(tfile['objectscurrente'])[2], CURRENT, additional_arg=dt)
-# # probe_current_i = denormaliser(np.squeeze(tfile['objectscurrenti'])[2], CURRENT, additional_arg=dt)
-# #probe_bias = denormaliser(np.squeeze(tfile['ProbePot']), POTENTIAL)
-# #qn_potential = denormaliser(np.squeeze(tfile['QnPot']), POTENTIAL)
-# probe_current_e = np.squeeze(tfile['objectscurrente'])[2]
-# probe_current_i = np.squeeze(tfile['objectscurrenti'])[2]
-# probe_bias = np.squeeze(tfile['ProbePot'])
-# qn_potential = np.squeeze(tfile['QnPot'])
-# probe_current_tot = probe_current_i + probe_current_e
-# density = np.squeeze(tfile['rho'])
-
-
-# ##################################
-# #             Prepare            #
-# ##################################
-#
-# # add on zeroes missing from time when diagnostics were not running and then
-# # remove 1/256 of data to get an array of size len(probe_current)
-# leading_zeroes = np.zeros(len(probe_bias), dtype=np.int)
-# probe_bias_double = np.concatenate([leading_zeroes, probe_bias])[0:-256:256]
-#
-# t_shape = np.shape(time)
-# pct_shape = np.shape(probe_current_tot)
-# pb_shape = np.shape(probe_bias)
-#
-# t_max = np.max(time)
-# t_min = np.min(time)
-# time_alt = np.linspace(t_min, t_max, pb_shape[0])
-
-# # Extract the voltage and current for the sweeping region.
-# V_full = np.trim_zeros(probe_bias_double, 'f')
-# full_length = len(V_full)
-# I_i_full = probe_current_i[-full_length:]
-# I_e_full = probe_current_e[-full_length:]
-# I_full = probe_current_tot[-full_length:]
 
 iv_data, raw_data = homogeniser.homogenise()
 
