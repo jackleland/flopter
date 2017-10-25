@@ -2,6 +2,8 @@ from scipy.io import loadmat
 from scipy import interpolate
 from scipy.optimize import curve_fit
 from normalisation import Denormaliser, TIME, LENGTH, POTENTIAL, CURRENT
+from homogeniser import Spice2Homogeniser
+from inputparser import InputParser
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -40,59 +42,66 @@ def print_params(values, errors, labels=("I_0", "a", "v_float", "T_e")):
 ##################################
 
 spice_dir = '/home/jleland/Spice/spice2/'
-data_mount_dir = 'bin/data/'
-run_name = 'fullgridtest'
-group_name = 'tests/'
+data_mount_dir = 'bin/data_f/'
+run_name = 'halfgrid'
+group_name = 'rundata/6-s-'
 data_dir = spice_dir + data_mount_dir + group_name + run_name + '/'
 input_dir = spice_dir + 'bin/inputs/'
 script_dir = spice_dir + 'bin/scripts/'
+file_suf = '.mat'
 tfile_pre = 't-{a}'.format(a=run_name)
-tfile_suf = '.mat'
-tfile = loadmat(data_dir + tfile_pre + tfile_suf)
-input_filename = data_dir + 'jleland.2.inp'
-denormaliser = Denormaliser(input_filename)
+tfile_path = data_dir + tfile_pre + file_suf
+tfile = loadmat(tfile_path)
+afile = loadmat(data_dir + run_name + file_suf)
+input_filename = input_dir + 'jleland.3.inp'
+# input_filename = data_dir + 'jleland.2.inp'
+parser = InputParser(input_filename=input_filename)
+denormaliser = Denormaliser(input_parser=parser)
+homogeniser = Spice2Homogeniser(denormaliser=denormaliser, data=tfile)
 
 # print( tfile.keys() )
 
-# Extract relevant arrays from the matlab file
-dt = np.squeeze(tfile['dt']).tolist()
-time = denormaliser(np.squeeze(tfile['t'])[:-1], TIME)
-objects = np.squeeze(tfile['objects'])
-# probe_current_e = denormaliser(np.squeeze(tfile['objectscurrente'])[2], CURRENT, additional_arg=dt)
-# probe_current_i = denormaliser(np.squeeze(tfile['objectscurrenti'])[2], CURRENT, additional_arg=dt)
-#probe_bias = denormaliser(np.squeeze(tfile['ProbePot']), POTENTIAL)
-#qn_potential = denormaliser(np.squeeze(tfile['QnPot']), POTENTIAL)
-probe_current_e = np.squeeze(tfile['objectscurrente'])[2]
-probe_current_i = np.squeeze(tfile['objectscurrenti'])[2]
-probe_bias = np.squeeze(tfile['ProbePot'])
-qn_potential = np.squeeze(tfile['QnPot'])
-probe_current_tot = probe_current_i + probe_current_e
-density = np.squeeze(tfile['rho'])
+# # Extract relevant arrays from the matlab file
+# dt = np.squeeze(tfile['dt']).tolist()
+# time = denormaliser(np.squeeze(tfile['t'])[:-1], TIME)
+# objects = np.squeeze(tfile['objects'])
+# # probe_current_e = denormaliser(np.squeeze(tfile['objectscurrente'])[2], CURRENT, additional_arg=dt)
+# # probe_current_i = denormaliser(np.squeeze(tfile['objectscurrenti'])[2], CURRENT, additional_arg=dt)
+# #probe_bias = denormaliser(np.squeeze(tfile['ProbePot']), POTENTIAL)
+# #qn_potential = denormaliser(np.squeeze(tfile['QnPot']), POTENTIAL)
+# probe_current_e = np.squeeze(tfile['objectscurrente'])[2]
+# probe_current_i = np.squeeze(tfile['objectscurrenti'])[2]
+# probe_bias = np.squeeze(tfile['ProbePot'])
+# qn_potential = np.squeeze(tfile['QnPot'])
+# probe_current_tot = probe_current_i + probe_current_e
+# density = np.squeeze(tfile['rho'])
 
 
-##################################
-#             Prepare            #
-##################################
+# ##################################
+# #             Prepare            #
+# ##################################
+#
+# # add on zeroes missing from time when diagnostics were not running and then
+# # remove 1/256 of data to get an array of size len(probe_current)
+# leading_zeroes = np.zeros(len(probe_bias), dtype=np.int)
+# probe_bias_double = np.concatenate([leading_zeroes, probe_bias])[0:-256:256]
+#
+# t_shape = np.shape(time)
+# pct_shape = np.shape(probe_current_tot)
+# pb_shape = np.shape(probe_bias)
+#
+# t_max = np.max(time)
+# t_min = np.min(time)
+# time_alt = np.linspace(t_min, t_max, pb_shape[0])
 
-# add on zeroes missing from time when diagnostics were not running and then
-# remove 1/256 of data to get an array of size len(probe_current)
-leading_zeroes = np.zeros(len(probe_bias), dtype=np.int)
-probe_bias_double = np.concatenate([leading_zeroes, probe_bias])[0:-256:256]
+# # Extract the voltage and current for the sweeping region.
+# V_full = np.trim_zeros(probe_bias_double, 'f')
+# full_length = len(V_full)
+# I_i_full = probe_current_i[-full_length:]
+# I_e_full = probe_current_e[-full_length:]
+# I_full = probe_current_tot[-full_length:]
 
-t_shape = np.shape(time)
-pct_shape = np.shape(probe_current_tot)
-pb_shape = np.shape(probe_bias)
-
-t_max = np.max(time)
-t_min = np.min(time)
-time_alt = np.linspace(t_min, t_max, pb_shape[0])
-
-# Extract the voltage and current for the sweeping region.
-V_full = np.trim_zeros(probe_bias_double, 'f')
-full_length = len(V_full)
-I_i_full = probe_current_i[-full_length:]
-I_e_full = probe_current_e[-full_length:]
-I_full = probe_current_tot[-full_length:]
+iv_data, raw_data = homogeniser.homogenise()
 
 ##################################
 #            Trimming            #
@@ -103,10 +112,11 @@ trim_beg = 0.05
 trim_end = 0.7
 
 # Cut off the noise in the electron saturation region
-V = V_full[int(full_length*trim_beg):int(full_length*trim_end)]
-I = I_full[int(full_length*trim_beg):int(full_length*trim_end)]
-I_e = I_e_full[int(full_length*trim_beg):int(full_length*trim_end)]
-I_i = I_i_full[int(full_length*trim_beg):int(full_length*trim_end)]
+full_length = len(iv_data['V'])
+V = iv_data['V'][int(full_length*trim_beg):int(full_length*trim_end)]
+I = iv_data['I'][int(full_length*trim_beg):int(full_length*trim_end)]
+I_e = iv_data['I_e'][int(full_length*trim_beg):int(full_length*trim_end)]
+I_i = iv_data['I_i'][int(full_length*trim_beg):int(full_length*trim_end)]
 
 ##################################
 #             Fitting            #
@@ -138,7 +148,7 @@ I_sam = iv_characteristic_function(V, *params)
 # Run fitting algorithm and create fitted function array
 fparams, fcov = curve_fit(iv_characteristic_function, V, I, p0=params, bounds=bounds)
 fparams_simple, fcov_simple = curve_fit(simple_iv_characteristic_function, V, I, p0=params_simple, bounds=bounds_simple)
-I_fitted = iv_characteristic_function(V_full, *fparams)
+I_fitted = iv_characteristic_function(iv_data['V'], *fparams)
 I_fitted_simple = simple_iv_characteristic_function(V, *fparams_simple)
 fstdevs = np.sqrt(np.diag(fcov))
 fstdevs_simple = np.sqrt(np.diag(fcov_simple))
@@ -170,7 +180,7 @@ print_params(sl_fit_params, sl_fstdevs, labels=["I_0", "a"])
 ##################################
 
 fig = plt.figure()
-plt.plot(V_full, I_i_full, label='Untrimmed', linestyle='dashed')
+plt.plot(iv_data['V'], iv_data['I_i'], label='Untrimmed', linestyle='dashed')
 plt.plot(V, I_i, label='Ion')
 # plt.plot(V, I_e, label='Electron')
 # plt.plot(V, I, label='Fitted section')
@@ -185,7 +195,7 @@ plt.axvline(x=v_float, color='gray', linewidth=1, linestyle='dashed')
 plt.legend()
 # plt.plot(I)
 # plt.plot(V)
-plt.show()
+# plt.show()
 
 fig1 = plt.figure()
 plt.plot(sl_V, I_i, 'x')
