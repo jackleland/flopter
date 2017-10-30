@@ -77,6 +77,10 @@ class Converter(ABC):
     def _convert_time(self, time):
         pass
 
+    @abstractmethod
+    def _convert_density(self, density):
+        pass
+
 
 class Denormaliser(Converter):
     """
@@ -85,12 +89,13 @@ class Denormaliser(Converter):
     Stores an input parser object containing the used input file and then builds conversion values from this.
     """
 
-    def __init__(self, input_parser=None, input_filename=None):
+    def __init__(self, dimensions=2, input_parser=None, input_filename=None):
         """
         Creates a denormaliser object by using InputParser to parse an input file for some parameters (principally n_e,
         T_e, B and N_pc) which are needed for the denormalisation process.
 
         InputParser either passed directly or created from a filename
+        :param dimensions           Int - specify the number of dimensions to be used for calculation of areas/volumes
         :param [input_parser]:      InputParser object to be used, must have already read the commented section.
         :param [input_filename]:    Directory of input file to be parsed
         """
@@ -102,24 +107,32 @@ class Denormaliser(Converter):
         else:
             raise ValueError('No valid InputParser object given or able to be created')
 
+        if dimensions in [2, 3]:
+            self.dimensions = dimensions
+        else:
+            raise ValueError('Number of dimensions should be 2 or 3')
+
         self.simulation_params = self.parser.get_commented_params()
         self.debye_length = np.sqrt((_EPSILON_0 * self.simulation_params['T_e'])
                                     / (_ELEM_CHARGE * self.simulation_params['n_e']))
         self.omega_i = ((_ELEM_CHARGE * self.simulation_params['B'])
                         / _ION_MASS)
+        self.K = (self.simulation_params['n_e'] * self.debye_length**self.dimensions) / float(self.parser.get('geom', 'Npc')[:-1])
 
     def _convert_potential(self, potential):
         return potential * (self.simulation_params['T_e'])
 
     def _convert_current(self, current, dt):
-        K = (self.simulation_params['n_e'] * self.debye_length**3) / float(self.parser.get('geom', 'Npc')[:-1])
-        return ((_ELEM_CHARGE * K * self.omega_i) / dt) * current
+        return ((_ELEM_CHARGE * self.K * self.omega_i) / dt) * current
 
     def _convert_length(self, length):
         return self.debye_length * length
 
     def _convert_time(self, time):
         return self.omega_i * time
+
+    def _convert_density(self, density):
+        return self.simulation_params['n_e'] * density
 
 
 class Normaliser(Converter):
@@ -140,3 +153,6 @@ class Normaliser(Converter):
 
     def _convert_potential(self, potential):
         super()._convert_potential(potential)
+
+    def _convert_density(self, density):
+        super()._convert_density(density)
