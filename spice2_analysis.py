@@ -6,6 +6,7 @@ from homogeniser import Spice2Homogeniser
 from inputparser import InputParser
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 
 def iv_characteristic_function(v, *parameters):
@@ -28,7 +29,7 @@ def simple_iv_characteristic_function(v, *parameters):
 def ion_current_sl_function(v, *parameters):
     I_0 = parameters[0]
     a = parameters[1]
-    return I_0 + (a*v)
+    return I_0 *(1 + (a*v))
 
 
 def print_params(values, errors, labels=("I_0", "a", "v_float", "T_e")):
@@ -37,24 +38,62 @@ def print_params(values, errors, labels=("I_0", "a", "v_float", "T_e")):
         print("{a} = {b} +/- {c}".format(a=labels[i], b=values[i], c=errors[i]))
 
 
+def get_runnames(data_dir):
+    run_name = data_dir.split(os.sep)[-2]
+    print(run_name)
+    return 'noga', 'nogaph'
+
+
 ##################################
 #             Extract            #
 ##################################
 
+# Constants(ish)
 spice_dir = '/home/jleland/Spice/spice2/'
-data_mount_dir = 'bin/data_f/'
-run_name = 'halfgrid'
-group_name = 'rundata/6-s-'
-data_dir = spice_dir + data_mount_dir + group_name + run_name + '/'
 input_dir = spice_dir + 'bin/inputs/'
 script_dir = spice_dir + 'bin/scripts/'
+
+# # Run specific data
+# data_mount_dir = 'bin/data/'
+# group_name = 'benchmarking_sam/'
+# folder_name = 'gapless_fullgrid/'
+# data_dir = spice_dir + data_mount_dir + group_name + folder_name
+
+# ------------------- Run specific data ------------------- #
+
+# Cumulus
+data_mount_dir = 'bin/data/'
+# group_name = 'tests/'
+# folder_name = 'fullgridtest/'
+# folder_name = 'reversed_charge/'
+
+group_name = 'benchmarking_sam/'
+folder_name = 'gapless_fullgrid/'
+# folder_name = 'gapless_halfgrid1/'
+# folder_name = 'gapless_halfgrid2/'
+# folder_name = 'nogaphalfgrid_tlong1/'
+
+# Freia
+# data_mount_dir = 'bin/data_f/'
+# group_name = 'rundata'
+# folder/name '6-s-halfgrid'
+
+
+data_dir = spice_dir + data_mount_dir + group_name + folder_name
+
+# input_filename = input_dir + 'jleland.3.inp'
+# input_filename = input_dir + 'jleland.2.inp'
+input_filename = data_dir + 's_benchmarking_nogap.inp'
+# input_filename = data_dir + 'reversede_ng_hg_sbm.inp'
+
+run_name = 'gapless_'
+ext_run_name = 'gapless_fu'
 file_suf = '.mat'
 tfile_pre = 't-{a}'.format(a=run_name)
 tfile_path = data_dir + tfile_pre + file_suf
+afile_path = data_dir + ext_run_name + file_suf
 tfile = loadmat(tfile_path)
-afile = loadmat(data_dir + run_name + file_suf)
-input_filename = input_dir + 'jleland.3.inp'
-# input_filename = data_dir + 'jleland.2.inp'
+afile = loadmat(afile_path)
 
 # create flopter objects
 parser = InputParser(input_filename=input_filename)
@@ -69,7 +108,7 @@ iv_data, raw_data = homogeniser.homogenise()
 
 # Cutting region definition
 trim_beg = 0.05
-trim_end = 0.7
+trim_end = 0.35
 
 # Cut off the noise in the electron saturation region
 full_length = len(iv_data['V'])
@@ -85,7 +124,7 @@ I_i = iv_data['I_i'][int(full_length*trim_beg):int(full_length*trim_end)]
 
 # find the potential where the net current is zero using np.interp
 # v_float = np.interp(0.0, I, V)
-iv_interp = interpolate.interp1d(I, V)
+iv_interp = interpolate.interp1d(iv_data['I'], iv_data['V'])
 v_float = iv_interp(0.0)
 
 print('v_float = {a}'.format(a=v_float))
@@ -140,16 +179,16 @@ print_params(sl_fit_params, sl_fstdevs, labels=["I_0", "a"])
 ##################################
 
 fig = plt.figure()
-plt.plot(iv_data['V'], iv_data['I_i'], label='Untrimmed', linestyle='dashed')
-plt.plot(V, I_i, label='Ion')
+plt.plot(iv_data['V'], iv_data['I'], label='Untrimmed', linestyle='dashed')
+# plt.plot(V, I_i, label='Ion')
 # plt.plot(V, I_e, label='Electron')
-# plt.plot(V, I, label='Fitted section')
+plt.plot(V, I, label='Fitted section')
 plt.plot([v_float], [0.0], 'x', label=r'V$_{float}$')
 # plt.plot(V_full, I_fitted, label='Fit')
 # plt.plot(V, I_fitted_simple, label='Simple')
 # plt.plot(V, I_sam, label='Sam\'s Params')
-plt.xlabel('V')
-plt.ylabel('I')
+plt.xlabel(r'$\hat{V}$')
+plt.ylabel(r'$\hat{I}$')
 plt.axhline(y=0, color='gray', linewidth=1, linestyle='dashed')
 plt.axvline(x=v_float, color='gray', linewidth=1, linestyle='dashed')
 plt.legend()
