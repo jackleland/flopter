@@ -49,8 +49,14 @@ class Homogeniser(ABC):
     def set_filename(self, filename):
         self.filename = filename
 
+    def get_filename(self):
+        return self.filename
+
     def set_data(self, data):
         self.data = data
+
+    def get_data(self):
+        return self.data
 
     def _prehomogenise_checks(self):
         if not self.data and isinstance(self.filename, (str, os.PathLike)):
@@ -112,7 +118,7 @@ class Spice2Homogeniser(Homogeniser):
         ##################################
 
         # add on zeroes missing from time when diagnostics were not running and then
-        # remove 1/256 of data to get an array of size len(probe_current)
+        # down-sample to get an array the same size as probe_current
         n = len(probe_bias)
         M = len(probe_current_tot)
         N, r = self.get_scaling_values(n, M)
@@ -120,6 +126,7 @@ class Spice2Homogeniser(Homogeniser):
 
         leading_zeroes = np.zeros(N, dtype=np.int)
         probe_bias_double = np.concatenate([leading_zeroes, probe_bias])[0:-r:r]
+        raw_data = IVData(probe_bias_double, probe_current_tot, time, e_current=probe_current_e, i_current=probe_current_i)
 
         # Extract the voltage and current for the sweeping region.
         V_full = np.trim_zeros(probe_bias_double, 'f')
@@ -130,7 +137,7 @@ class Spice2Homogeniser(Homogeniser):
 
         iv_data = IVData(V_full, I_full, time, e_current=I_e_full, i_current=I_i_full)
 
-        return iv_data, self.data
+        return iv_data, raw_data
 
     def get_probe_index(self):
         """
