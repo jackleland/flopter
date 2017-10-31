@@ -129,7 +129,7 @@ class Denormaliser(Converter):
         return self.debye_length * length
 
     def _convert_time(self, time):
-        return self.omega_i * time
+        return (1 / self.omega_i) * time
 
     def _convert_density(self, density):
         return self.simulation_params['n_e'] * density
