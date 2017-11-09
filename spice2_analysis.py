@@ -63,12 +63,13 @@ script_dir = spice_dir + 'bin/scripts/'
 
 # Cumulus
 data_mount_dir = 'bin/data/'
-# group_name = 'tests/'
-# folder_name = 'fullgridtest/'
+group_name = 'tests/'
+# folder_name = 'fullgridtest/'         # gapped fullgrid
 # folder_name = 'reversed_charge/'
+folder_name = 'prebiased_probe/'
 
-group_name = 'benchmarking_sam/'
-folder_name = 'gapless_fullgrid/'
+# group_name = 'benchmarking_sam/'
+# folder_name = 'gapless_fullgrid/'
 # folder_name = 'gapless_halfgrid1/'
 # folder_name = 'gapless_halfgrid2/'
 # folder_name = 'nogaphalfgrid_tlong1/'
@@ -83,11 +84,12 @@ data_dir = spice_dir + data_mount_dir + group_name + folder_name
 
 # input_filename = input_dir + 'jleland.3.inp'
 # input_filename = input_dir + 'jleland.2.inp'
-input_filename = data_dir + 's_benchmarking_nogap.inp'
+# input_filename = data_dir + 's_benchmarking_nogap.inp'
 # input_filename = data_dir + 'reversede_ng_hg_sbm.inp'
+input_filename = data_dir + 'prebiasprobe_ng_hg_sbm.inp'
 
-run_name = 'gapless_'
-ext_run_name = 'gapless_fu'
+run_name = 'prebiased_probe'
+ext_run_name = 'prebiased_probe'
 file_suf = '.mat'
 tfile_pre = 't-{a}'.format(a=run_name)
 tfile_path = data_dir + tfile_pre + file_suf
@@ -179,7 +181,9 @@ print_params(sl_fit_params, sl_fstdevs, labels=["I_0", "a"])
 ##################################
 
 fig = plt.figure()
-plt.plot(iv_data['V'], iv_data['I'], label='Untrimmed', linestyle='dashed')
+plt.plot(iv_data['V'][:-1], iv_data['I'][:-1], label='Untrimmed', linestyle='dashed')
+plt.plot(iv_data['V'][:-1], iv_data['I_e'][:-1], label='Untrimmed e')
+plt.plot(iv_data['V'][:-1], iv_data['I_i'][:-1], label='Untrimmed i')
 # plt.plot(V, I_i, label='Ion')
 # plt.plot(V, I_e, label='Electron')
 plt.plot(V, I, label='Fitted section')
@@ -192,8 +196,6 @@ plt.ylabel(r'$\hat{I}$')
 plt.axhline(y=0, color='gray', linewidth=1, linestyle='dashed')
 plt.axvline(x=v_float, color='gray', linewidth=1, linestyle='dashed')
 plt.legend()
-# plt.plot(I)
-# plt.plot(V)
 # plt.show()
 
 fig1 = plt.figure()
@@ -202,9 +204,16 @@ plt.plot(sl_V, sl_I_fitted, label='Fitted')
 plt.xlabel(r'$|V|^{3/4}$')
 plt.ylabel(r'$I_i$')
 plt.legend()
-plt.show()
-
-# plt.plot(time, probe_current_tot)
-# plt.plot(time, probe_bias_double)
-# plt.plot(time_alt, probe_bias)
 # plt.show()
+
+######################
+#    Raw Data Plot   #
+######################
+
+fig2 = plt.figure()
+plt.plot(iv_data['t'][:-1], raw_data['V'][:-1], label='Raw Voltage')
+# plt.plot(iv_data['t'], raw_data['I'], label='Raw Current')
+plt.plot(iv_data['t'][:-1], raw_data['I_e'][:-1], label='Raw Electron Current')
+plt.plot(iv_data['t'][:-1], raw_data['I_i'][:-1], label='Raw Ion Current')
+plt.legend()
+plt.show()
