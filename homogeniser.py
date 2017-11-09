@@ -87,6 +87,10 @@ class Homogeniser(ABC):
 
 class Spice2Homogeniser(Homogeniser):
 
+    _SWEEP_LOWER = -9.95
+    _SWEEP_UPPER = 10.05
+    _PROBE_PARAMETER = 3
+
     def __init__(self, input_filename=None, denormaliser=None, **kwargs):
         super().__init__('Spice2', **kwargs)
         self.input_filename = input_filename
@@ -113,31 +117,29 @@ class Spice2Homogeniser(Homogeniser):
         probe_bias = np.squeeze(self.data['ProbePot'])
         probe_current_tot = probe_current_i + probe_current_e
 
-        ##################################
-        #             Prepare            #
-        ##################################
-
-        # add on zeroes missing from time when diagnostics were not running and then
+        # Prepend missing elements to make array cover the same timespan as the builtin diagnostics and then
         # down-sample to get an array the same size as probe_current
         n = len(probe_bias)
         M = len(probe_current_tot)
         N, r = self.get_scaling_values(n, M)
         print(N, r)
 
-        leading_zeroes = np.zeros(N, dtype=np.int)
-        probe_bias_double = np.concatenate([leading_zeroes, probe_bias])[0:-r:r]
-        raw_data = IVData(probe_bias_double, probe_current_tot, time, e_current=probe_current_e, i_current=probe_current_i)
+        leading_values = np.zeros(N, dtype=np.int) + probe_bias[0]
+        probe_bias_extended = np.concatenate([leading_values, probe_bias])[0:-r:r]
 
         # Extract the voltage and current for the sweeping region.
-        V_full = np.trim_zeros(probe_bias_double, 'f')
-        full_length = len(V_full)
-        I_i_full = probe_current_i[-full_length:]
-        I_e_full = probe_current_e[-full_length:]
-        I_full = probe_current_tot[-full_length:]
+        sweep_length = self.get_sweep_length(M, probe_bias_extended)
+        V_sweep = probe_bias_extended[sweep_length:]
+        I_i_sweep = probe_current_i[sweep_length:]
+        I_e_sweep = probe_current_e[sweep_length:]
+        I_sweep = probe_current_tot[sweep_length:]
 
-        iv_data = IVData(V_full, I_full, time, e_current=I_e_full, i_current=I_i_full)
+        sweep_data = IVData(V_sweep, I_sweep, time,
+                            e_current=I_e_sweep, i_current=I_i_sweep)
+        raw_data = IVData(probe_bias_extended, probe_current_tot, time,
+                          e_current=probe_current_e, i_current=probe_current_i)
 
-        return iv_data, raw_data
+        return sweep_data, raw_data
 
     def get_probe_index(self):
         """
@@ -155,7 +157,7 @@ class Spice2Homogeniser(Homogeniser):
                 shape_name = shape[:-1]
                 for i in range(n_shape):
                     section = self.parser[shape_name + str(i)]
-                    if int(section['param1']) == 3:
+                    if int(section['param1']) == self._PROBE_PARAMETER:
                         return (n - n_shape) + i
         raise ValueError('Could not find a shape set to sweep voltage')
 
@@ -163,8 +165,8 @@ class Spice2Homogeniser(Homogeniser):
         """
         Calculates the scaling values (n' and r) which are needed to extend the diagnostic outputs to the right length
         and downsample them.
-        :param len_diag:    length of raw diagnostic output array
-        :param len_builtin: length of builtin output array
+        :param len_diag:    length of raw diagnostic output array   (n)
+        :param len_builtin: length of builtin output array          (M)
         :return n_leading:  size of array to prepend onto the diagnostic array
         :return ratio:      ratio of extended diagnostic output array to builtin output array (e.g. objectscurrent):
         """
@@ -176,6 +178,26 @@ class Spice2Homogeniser(Homogeniser):
         n_leading = t * len_diag / (1 - t)
         ratio = len_diag/(len_builtin*(1-t))
         return int(n_leading), int(ratio)
+
+    def get_sweep_length(self, len_builtin, raw_voltage):
+        t_a = self.parser.getfloat('geom', 'ta')
+        t_p = self.parser.getfloat('geom', 'tp')
+        # t_a as a fraction of whole time
+        t = t_a / t_p
+
+        sweep_length = int(t * len_builtin)
+
+        initial_v = raw_voltage[0]
+        if not self._is_within_bounds(initial_v, self._SWEEP_LOWER):
+            corr_sweep_length = sweep_length
+            while raw_voltage[corr_sweep_length] == initial_v and corr_sweep_length < len(raw_voltage):
+                corr_sweep_length += 1
+            sweep_length = corr_sweep_length
+        return sweep_length
+
+    @staticmethod
+    def _is_within_bounds(value, comparison):
+        return (value > comparison - 0.01) and (value < comparison + 0.01)
 
     def get_probe_geometry(self):
         # TODO: (25/10/2017) Write function to retrieve probe geometry from parser. Probably requires the definition
