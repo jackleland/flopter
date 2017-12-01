@@ -25,6 +25,12 @@ class IVData(dict):
         if i_current is not None:
             self['I_i'] = i_current
 
+    def split(self):
+        if 'I_i' in self.keys():
+            return self['V'], self['I'], self['I_i']
+        else:
+            return self['V'], self['I']
+
 
 class Homogeniser(ABC):
     """

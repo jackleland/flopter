@@ -10,6 +10,7 @@ LENGTH = 'length'
 TIME = 'time'
 
 # Physical constants
+_BOLTZMANN = 1.38064852e-23  # m^2 kg s^-2 K^-1
 _EPSILON_0 = 8.85418782e-12  # m^-3 kg^-1 s^4 A^2
 _ELEM_CHARGE = 1.60217662e-19 # C
 _PROTON_MASS = 1.6726219e-27 # kg
