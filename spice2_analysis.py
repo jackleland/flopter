@@ -2,7 +2,8 @@ from scipy.io import loadmat
 from scipy import interpolate
 from scipy.optimize import curve_fit
 from normalisation import Denormaliser, TIME, LENGTH, POTENTIAL, CURRENT
-from homogeniser import Spice2Homogeniser, IVData
+from homogeniser import Spice2Homogeniser
+from datatypes import IVData, IVFitData
 from inputparser import InputParser
 import matplotlib.pyplot as plt
 import numpy as np
@@ -36,6 +37,7 @@ def print_params(values, errors, labels=("I_0", "a", "v_float", "T_e")):
     print("FIT PARAMETERS")
     for i in range(len(values)):
         print("{a} = {b} +/- {c}".format(a=labels[i], b=values[i], c=errors[i]))
+    print("")
 
 
 def get_runnames(data_dir):
@@ -45,7 +47,6 @@ def get_runnames(data_dir):
 
 
 class Flopter(object):
-
     def __init__(self, data_mount_dir, group_name, folder_name, run_name='prebpro', ext_run_name='prebprobe'):
         ##################################
         #             Extract            #
@@ -142,7 +143,8 @@ class Flopter(object):
         V, I, I_i = iv_data.split()
         v_float = self.get_vf()
 
-        print('v_float = {a}'.format(a=v_float))
+        if print_fl:
+            print('v_float = {a}'.format(a=v_float))
         e_temp = 1  # eV
         I_0_sam = 32.774
         a_sam = 0.0204
@@ -159,7 +161,7 @@ class Flopter(object):
             fstdevs = np.sqrt(np.diag(fcov))
             if print_fl:
                 print_params(fparams, fstdevs)
-            return V, I_fitted, fparams, fstdevs
+            return IVFitData(V, I, I_fitted, fparams, fstdevs, iv_characteristic_function)
 
         if fit_simple:
             # Parameters for the simple fitting function (no sheath expansion)
@@ -192,18 +194,18 @@ class Flopter(object):
             sl_fstdevs = np.sqrt(np.diag(sl_fit_cov))
             if print_fl:
                 print_params(sl_fit_params, sl_fstdevs, labels=["I_0", "a"])
-            return sl_V, sl_I_fitted, sl_fit_params, sl_fstdevs
-
-##################################
-#             Print              #
-##################################
-
-# print fit parameters to console with errors
-# print_params(sl_fit_params, sl_fstdevs, labels=["I_0", "a"])
+            return IVFitData(sl_V, I_i, sl_I_fitted, sl_fit_params, sl_fstdevs, iv_characteristic_function)
 
 ##################################
 #              Plot              #
 ##################################
+    AX_LABEL_IV = 'IV'
+    AX_LABEL_ION_FIT = 'Ion Current'
+    _AXES_LABELS = {
+        AX_LABEL_IV: [r'$\hat{V}$', r'$\hat{I}$'],
+        AX_LABEL_ION_FIT: [r'$|\hat{V}|^{3/4}$', r'$\hat{I}_i$'],
+    }
+
     def plot_iv(self, fig=None, iv_data=None, plot_vf=False, plot_tot=False, plot_i=False, plot_e=False,
                 label='Total', is_final=False):
         if not fig:
@@ -240,12 +242,13 @@ class Flopter(object):
         if is_final:
             plt.show()
 
-    def plot_f_fit(self, V, I, I_fitted, fig=None, label='', plot_vf=True):
+    def plot_f_fit(self, iv_fit_data, fig=None, label=None, plot_raw=True, plot_vf=True):
         if not fig:
-            fig = plt.figure()
+            plt.figure()
 
-        plt.plot(V, I, 'x')
-        plt.plot(V, I_fitted, label='{}Fitted'.format(label))
+        if plot_raw:
+            plt.plot(*iv_fit_data.get_raw_plottables(), 'x')
+        plt.plot(*iv_fit_data.get_fit_plottables(), label=label)
 
         plt.axhline(y=0, color='gray', linewidth=1, linestyle='dashed')
         if plot_vf:
@@ -253,16 +256,17 @@ class Flopter(object):
             plt.plot([v_float], [0.0], 'x', label=r'V$_{float}$')
             plt.axvline(x=v_float, color='gray', linewidth=1, linestyle='dashed')
 
-        plt.xlabel(r'$\hat{V}$')
-        plt.ylabel(r'$\hat{I}$')
-        plt.legend()
+        plt.xlabel(self._AXES_LABELS[self.AX_LABEL_IV][0])
+        plt.ylabel(self._AXES_LABELS[self.AX_LABEL_IV][1])
+        if label:
+            plt.legend()
 
-    def plot_i_fit(self, sl_V, I_i, I_fitted, fig=None, label=''):
+    def plot_i_fit(self, iv_fit_data, fig=None, label='', axes=None):
         if not fig:
             fig = plt.figure()
 
-        plt.plot(sl_V, I_i, 'x')
-        plt.plot(sl_V, I_fitted, label='{}Fitted'.format(label))
+        plt.plot(*iv_fit_data.get_raw_plottables(), 'x')
+        plt.plot(*iv_fit_data.get_fit_plottables(), label=label)
         plt.xlabel(r'$|V|^{3/4}$')
         plt.ylabel(r'$I_i$')
         # plt.legend()
@@ -292,8 +296,44 @@ class Flopter(object):
         plt.show()
 
 
-if __name__ == '__main__':
+def run_param_scan():
+    flopter_gap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
+    # flopter_nogap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', run_name='prebp', ext_run_name='prebpro')
 
+    ivdata_g = flopter_gap.trim(trim_end=0.8)
+    # ivdata_ng = flopter_nogap.trim()
+
+    fig = plt.figure()
+    flopter_gap.plot_iv(iv_data=ivdata_g, fig=fig, plot_tot=True, label='Gap')
+    n_params = 4
+    params = [[]]*n_params
+    errors = [[]]*n_params
+    trim_space = np.linspace(0.4, 0.5, 11)
+    print(params)
+    for trim_end in trim_space:
+        ivdata = flopter_gap.trim(trim_end=trim_end)
+        ivfitdata = flopter_gap.fit(ivdata, fit_full=True)
+        flopter_gap.plot_f_fit(ivfitdata, fig=fig, plot_raw=False, plot_vf=False, label=str(trim_end))
+        fit_params, fit_errors = ivfitdata.get_fit_params()
+        for i in range(n_params):
+            if len(params[i]) == 0:
+                params[i] = [fit_params[i]]
+            else:
+                params[i].append(fit_params[i])
+            if len(errors[i]) == 0:
+                errors[i] = [min(fit_errors[i], fit_params[i])]
+            else:
+                errors[i].append(min(fit_errors[i], fit_params[i]))
+
+    for j in range(n_params):
+        plt.figure()
+        print(np.shape(trim_space))
+        print(np.shape(params[j]))
+        print(np.shape(errors[j]))
+        plt.errorbar(trim_space, params[j], yerr=errors[j])
+    plt.show()
+
+def run_gap_nogap_comparison():
     flopter_gap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
     flopter_nogap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', run_name='prebp', ext_run_name='prebpro')
 
@@ -313,16 +353,17 @@ if __name__ == '__main__':
     flopter_gap.plot_iv(fig=fig1, plot_tot=True, label='Gap')
     flopter_nogap.plot_iv(fig=fig1, plot_vf=True, plot_tot=True, label='No Gap')
 
-    fig3 = plt.figure()
-    flopter_gap.plot_f_fit(ffit_g2[0], ivdata_g2['I'], ffit_g2[1], fig=fig3, label='Gap ', plot_vf=False)
-    flopter_nogap.plot_f_fit(ffit_ng2[0], ivdata_ng2['I'], ffit_ng2[1], fig=fig3, label='No Gap ')
-
-
     fig2 = plt.figure()
-    flopter_gap.plot_i_fit(ifit_g[0], ivdata_g['I_i'], ifit_g[1], fig=fig2, label='Gap ')
-    flopter_nogap.plot_i_fit(ifit_ng[0], ivdata_ng['I_i'], ifit_ng[1], fig=fig2, label='No Gap ')
+    flopter_gap.plot_f_fit(ffit_g2, fig=fig2, label='Gap ', plot_vf=False)
+    flopter_nogap.plot_f_fit(ffit_ng2, fig=fig2, label='No Gap ')
+
+    fig3 = plt.figure()
+    flopter_gap.plot_i_fit(ifit_g, fig=fig3, label='Gap ')
+    flopter_nogap.plot_i_fit(ifit_ng, fig=fig3, label='No Gap ')
     plt.legend()
     plt.show()
 
+if __name__ == '__main__':
+    run_gap_nogap_comparison()
 
 

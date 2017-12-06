@@ -1,35 +1,9 @@
 from abc import ABC, abstractmethod
 from scipy.io import loadmat
 from normalisation import Denormaliser, TIME
+from datatypes import IVData
 import os
 import numpy as np
-
-
-class IVData(dict):
-    """
-        A dictionary which holds IV specific data, namely
-            - Voltage
-            - Current
-            - Time
-            - [Electron Current] (for simulations)
-            - [Ion Current] (for simulations)
-    """
-    def __init__(self, voltage, total_current, time, e_current=None, i_current=None):
-        super().__init__([
-            ("I", total_current),
-            ("V", voltage),
-            ("t", time)
-        ])
-        if e_current is not None:
-            self['I_e'] = e_current
-        if i_current is not None:
-            self['I_i'] = i_current
-
-    def split(self):
-        if 'I_i' in self.keys():
-            return self['V'], self['I'], self['I_i']
-        else:
-            return self['V'], self['I']
 
 
 class Homogeniser(ABC):
