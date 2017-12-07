@@ -5,6 +5,7 @@ from normalisation import Denormaliser, TIME, LENGTH, POTENTIAL, CURRENT
 from homogeniser import Spice2Homogeniser
 from datatypes import IVData, IVFitData
 from inputparser import InputParser
+from interfaces import IVAnalyser
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -40,13 +41,8 @@ def print_params(values, errors, labels=("I_0", "a", "v_float", "T_e")):
     print("")
 
 
-def get_runnames(data_dir):
-    run_name = data_dir.split(os.sep)[-2]
-    print(run_name)
-    return 'noga', 'nogaph'
+class Flopter(IVAnalyser):
 
-
-class Flopter(object):
     def __init__(self, data_mount_dir, group_name, folder_name, run_name='prebpro', ext_run_name='prebprobe'):
         ##################################
         #             Extract            #
@@ -333,6 +329,7 @@ def run_param_scan():
         plt.errorbar(trim_space, params[j], yerr=errors[j])
     plt.show()
 
+
 def run_gap_nogap_comparison():
     flopter_gap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
     flopter_nogap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', run_name='prebp', ext_run_name='prebpro')
@@ -363,7 +360,8 @@ def run_gap_nogap_comparison():
     plt.legend()
     plt.show()
 
+
 if __name__ == '__main__':
     run_gap_nogap_comparison()
-
+    # run_param_scan()
 
