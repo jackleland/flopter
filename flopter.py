@@ -5,10 +5,36 @@ from normalisation import Denormaliser, TIME, LENGTH, POTENTIAL, CURRENT
 from homogeniser import Spice2Homogeniser
 from datatypes import IVData, IVFitData
 from inputparser import InputParser
-from interfaces import IVAnalyser
+from abc import ABC, abstractmethod
+
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+
+
+class IVAnalyser(ABC):
+    """
+    Abstract base class for the analysis of Langmuir Probe data.
+    """
+    @abstractmethod
+    def prepare(self):
+        pass
+
+    @abstractmethod
+    def trim(self):
+        pass
+
+    @abstractmethod
+    def fit(self, *args, **kwargs):
+        pass
+
+    @abstractmethod
+    def plot(self):
+        pass
+
+    @abstractmethod
+    def save(self):
+        pass
 
 
 def iv_characteristic_function(v, *parameters):
@@ -107,6 +133,9 @@ class Flopter(IVAnalyser):
         self.homogeniser = Spice2Homogeniser(denormaliser=self.denormaliser, data=tfile)
 
         self.iv_data, self.raw_data = self.homogeniser.homogenise()
+
+    def prepare(self):
+        pass
 
 ##################################
 #            Trimming            #
