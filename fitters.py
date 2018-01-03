@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
-from constants import ELEC_TEMP, ION_SAT, SHEATH_EXP, FLOAT_POT, ELEC_DENS
+from constants import ELEC_TEMP, ION_SAT, SHEATH_EXP, FLOAT_POT, ELEC_MASS
+from normalisation import _BOLTZMANN
 import numpy as np
 
 
-class IVFitter(ABC):
+class GenericFitter(ABC):
     """
     Semi-abstract base class for a Fitter object, which describes a model for fitting an IV curve.
     """
@@ -34,7 +35,7 @@ class IVFitter(ABC):
             return None
 
 
-class FullFitter(IVFitter):
+class FullFitter(GenericFitter):
     """
     IV Fitter implementation utilising the full, 4 parameter IV Curve fitting method.
     """
@@ -75,7 +76,7 @@ class FullFitter(IVFitter):
         return self._params[SHEATH_EXP]
 
 
-class SimpleFitter(IVFitter):
+class SimpleFitter(GenericFitter):
     def __init__(self):
         super().__init__()
         self._params = {
@@ -105,7 +106,7 @@ class SimpleFitter(IVFitter):
         return self._params[FLOAT_POT]
 
 
-class IonCurrentSEFitter(IVFitter):
+class IonCurrentSEFitter(GenericFitter):
     def __init__(self):
         super().__init__()
         self._params = {
@@ -127,3 +128,28 @@ class IonCurrentSEFitter(IVFitter):
 
     def get_a_index(self):
         return self._params[SHEATH_EXP]
+
+
+class MaxwellianFitter(GenericFitter):
+    def __init__(self):
+        super().__init__()
+        self.params = {
+            ELEC_TEMP: 0,
+            ELEC_MASS: 1,
+        }
+        self.name = 'Maxwellian Distribution Fit'
+
+    def fit(self):
+        super().fit()
+
+    def fit_function(self, v, *parameters):
+        T_e = parameters[self._params[ELEC_TEMP]]
+        m = parameters[self._params[ELEC_MASS]]
+        a = np.sqrt((T_e * _BOLTZMANN) / (2*m))
+        return np.power(a/np.sqrt(np.pi), 3) * 4 * np.pi * np.power(v, 2) * np.exp(-np.power(a*v, 2))
+
+    def get_temp_index(self):
+        return self._params[ELEC_TEMP]
+
+    def get_mass_index(self):
+        return self._params[ELEC_MASS]
