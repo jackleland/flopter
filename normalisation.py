@@ -2,12 +2,7 @@ import numpy as np
 from inputparser import InputParser
 from inspect import signature
 from abc import ABC, abstractmethod
-
-# Constants for conversion types
-POTENTIAL = 'potential'
-CURRENT = 'current'
-LENGTH = 'length'
-TIME = 'time'
+from constants import POTENTIAL, CURRENT_CONV, LENGTH_CONV, TIME_CONV
 
 # Physical constants
 _BOLTZMANN = 1.38064852e-23  # m^2 kg s^-2 K^-1
@@ -28,15 +23,15 @@ class Converter(ABC):
         # Conversion types - stored in a dictionary
         self.CONVERSION_TYPES = {
             POTENTIAL: self._convert_potential,
-            CURRENT: self._convert_current,
-            LENGTH: self._convert_length,
-            TIME: self._convert_time
+            CURRENT_CONV: self._convert_current,
+            LENGTH_CONV: self._convert_length,
+            TIME_CONV: self._convert_time
         }
 
     def __call__(self, variable, conversion_type, additional_arg=None):
         """
         :param variable:            Variable to be converted. Must be scalable, i.e. a float or a numpy array
-        :param conversion_type:     Which conversion type should be done (legnth, potential etc)
+        :param conversion_type:     Which conversion type should be done (length, potential etc)
         :param additional_arg:      Optional argument that may be required in the conversion procedure. Can be a list of
                                     arguments.
         :return:                    Converted version of variable
@@ -90,7 +85,7 @@ class Denormaliser(Converter):
     Stores an input parser object containing the used input file and then builds conversion values from this.
     """
 
-    def __init__(self, dimensions=2, input_parser=None, input_filename=None):
+    def __init__(self, dimensions=2, input_parser=None, input_filename=None, temp=None):
         """
         Creates a denormaliser object by using InputParser to parse an input file for some parameters (principally n_e,
         T_e, B and N_pc) which are needed for the denormalisation process.
@@ -114,6 +109,10 @@ class Denormaliser(Converter):
             raise ValueError('Number of dimensions should be 2 or 3')
 
         self.simulation_params = self.parser.get_commented_params()
+        if temp:
+            self.temperature = temp
+        elif 'T_e' in self.simulation_params.keys():
+            self.temperature = self.simulation_params
         self.debye_length = np.sqrt((_EPSILON_0 * self.simulation_params['T_e'])
                                     / (_ELEM_CHARGE * self.simulation_params['n_e']))
         self.omega_i = ((_ELEM_CHARGE * self.simulation_params['B'])

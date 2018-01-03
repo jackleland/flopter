@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from scipy.io import loadmat
-from normalisation import Denormaliser, TIME
+from normalisation import Denormaliser, TIME_CONV
 from datatypes import IVData
 import os
 import numpy as np
@@ -91,7 +91,7 @@ class Spice2Homogeniser(Homogeniser):
         # Extract relevant arrays from the matlab file
         probe_index = self.get_probe_index()
 
-        time = self.denormaliser(np.squeeze(self.data['t'])[:-1], TIME)
+        time = self.denormaliser(np.squeeze(self.data['t'])[:-1], TIME_CONV)
         probe_current_e = np.squeeze(self.data['objectscurrente'])[probe_index]
         probe_current_i = np.squeeze(self.data['objectscurrenti'])[probe_index]
         probe_bias = np.squeeze(self.data['ProbePot'])

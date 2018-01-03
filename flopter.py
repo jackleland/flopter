@@ -1,11 +1,12 @@
 from scipy.io import loadmat
 from scipy import interpolate
 from scipy.optimize import curve_fit
-from normalisation import Denormaliser, TIME, LENGTH, POTENTIAL, CURRENT
+from normalisation import Denormaliser, TIME_CONV, LENGTH_CONV, POTENTIAL, CURRENT_CONV
 from homogeniser import Spice2Homogeniser
 from datatypes import IVData, IVFitData
 from inputparser import InputParser
 from abc import ABC, abstractmethod
+from constants import POTENTIAL, CURRENT, ELEC_CURRENT, ION_CURRENT, TIME
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,13 +29,13 @@ class IVAnalyser(ABC):
     def fit(self, *args, **kwargs):
         pass
 
-    @abstractmethod
-    def plot(self):
-        pass
-
-    @abstractmethod
-    def save(self):
-        pass
+    # @abstractmethod
+    # def plot(self):
+    #     pass
+    #
+    # @abstractmethod
+    # def save(self):
+    #     pass
 
 
 def iv_characteristic_function(v, *parameters):
@@ -141,13 +142,13 @@ class Flopter(IVAnalyser):
 #            Trimming            #
 ##################################
     def trim(self, trim_beg=0.01, trim_end=0.35):
-        full_length = len(self.iv_data['V'])
+        full_length = len(self.iv_data[POTENTIAL])
         # Cut off the noise in the electron saturation region
-        t = self.iv_data['t'][int(full_length*trim_beg):int(full_length*trim_end)]
-        V = self.iv_data['V'][int(full_length*trim_beg):int(full_length*trim_end)]
-        I = self.iv_data['I'][int(full_length*trim_beg):int(full_length*trim_end)]
-        I_e = self.iv_data['I_e'][int(full_length*trim_beg):int(full_length*trim_end)]
-        I_i = self.iv_data['I_i'][int(full_length*trim_beg):int(full_length*trim_end)]
+        t = self.iv_data[TIME][int(full_length*trim_beg):int(full_length*trim_end)]
+        V = self.iv_data[POTENTIAL][int(full_length*trim_beg):int(full_length*trim_end)]
+        I = self.iv_data[CURRENT][int(full_length*trim_beg):int(full_length*trim_end)]
+        I_e = self.iv_data[ELEC_CURRENT][int(full_length*trim_beg):int(full_length*trim_end)]
+        I_i = self.iv_data[ION_CURRENT][int(full_length*trim_beg):int(full_length*trim_end)]
 
         # return V, I, I_i, I_e
         return IVData(V, I, t, i_current=I_i, e_current=I_e)
@@ -159,7 +160,7 @@ class Flopter(IVAnalyser):
         if not iv_data:
             iv_data = self.iv_data
 
-        iv_interp = interpolate.interp1d(iv_data['I'], iv_data['V'])
+        iv_interp = interpolate.interp1d(iv_data[CURRENT], iv_data[POTENTIAL])
         v_float = iv_interp([0.0])
         return v_float
 
@@ -240,13 +241,13 @@ class Flopter(IVAnalyser):
             iv_data = self.iv_data
 
         if plot_tot:
-            plt.plot(iv_data['V'][:-1], iv_data['I'][:-1], label=label) #, linestyle='dashed')
+            plt.plot(iv_data[POTENTIAL][:-1], iv_data[CURRENT][:-1], label=label) #, linestyle='dashed')
 
         if plot_e:
-            plt.plot(iv_data['V'][:-1], iv_data['I_e'][:-1], label='Electron')
+            plt.plot(iv_data[POTENTIAL][:-1], iv_data[ELEC_CURRENT][:-1], label='Electron')
 
         if plot_i:
-            plt.plot(iv_data['V'][:-1], iv_data['I_i'][:-1], label='Ion')
+            plt.plot(iv_data[POTENTIAL][:-1], iv_data[ION_CURRENT][:-1], label='Ion')
 
         # plt.plot(V, I_i, label='Ion')
         # plt.plot(V, I_e, label='Electron')
@@ -316,7 +317,7 @@ class Flopter(IVAnalyser):
 
         for var in plot_list:
             if var in _PLOTTABLE.keys():
-                plt.plot(self.iv_data['t'][:-1], self.raw_data[var][-1], label=_PLOTTABLE[var])
+                plt.plot(self.iv_data[TIME][:-1], self.raw_data[var][-1], label=_PLOTTABLE[var])
         plt.legend()
         plt.show()
 

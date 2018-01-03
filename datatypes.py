@@ -1,4 +1,5 @@
 import fitters as f
+from constants import POTENTIAL, CURRENT, TIME, ELEC_CURRENT, ION_CURRENT
 
 
 class IVData(dict):
@@ -12,20 +13,20 @@ class IVData(dict):
     """
     def __init__(self, voltage, total_current, time, e_current=None, i_current=None):
         super().__init__([
-            ("I", total_current),
-            ("V", voltage),
-            ("t", time)
+            (CURRENT, total_current),
+            (POTENTIAL, voltage),
+            (TIME, time)
         ])
         if e_current is not None:
-            self['I_e'] = e_current
+            self[ELEC_CURRENT] = e_current
         if i_current is not None:
-            self['I_i'] = i_current
+            self[ION_CURRENT] = i_current
 
     def split(self):
-        if 'I_i' in self.keys():
-            return self['V'], self['I'], self['I_i']
+        if ION_CURRENT in self.keys():
+            return self[POTENTIAL], self[CURRENT], self[ION_CURRENT]
         else:
-            return self['V'], self['I']
+            return self[POTENTIAL], self[CURRENT]
 
 
 class IVFitData(object):

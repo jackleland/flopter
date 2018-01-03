@@ -1,12 +1,6 @@
 from abc import ABC, abstractmethod
+from constants import ELEC_TEMP, ION_SAT, SHEATH_EXP, FLOAT_POT, ELEC_DENS
 import numpy as np
-
-# Labels
-ION_SAT = 'I_sat'       # Ion saturation current label
-SHEATH_EXP = 'a'        # Sheath expansion parameter label
-FLOAT_POT = 'V_f'       # Floating potential label
-ELEC_TEMP = 'T_e'       # Electron temperature label
-ELEC_DENS = 'n_e'       # Electron density label
 
 
 class IVFitter(ABC):
