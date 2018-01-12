@@ -11,6 +11,7 @@ from constants import POTENTIAL, CURRENT, ELEC_CURRENT, ION_CURRENT, TIME
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import glob
 
 
 class IVAnalyser(ABC):
@@ -28,6 +29,12 @@ class IVAnalyser(ABC):
     @abstractmethod
     def fit(self, *args, **kwargs):
         pass
+
+    @staticmethod
+    def trim_generic(data, trim_beg=0.0, trim_end=1.0):
+        full_length = len(data)
+        # Cut off the noise in the electron saturation region
+        return data[int(full_length * trim_beg):int(full_length * trim_end)]
 
     # @abstractmethod
     # def plot(self):
@@ -70,7 +77,8 @@ def print_params(values, errors, labels=("I_0", "a", "v_float", "T_e")):
 
 class Flopter(IVAnalyser):
 
-    def __init__(self, data_mount_dir, group_name, folder_name, run_name='prebpro', ext_run_name='prebprobe'):
+    def __init__(self, data_mount_dir, group_name, folder_name, run_name='prebpro', ext_run_name='prebprobe',
+                 prepare=True):
         ##################################
         #             Extract            #
         ##################################
@@ -115,9 +123,11 @@ class Flopter(IVAnalyser):
         # input_filename = data_dir + 's_benchmarking_nogap.inp'
         # input_filename = data_dir + 'reversede_ng_hg_sbm.inp'
         # input_filename = data_dir + 'prebiasprobe_ng_hg_sbm.inp'
-        input_filename = data_dir + 'input.inp'
+        self.input_filename = data_dir + 'input.inp'
 
-        # test = get_runnames(data_dir)
+        # file_suf = '.mat'
+        # tfile_pre = 't-'
+        # tfile_path, afile_path = self.get_runnames(data_dir, file_suf, tfile_pre)
 
         # run_name = 'prebpro'
         # ext_run_name = 'prebprobe'
@@ -125,18 +135,36 @@ class Flopter(IVAnalyser):
         tfile_pre = 't-{a}'.format(a=run_name)
         tfile_path = data_dir + tfile_pre + file_suf
         afile_path = data_dir + ext_run_name + file_suf
-        tfile = loadmat(tfile_path)
+        self.tfile = loadmat(tfile_path)
         self.afile = loadmat(afile_path)
 
+        self.parser = None
+        self.denormaliser = None
+        self.homogeniser = None
+        self.iv_data = None
+        self.raw_data = None
+
+        if prepare:
+            self.prepare()
+
+    def prepare(self, homogenise=True, denormalise=True):
         # create flopter objects
-        self.parser = InputParser(input_filename=input_filename)
-        self.denormaliser = Denormaliser(input_parser=self.parser)
-        self.homogeniser = Spice2Homogeniser(denormaliser=self.denormaliser, data=tfile)
+        self.parser = InputParser(input_filename=self.input_filename)
+        if denormalise:
+            self.denormaliser = Denormaliser(input_parser=self.parser)
+        if homogenise:
+            self.homogeniser = Spice2Homogeniser(denormaliser=self.denormaliser, data=self.tfile)
+            self.iv_data, self.raw_data = self.homogeniser.homogenise()
 
-        self.iv_data, self.raw_data = self.homogeniser.homogenise()
-
-    def prepare(self):
-        pass
+    def get_runnames(self, directory, file_suffix, tfile_prefix):
+        os.chdir(directory)
+        tfile_glob_str = '{}{}*[!0-9]{}'.format(directory, tfile_prefix, file_suffix)
+        print(tfile_glob_str)
+        tfile_name = glob.glob(tfile_glob_str)
+        afile_name = glob.glob('{}[!{}]*[!0-9]{}'.format(directory, tfile_prefix, file_suffix))
+        print(tfile_name)
+        print(afile_name)
+        return tfile_name, afile_name
 
 ##################################
 #            Trimming            #
@@ -320,78 +348,3 @@ class Flopter(IVAnalyser):
                 plt.plot(self.iv_data[TIME][:-1], self.raw_data[var][-1], label=_PLOTTABLE[var])
         plt.legend()
         plt.show()
-
-
-def run_param_scan():
-    flopter_gap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
-    # flopter_nogap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', run_name='prebp', ext_run_name='prebpro')
-
-    ivdata_g = flopter_gap.trim(trim_end=0.8)
-    # ivdata_ng = flopter_nogap.trim()
-
-    fig = plt.figure()
-    flopter_gap.plot_iv(iv_data=ivdata_g, fig=fig, plot_tot=True, label='Gap')
-    n_params = 4
-    params = [[]]*n_params
-    errors = [[]]*n_params
-    trim_space = np.linspace(0.4, 0.5, 11)
-    print(params)
-    for trim_end in trim_space:
-        ivdata = flopter_gap.trim(trim_end=trim_end)
-        ivfitdata = flopter_gap.fit(ivdata, fit_full=True)
-        flopter_gap.plot_f_fit(ivfitdata, fig=fig, plot_raw=False, plot_vf=False, label=str(trim_end))
-        fit_params, fit_errors = ivfitdata.get_fit_params()
-        for i in range(n_params):
-            if len(params[i]) == 0:
-                params[i] = [fit_params[i]]
-            else:
-                params[i].append(fit_params[i])
-            if len(errors[i]) == 0:
-                errors[i] = [min(fit_errors[i], fit_params[i])]
-            else:
-                errors[i].append(min(fit_errors[i], fit_params[i]))
-
-    for j in range(n_params):
-        plt.figure()
-        print(np.shape(trim_space))
-        print(np.shape(params[j]))
-        print(np.shape(errors[j]))
-        plt.errorbar(trim_space, params[j], yerr=errors[j])
-    plt.show()
-
-
-def run_gap_nogap_comparison():
-    flopter_gap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
-    flopter_nogap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', run_name='prebp', ext_run_name='prebpro')
-
-    ivdata_g = flopter_gap.trim()
-    ivdata_ng = flopter_nogap.trim()
-
-    ivdata_g2 = flopter_gap.trim(trim_end=0.5)
-    ivdata_ng2 = flopter_nogap.trim(trim_end=0.5)
-
-    ifit_g = flopter_gap.fit(ivdata_g, fit_i=True, print_fl=True)
-    ifit_ng = flopter_nogap.fit(ivdata_ng, fit_i=True, print_fl=True)
-
-    ffit_g2 = flopter_gap.fit(ivdata_g2, fit_full=True, print_fl=True)
-    ffit_ng2 = flopter_nogap.fit(ivdata_ng2, fit_full=True, print_fl=True)
-
-    fig1 = plt.figure()
-    flopter_gap.plot_iv(fig=fig1, plot_tot=True, label='Gap')
-    flopter_nogap.plot_iv(fig=fig1, plot_vf=True, plot_tot=True, label='No Gap')
-
-    fig2 = plt.figure()
-    flopter_gap.plot_f_fit(ffit_g2, fig=fig2, label='Gap ', plot_vf=False)
-    flopter_nogap.plot_f_fit(ffit_ng2, fig=fig2, label='No Gap ')
-
-    fig3 = plt.figure()
-    flopter_gap.plot_i_fit(ifit_g, fig=fig3, label='Gap ')
-    flopter_nogap.plot_i_fit(ifit_ng, fig=fig3, label='No Gap ')
-    plt.legend()
-    plt.show()
-
-
-if __name__ == '__main__':
-    run_gap_nogap_comparison()
-    # run_param_scan()
-
