@@ -85,16 +85,31 @@ def run_maxwellian_fit():
     adata = f_gap.afile
     print(f_gap.tfile.keys())
     print(f_gap.afile.keys())
-    ehist1 = f_gap.tfile['eHist01x1'][:, 0]
-    ehist2 = f_gap.tfile['eHist01x2'][:, 0]
-    ehist3 = f_gap.tfile['eHist01x3']
+
+    # Get all arrays in the t-file which contain diagnostic histograms and put them into
+    hist_names = [hist_name for hist_name in tdata.diagnostics.keys() if 'Hist' in hist_name]
+    diagnostic_histograms = {}
+    for hist_name in hist_names:
+        diagnostic = hist_name[:-2]
+        if diagnostic in diagnostic_histograms:
+            diagnostic_histograms[diagnostic].append(tdata[hist_name])
+        else:
+            diagnostic_histograms[diagnostic] = [tdata[hist_name]]
+
+    ehist1 = f_gap.tfile['eHistSheathx1'][:, 0]
+    ehist2 = f_gap.tfile['eHistSheathx2'][:, 0]
+    ehist3 = f_gap.tfile['eHistSheathx3']
     ehist = np.sqrt(ehist1**2 + ehist2**2)
+    pot = f_gap.tfile['Pot']
+    temp = f_gap.tfile['Temp']
 
     fvarrays = tdata['fvarrays']
     fvbin = tdata['fvbin']
     fvperparraycount = tdata['fvperparraycount']
     fvlimits = tdata['fvlimits']
     histlimits = tdata['histlimits']
+    current = tdata['objectscurrente'][0]
+    time = tdata['t'][:-1]
 
     # vx = adata['vxav02']
     # vx2 = adata['vx2av02']
@@ -106,6 +121,7 @@ def run_maxwellian_fit():
     # t2 = adata['temperature02']
     # temp = tdata['Temp']
 
+    print('hists', np.shape(diagnostic_histograms))
     print('ehist', np.shape(ehist))
     print('ehist2', np.shape(ehist2))
     print('fvarrays   ', np.shape(fvarrays), fvarrays)
@@ -118,8 +134,8 @@ def run_maxwellian_fit():
     ehist2x = np.linspace(fvlimits[4][0], fvlimits[4][1], fvbin)
     ehist3x = np.linspace(fvlimits[5][0], fvlimits[5][1], fvbin)
 
-    ehist2 = f_gap.trim_generic(ehist2, trim_beg=0.49)
-    ehist2x = f_gap.trim_generic(ehist2x, trim_beg=0.49)
+    # ehist2 = f_gap.trim_generic(ehist2, trim_beg=0.49)
+    # ehist2x = f_gap.trim_generic(ehist2x, trim_beg=0.49)
 
     m_fitter = Gaussian1DFitter()
     guess = [100.0, 1.0, 10, 100]
@@ -127,16 +143,36 @@ def run_maxwellian_fit():
         [0.0,       0.0,    -np.inf,    0.0],
         [np.inf,    np.inf, np.inf,     np.inf]
     ]
-    fit_data = m_fitter.fit(ehist1x, ehist1, guess, bounds=bounds)
-    fit_data.print_fit_params()
+    # fit_data = m_fitter.fit(ehist1x, ehist1, guess, bounds=bounds)
+    # fit_data.print_fit_params()
     guess_func = m_fitter.fit_function(ehist1x, *guess)
 
     plt.figure()
-    # plt.plot(ehist2x, ehist2)
-    plt.plot(ehist1x, ehist1)
-    plt.plot(*fit_data.get_fit_plottables())
+    plt.plot(ehist2)
+    plt.plot(ehist1)
+
+    # for name, data in diagnostic_histograms.items():
+    #     for i in range(len(data)):
+    #         plt.figure(i)
+    #         plt.plot(data[i], label=name)
+    #         plt.legend()
+
+    for name, data in diagnostic_histograms.items():
+        plt.figure()
+        for i in range(len(data)):
+            plt.plot(data[i])
+    # plt.plot(*fit_data.get_fit_plottables())
     # plt.plot(ehist1x, guess_func)
     # plt.show()
+
+    # plt.figure()
+    # plt.imshow(temp)
+    #
+    # plt.figure()
+    # plt.imshow(pot)
+
+    plt.figure()
+    plt.plot(time, current)
 
     # plt.figure()
     # for t in np.linspace(0.1, 10, 101):

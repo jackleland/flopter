@@ -1,17 +1,20 @@
-from scipy.io import loadmat
-from scipy import interpolate
-from scipy.optimize import curve_fit
-from normalisation import Denormaliser, TIME_CONV, LENGTH_CONV, POTENTIAL, CURRENT_CONV
-from homogeniser import Spice2Homogeniser
-from datatypes import IVData, IVFitData
-from inputparser import InputParser
+import glob
+import os
 from abc import ABC, abstractmethod
-from constants import POTENTIAL, CURRENT, ELEC_CURRENT, ION_CURRENT, TIME
 
 import matplotlib.pyplot as plt
 import numpy as np
-import os
-import glob
+from scipy import interpolate
+from scipy.io import loadmat
+from scipy.optimize import curve_fit
+
+from classes.fitdata import IVFitData
+from classes.ivdata import IVData
+from classes.spicedata import Spice2Data
+from constants import POTENTIAL, CURRENT, ELEC_CURRENT, ION_CURRENT, TIME
+from homogeniser import Spice2Homogeniser
+from inputparser import InputParser
+from normalisation import Denormaliser
 
 
 class IVAnalyser(ABC):
@@ -24,6 +27,10 @@ class IVAnalyser(ABC):
 
     @abstractmethod
     def trim(self):
+        pass
+
+    @abstractmethod
+    def denormalise(self):
         pass
 
     @abstractmethod
@@ -133,10 +140,10 @@ class Flopter(IVAnalyser):
         # ext_run_name = 'prebprobe'
         file_suf = '.mat'
         tfile_pre = 't-{a}'.format(a=run_name)
-        tfile_path = data_dir + tfile_pre + file_suf
-        afile_path = data_dir + ext_run_name + file_suf
-        self.tfile = loadmat(tfile_path)
-        self.afile = loadmat(afile_path)
+        self.tfile_path = data_dir + tfile_pre + file_suf
+        self.afile_path = data_dir + ext_run_name + file_suf
+        self.tfile = Spice2Data(self.tfile_path)
+        self.afile = loadmat(self.afile_path)
 
         self.parser = None
         self.denormaliser = None
@@ -151,9 +158,9 @@ class Flopter(IVAnalyser):
         # create flopter objects
         self.parser = InputParser(input_filename=self.input_filename)
         if denormalise:
-            self.denormaliser = Denormaliser(input_parser=self.parser)
+            self.denormaliser = Denormaliser(dt=self.tfile.dt, input_parser=self.parser)
         if homogenise:
-            self.homogeniser = Spice2Homogeniser(denormaliser=self.denormaliser, data=self.tfile)
+            self.homogeniser = Spice2Homogeniser(data=self.tfile, input_parser=self.parser)
             self.iv_data, self.raw_data = self.homogeniser.homogenise()
 
     def get_runnames(self, directory, file_suffix, tfile_prefix):
@@ -170,16 +177,18 @@ class Flopter(IVAnalyser):
 #            Trimming            #
 ##################################
     def trim(self, trim_beg=0.01, trim_end=0.35):
-        full_length = len(self.iv_data[POTENTIAL])
         # Cut off the noise in the electron saturation region
-        t = self.iv_data[TIME][int(full_length*trim_beg):int(full_length*trim_end)]
-        V = self.iv_data[POTENTIAL][int(full_length*trim_beg):int(full_length*trim_end)]
-        I = self.iv_data[CURRENT][int(full_length*trim_beg):int(full_length*trim_end)]
-        I_e = self.iv_data[ELEC_CURRENT][int(full_length*trim_beg):int(full_length*trim_end)]
-        I_i = self.iv_data[ION_CURRENT][int(full_length*trim_beg):int(full_length*trim_end)]
+        t = Flopter.trim_generic(self.iv_data[TIME], trim_beg=trim_beg, trim_end=trim_end)
+        V = Flopter.trim_generic(self.iv_data[POTENTIAL], trim_beg=trim_beg, trim_end=trim_end)
+        I = Flopter.trim_generic(self.iv_data[CURRENT], trim_beg=trim_beg, trim_end=trim_end)
+        I_e = Flopter.trim_generic(self.iv_data[ELEC_CURRENT], trim_beg=trim_beg, trim_end=trim_end)
+        I_i = Flopter.trim_generic(self.iv_data[ION_CURRENT], trim_beg=trim_beg, trim_end=trim_end)
 
-        # return V, I, I_i, I_e
         return IVData(V, I, t, i_current=I_i, e_current=I_e)
+
+    def denormalise(self):
+        self.iv_data = self.denormaliser(self.iv_data)
+        self.raw_data = self.denormaliser(self.raw_data)
 
 ##################################
 #             Fitting            #

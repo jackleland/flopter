@@ -2,7 +2,8 @@ import numpy as np
 from inputparser import InputParser
 from inspect import signature
 from abc import ABC, abstractmethod
-from constants import POTENTIAL, CURRENT_CONV, LENGTH_CONV, TIME_CONV
+import constants as c
+from classes.ivdata import IVData
 
 # Physical constants
 _BOLTZMANN = 1.38064852e-23  # m^2 kg s^-2 K^-1
@@ -24,13 +25,13 @@ class Converter(ABC):
     def __init__(self):
         # Conversion types - stored in a dictionary
         self.CONVERSION_TYPES = {
-            POTENTIAL: self._convert_potential,
-            CURRENT_CONV: self._convert_current,
-            LENGTH_CONV: self._convert_length,
-            TIME_CONV: self._convert_time
+            c.POTENTIAL_CONV: self._convert_potential,
+            c.CURRENT_CONV: self._convert_current,
+            c.LENGTH_CONV: self._convert_length,
+            c.TIME_CONV: self._convert_time
         }
 
-    def __call__(self, variable, conversion_type, additional_arg=None):
+    def __call__(self, variable, conversion_type=c.POTENTIAL_CONV, additional_arg=None):
         """
         :param variable:            Variable to be converted. Must be scalable, i.e. a float or a numpy array
         :param conversion_type:     Which conversion type should be done (length, potential etc)
@@ -64,7 +65,7 @@ class Converter(ABC):
         pass
 
     @abstractmethod
-    def _convert_current(self, current, dt):
+    def _convert_current(self, current):
         pass
 
     @abstractmethod
@@ -87,30 +88,39 @@ class Denormaliser(Converter):
     Stores an input parser object containing the used input file and then builds conversion values from this.
     """
 
-    def __init__(self, dimensions=2, input_parser=None, input_filename=None, temp=None):
+    def __init__(self, dt=1.0, dimensions=2, input_parser=None, input_filename=None, temp=None):
         """
         Creates a denormaliser object by using InputParser to parse an input file for some parameters (principally n_e,
         T_e, B and N_pc) which are needed for the denormalisation process.
 
         InputParser either passed directly or created from a filename
+        :param dt                   Float - value of dt from simulation (cannot be ascertained from the input file)
         :param dimensions           Int - specify the number of dimensions to be used for calculation of areas/volumes
         :param [input_parser]:      InputParser object to be used, must have already read the commented section.
         :param [input_filename]:    Directory of input file to be parsed
+
+        One of input_parser or input_filename is required
         """
         super().__init__()
+
+        # Check for input parser or create one from given filename
         if input_parser is not None and input_parser.has_commented_params():
-            self.parser = input_parser
+            parser = input_parser
         elif input_filename is not None:
-            self.parser = InputParser(input_filename=input_filename)
+            parser = InputParser(input_filename=input_filename)
         else:
             raise ValueError('No valid InputParser object given or able to be created')
 
+        # Check that valid number of dimensions given
         if dimensions in [2, 3]:
             self.dimensions = dimensions
         else:
             raise ValueError('Number of dimensions should be 2 or 3')
 
-        self.simulation_params = self.parser.get_commented_params()
+        self.dt = dt
+
+        # Save parameters from commented params
+        self.simulation_params = parser.get_commented_params()
         if temp:
             self.temperature = temp
         elif 'T_e' in self.simulation_params.keys():
@@ -119,13 +129,19 @@ class Denormaliser(Converter):
                                     / (_ELEM_CHARGE * self.simulation_params['n_e']))
         self.omega_i = ((_ELEM_CHARGE * self.simulation_params['B'])
                         / _ION_MASS)
-        self.K = (self.simulation_params['n_e'] * self.debye_length**self.dimensions) / float(self.parser.get('geom', 'Npc')[:-1])
+        self.K = ((self.simulation_params['n_e'] * self.debye_length**self.dimensions)
+                  / float(parser.get('geom', 'Npc')[:-1]))
+
+        self.CONVERSION_TYPES[c.IV_CONV] = self._convert_iv_data
+
+    def __call__(self, variable, conversion_type=c.IV_CONV, additional_arg=None):
+        super().__call__(variable, conversion_type=conversion_type, additional_arg=additional_arg)
 
     def _convert_potential(self, potential):
         return potential * (self.simulation_params['T_e'])
 
-    def _convert_current(self, current, dt):
-        return ((_ELEM_CHARGE * self.K * self.omega_i) / dt) * current
+    def _convert_current(self, current):
+        return ((_ELEM_CHARGE * self.K * self.omega_i) / self.dt) * current
 
     def _convert_length(self, length):
         return self.debye_length * length
@@ -135,6 +151,15 @@ class Denormaliser(Converter):
 
     def _convert_density(self, density):
         return self.simulation_params['n_e'] * density
+
+    def _convert_iv_data(self, iv_data):
+        time = self._convert_time(iv_data[c.TIME])
+        potential = self._convert_potential(iv_data[c.POTENTIAL])
+        current = self._convert_current(iv_data[c.CURRENT])
+        current_e = self._convert_current(iv_data[c.ELEC_CURRENT])
+        current_i = self._convert_current(iv_data[c.ION_CURRENT])
+
+        return IVData(potential, current, time, i_current=current_i, e_current=current_e)
 
 
 class Normaliser(Converter):
@@ -147,8 +172,8 @@ class Normaliser(Converter):
     def _convert_length(self, length):
         super()._convert_length(length)
 
-    def _convert_current(self, current, dt):
-        super()._convert_current(current, dt)
+    def _convert_current(self, current):
+        super()._convert_current(current)
 
     def _convert_time(self, time):
         super()._convert_time(time)

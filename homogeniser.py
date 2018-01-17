@@ -1,9 +1,14 @@
-from abc import ABC, abstractmethod
-from scipy.io import loadmat
-from normalisation import Denormaliser, TIME_CONV
-from datatypes import IVData
 import os
+from abc import ABC, abstractmethod
+
 import numpy as np
+from scipy.io import loadmat
+
+from classes.ivdata import IVData
+from classes.spicedata import Spice2Data
+from inputparser import InputParser
+from normalisation import Denormaliser, TIME_CONV
+from constants import DIAG_PROBE_POT
 
 
 class Homogeniser(ABC):
@@ -16,21 +21,21 @@ class Homogeniser(ABC):
     Can separately be created and fed data using the set_data() method.
     """
 
-    def __init__(self, source, filename=None, data=None):
+    def __init__(self, source, data_filename=None, data=None):
         self.source = source
         self.data = data
-        if filename and isinstance(filename, (str, os.PathLike)):
-            self.filename = filename
+        if data_filename and isinstance(data_filename, (str, os.PathLike)):
+            self.data_filename = data_filename
             if not data:
                 self.read_data()
         else:
-            self.filename = None
+            self.data_filename = None
 
-    def set_filename(self, filename):
-        self.filename = filename
+    def set_data_filename(self, filename):
+        self.data_filename = filename
 
-    def get_filename(self):
-        return self.filename
+    def get_data_filename(self):
+        return self.data_filename
 
     def set_data(self, data):
         self.data = data
@@ -39,7 +44,7 @@ class Homogeniser(ABC):
         return self.data
 
     def _prehomogenise_checks(self):
-        if not self.data and isinstance(self.filename, (str, os.PathLike)):
+        if not self.data and isinstance(self.data_filename, (str, os.PathLike)):
             self.read_data()
         elif not self.data:
             raise ValueError("No data to homogenise")
@@ -71,19 +76,28 @@ class Spice2Homogeniser(Homogeniser):
     _SWEEP_UPPER = 10.05
     _PROBE_PARAMETER = 3
 
-    def __init__(self, input_filename=None, denormaliser=None, **kwargs):
+    def __init__(self, input_parser=None, input_filename=None, **kwargs):
         super().__init__('Spice2', **kwargs)
-        self.input_filename = input_filename
-        self.denormaliser = denormaliser
-        if not denormaliser and input_filename:
+
+        if input_parser is not None and input_parser:
+            self.parser = input_parser
+            self.input_filename = None
+        elif self.input_filename and isinstance(input_filename, (str, os.PathLike)):
             self.input_filename = input_filename
-            self.denormaliser = Denormaliser(input_filename)
-        elif not denormaliser and not input_filename:
-            raise ValueError('Need one of \'input_filename\' or \'denormaliser\' to not be None')
-        self.parser = self.denormaliser.parser
+            self.parser = InputParser(self.input_filename)
+        else:
+            raise ValueError('No valid InputParser object given or able to be created')
+
+        # self.denormaliser = denormaliser
+
+        # if not denormaliser and input_filename:
+        #     self.input_filename = input_filename
+        #     self.denormaliser = Denormaliser(input_filename)
+        # elif not denormaliser and not input_filename:
+        #     raise ValueError('Need one of \'input_filename\' or \'denormaliser\' to not be None')
 
     def read_data(self):
-        self.data = loadmat(self.filename)
+        self.data = Spice2Data(self.data_filename)
 
     def homogenise(self):
         self._prehomogenise_checks()
@@ -91,10 +105,10 @@ class Spice2Homogeniser(Homogeniser):
         # Extract relevant arrays from the matlab file
         probe_index = self.get_probe_index()
 
-        time = self.denormaliser(np.squeeze(self.data['t'])[:-1], TIME_CONV)
-        probe_current_e = np.squeeze(self.data['objectscurrente'])[probe_index]
-        probe_current_i = np.squeeze(self.data['objectscurrenti'])[probe_index]
-        probe_bias = np.squeeze(self.data['ProbePot'])
+        time = np.squeeze(self.data.t)[:-1]
+        probe_current_e = np.squeeze(self.data.objectscurrente)[probe_index]
+        probe_current_i = np.squeeze(self.data.objectscurrenti)[probe_index]
+        probe_bias = np.squeeze(self.data.diagnostics[DIAG_PROBE_POT])
         probe_current_tot = probe_current_i + probe_current_e
 
         # Prepend missing elements to make array cover the same timespan as the builtin diagnostics and then
@@ -122,6 +136,7 @@ class Spice2Homogeniser(Homogeniser):
         return sweep_data, raw_data
 
     def get_probe_index(self):
+        # TODO: make this return a slice object with each sweeping object index
         """
         Returns the index of the object within the simulation which is acting as a probe i.e. has 'param1' set to 3.
         The index can be used to reference the correct array in objectscurrent, for example. Assumes that the first

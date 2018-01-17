@@ -20,4 +20,9 @@ POTENTIAL_CONV = 'potential'
 CURRENT_CONV = 'current'
 LENGTH_CONV = 'length'
 TIME_CONV = 'time'
+IV_CONV = 'iv_data'
+
+# Standardised diagnostic names for Spice
+DIAG_PROBE_POT = 'ProbePot'
+DIAG_DIST_FUNCTION_HIST = 'Hist'
 

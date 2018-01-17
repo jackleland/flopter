@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
+
+import numpy as np
+from scipy.optimize import curve_fit
+
+from classes.fitdata import FitData2, IVFitData
 from constants import ELEC_TEMP, ION_SAT, SHEATH_EXP, FLOAT_POT, ELEC_MASS
 from normalisation import _BOLTZMANN, _ELECTRON_MASS
-from scipy.optimize import curve_fit
-from datatypes import FitData2, IVFitData
-import numpy as np
 
 
 class GenericFitter(ABC):
@@ -76,7 +78,7 @@ class FullIVFitter(IVFitter):
         v_f = parameters[self._param_labels[FLOAT_POT]]
         T_e = parameters[self._param_labels[ELEC_TEMP]]
         V = (v_f - v) / T_e
-        return I_0 * (1 - np.exp(-V) + (a * np.float_power(np.absolute(V), 0.75)))
+        return I_0 * (1 - np.exp(-V) + (a * np.float_power(np.absolute(V), [0.75])))
 
     def get_param_index(self, label):
         return self._param_labels[label]
@@ -131,8 +133,8 @@ class IonCurrentSEFitter(IVFitter):
         self.name = 'Ion Current Sheath Expansion Fit'
 
     def fit_function(self, v, *parameters):
-        I_0 = parameters[self._params[ION_SAT]]
-        a = parameters[self._params[SHEATH_EXP]]
+        I_0 = parameters[self._param_labels[ION_SAT]]
+        a = parameters[self._param_labels[SHEATH_EXP]]
         return I_0 * (1 + (a * v))
 
     def get_isat_index(self):
