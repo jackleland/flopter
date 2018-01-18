@@ -7,7 +7,6 @@ from scipy.io import loadmat
 from classes.ivdata import IVData
 from classes.spicedata import Spice2Data
 from inputparser import InputParser
-from normalisation import Denormaliser, TIME_CONV
 from constants import DIAG_PROBE_POT
 
 
@@ -87,14 +86,6 @@ class Spice2Homogeniser(Homogeniser):
             self.parser = InputParser(self.input_filename)
         else:
             raise ValueError('No valid InputParser object given or able to be created')
-
-        # self.denormaliser = denormaliser
-
-        # if not denormaliser and input_filename:
-        #     self.input_filename = input_filename
-        #     self.denormaliser = Denormaliser(input_filename)
-        # elif not denormaliser and not input_filename:
-        #     raise ValueError('Need one of \'input_filename\' or \'denormaliser\' to not be None')
 
     def read_data(self):
         self.data = Spice2Data(self.data_filename)
