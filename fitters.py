@@ -3,9 +3,15 @@ from abc import ABC, abstractmethod
 import numpy as np
 from scipy.optimize import curve_fit
 
+from classes.ivdata import IVData
 from classes.fitdata import FitData2, IVFitData
-from constants import ELEC_TEMP, ION_SAT, SHEATH_EXP, FLOAT_POT, ELEC_MASS
+from constants import ELEC_TEMP, ION_SAT, SHEATH_EXP, FLOAT_POT, ELEC_MASS, POTENTIAL, CURRENT, ION_CURRENT
 from normalisation import _BOLTZMANN, _ELECTRON_MASS
+from warnings import warn
+
+# Curve-fit default values and bounds
+CF_DEFAULT_VALUES = None
+CF_DEFAULT_BOUNDS = (-np.inf, np.inf)
 
 
 class GenericFitter(ABC):
@@ -14,25 +20,35 @@ class GenericFitter(ABC):
     """
     def __init__(self):
         self._param_labels = {}
+        self.default_values = None
+        self.default_bounds = (-np.inf, np.inf)
         self.name = None
 
     @abstractmethod
     def fit_function(self, v, parameters):
         pass
 
-    def fit(self, x_data, y_data, initial_vals, bounds=(-np.inf, np.inf)):
+    def fit(self, x_data, y_data, initial_vals=None, bounds=None):
         # Check params exist and check length of passed arrays
         if len(self._param_labels) == 0:
             print('No params, IVFitter class not properly implemented')
             return None
-        if len(initial_vals) != len(self._param_labels):
-            raise ValueError('Intial parameter array ({}) must be same length as defined parameter list'
-                             '(see get_param_labels()).'.format(len(initial_vals)))
-        elif bounds and len(bounds) == 2 * len(self._param_labels):
-            raise ValueError('Parameter bounds array ({}) must be exactly double the length of defined parameter list'
-                             '(see get_param_labels()).'.format(len(bounds)))
 
-        fit_vals, fit_cov = curve_fit(self.fit_function, x_data, y_data, p0=initial_vals)
+        if not initial_vals:
+            initial_vals = self.default_values
+        if initial_vals and len(initial_vals) != len(self._param_labels):
+            warn('Intial parameter array ({}) must be same length as defined parameter list (see get_param_labels()).'
+                 .format(len(initial_vals)))
+            initial_vals = CF_DEFAULT_VALUES
+
+        if not bounds:
+            bounds = self.default_bounds
+        if bounds and bounds != CF_DEFAULT_BOUNDS and len(bounds) == 2 * len(self._param_labels):
+            warn('Parameter bounds array ({}) must be exactly double the length of defined parameter list '
+                 '(see get_param_labels()).'.format(len(bounds)))
+            bounds = CF_DEFAULT_VALUES
+
+        fit_vals, fit_cov = curve_fit(self.fit_function, x_data, y_data, p0=initial_vals, bounds=bounds)
         fit_y_data = self.fit_function(x_data, *fit_vals)
         fit_sterrs = np.sqrt(np.diag(fit_cov))
         return FitData2(x_data, y_data, fit_y_data, fit_vals, fit_sterrs, self)
@@ -51,11 +67,23 @@ class GenericFitter(ABC):
                 print('No params, IVFitter class not properly implemented')
             return None
 
+    def get_default_values(self):
+        return self.default_values
+
+    def get_default_bounds(self):
+        return self.default_bounds
+
 
 class IVFitter(GenericFitter, ABC):
-    def fit(self, x_data, y_data, initial_vals, bounds=None):
-        fit_data = super().fit(x_data, y_data, initial_vals, bounds)
+    def fit(self, x_data, y_data, initial_vals=None, bounds=None):
+        fit_data = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds)
         return IVFitData.from_fit_data(fit_data)
+
+    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None):
+        assert isinstance(iv_data, IVData)
+        potential = iv_data[POTENTIAL]
+        current = iv_data[CURRENT]
+        return self.fit(potential, current, initial_vals, bounds)
 
 
 class FullIVFitter(IVFitter):
@@ -70,6 +98,11 @@ class FullIVFitter(IVFitter):
             FLOAT_POT: 2,
             ELEC_TEMP: 3
         }
+        self.default_values = (30.0, -1.5, 0.0204, 1)
+        self.default_bounds = (
+            (-np.inf, -np.inf,      0, -np.inf),
+            ( np.inf,  np.inf, np.inf,  np.inf)
+        )
         self.name = '4 Parameter Fit'
 
     def fit_function(self, v, *parameters):
@@ -104,6 +137,11 @@ class SimpleIVFitter(IVFitter):
             FLOAT_POT: 1,
             ELEC_TEMP: 2
         }
+        self.default_values = (30.0, -1.5,  1)
+        self.default_bounds = (
+            (-np.inf, -np.inf, -np.inf),
+            ( np.inf,  np.inf,  np.inf)
+        )
         self.name = '3 Parameter Fit'
 
     def fit_function(self, v, *parameters):
@@ -130,7 +168,18 @@ class IonCurrentSEFitter(IVFitter):
             ION_SAT: 0,
             SHEATH_EXP: 1
         }
+        self.default_values = (30.0, 0.0204)
+        self.default_bounds = (
+            (-np.inf,      0),
+            ( np.inf, np.inf)
+        )
         self.name = 'Ion Current Sheath Expansion Fit'
+
+    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None):
+        assert isinstance(iv_data, IVData)
+        potential = np.power(np.abs(iv_data[POTENTIAL]), 0.75)
+        current = iv_data[ION_CURRENT]
+        return self.fit(potential, current, initial_vals, bounds)
 
     def fit_function(self, v, *parameters):
         I_0 = parameters[self._param_labels[ION_SAT]]
@@ -151,6 +200,11 @@ class Maxwellian3Fitter(GenericFitter):
             ELEC_TEMP: 0,
             ELEC_MASS: 1,
         }
+        self.default_values = (1, 1)
+        self.default_bounds = (
+            (     0,      0),
+            (np.inf, np.inf)
+        )
         self.name = '3D Maxwellian Distribution Fit'
 
     def fit_function(self, v, *parameters):
@@ -176,6 +230,11 @@ class Gaussian1DFitter(GenericFitter):
             "x_0": 2,
             "A": 3
         }
+        self.default_values = (1.0, 1.0, 0.0, 1)
+        self.default_bounds = (
+            (     0,      0, -np.inf, -np.inf),
+            (np.inf, np.inf,  np.inf,  np.inf)
+        )
         self.name = '1D Gaussian Distribution Fit'
 
     def fit_function(self, v, *parameters):

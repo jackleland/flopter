@@ -1,5 +1,5 @@
 import flopter as fl
-from fitters import Gaussian1DFitter, Maxwellian3Fitter
+from fitters import Gaussian1DFitter, Maxwellian3Fitter, SimpleIVFitter, IonCurrentSEFitter
 from normalisation import _ELECTRON_MASS as m_e
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,7 +21,7 @@ def run_param_scan():
     print(params)
     for trim_end in trim_space:
         ivdata = flopter_gap.trim(trim_end=trim_end)
-        ivfitdata = flopter_gap.fit(ivdata, fit_full=True)
+        ivfitdata = flopter_gap.fit(ivdata)
         flopter_gap.plot_f_fit(ivfitdata, fig=fig, plot_raw=False, plot_vf=False, label=str(trim_end))
         fit_params, fit_errors = ivfitdata.get_fit_params()
         for i in range(n_params):
@@ -53,11 +53,11 @@ def run_gap_nogap_comparison():
     ivdata_g2 = flopter_gap.trim(trim_end=0.5)
     ivdata_ng2 = flopter_nogap.trim(trim_end=0.5)
 
-    ifit_g = flopter_gap.fit(ivdata_g, fit_i=True, print_fl=True)
-    ifit_ng = flopter_nogap.fit(ivdata_ng, fit_i=True, print_fl=True)
+    ifit_g = flopter_gap.fit(ivdata_g, IonCurrentSEFitter(), print_fl=True)
+    ifit_ng = flopter_nogap.fit(ivdata_ng, IonCurrentSEFitter(), print_fl=True)
 
-    ffit_g2 = flopter_gap.fit(ivdata_g2, fit_full=True, print_fl=True)
-    ffit_ng2 = flopter_nogap.fit(ivdata_ng2, fit_full=True, print_fl=True)
+    ffit_g2 = flopter_gap.fit(ivdata_g2, print_fl=True)
+    ffit_ng2 = flopter_nogap.fit(ivdata_ng2, print_fl=True)
 
     fig1 = plt.figure()
     flopter_gap.plot_iv(fig=fig1, plot_tot=True, label='Gap')

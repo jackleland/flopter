@@ -15,6 +15,7 @@ from constants import POTENTIAL, CURRENT, ELEC_CURRENT, ION_CURRENT, TIME
 from homogeniser import Spice2Homogeniser
 from inputparser import InputParser
 from normalisation import Denormaliser
+from fitters import IVFitter, FullIVFitter
 
 
 class IVAnalyser(ABC):
@@ -50,37 +51,7 @@ class IVAnalyser(ABC):
     # @abstractmethod
     # def save(self):
     #     pass
-
-
-def iv_characteristic_function(v, *parameters):
-    I_0 = parameters[0]
-    a = parameters[1]
-    v_f = parameters[2]
-    T_e = parameters[3]
-    V = (v_f - v)/T_e
-    return I_0 * (1 - np.exp(-V) + (a * np.float_power(np.absolute(V), 0.75)))
-
-
-def simple_iv_characteristic_function(v, *parameters):
-    I_0 = parameters[0]
-    v_f = parameters[1]
-    T_e = parameters[2]
-    V = (v_f - v) / T_e
-    return I_0 * (1 - np.exp(-V))
-
-
-def ion_current_sl_function(v, *parameters):
-    I_0 = parameters[0]
-    a = parameters[1]
-    return I_0 *(1 + (a*v))
-
-
-def print_params(values, errors, labels=("I_0", "a", "v_float", "T_e")):
-    print("FIT PARAMETERS")
-    for i in range(len(values)):
-        print("{a} = {b} +/- {c}".format(a=labels[i], b=values[i], c=errors[i]))
-    print("")
-
+    
 
 class Flopter(IVAnalyser):
 
@@ -201,63 +172,38 @@ class Flopter(IVAnalyser):
         v_float = iv_interp([0.0])
         return v_float
 
-    def fit(self, iv_data, fit_i=False, fit_simple=False, fit_full=False, print_fl=False):
-        # find the potential where the net current is zero using np.interp
-        V, I, I_i = iv_data.split()
-        v_float = self.get_vf()
+    def fit(self, iv_data, fitter=FullIVFitter(), print_fl=False, bounds=None, initial_vals=None):
+        # TODO: Reimplement the finding of floating potential
+        assert isinstance(fitter, IVFitter)
 
+        fit_data = fitter.fit_iv_data(iv_data, initial_vals=initial_vals, bounds=bounds)
         if print_fl:
-            print('v_float = {a}'.format(a=v_float))
-        e_temp = 1  # eV
-        I_0_sam = 32.774
-        a_sam = 0.0204
+            fit_data.print_fit_params()
 
-        if fit_full:
-            # Parameters for the full fitting function [I_0, a, v_float, electron_temperature]
-            # These are taken from Sam's paper
+        return fit_data
 
-            params = [I_0_sam, a_sam, v_float, e_temp]
-            bounds = ([-np.inf, 0, v_float - 0.01, -np.inf],
-                      [np.inf, np.inf, v_float, np.inf])
-            fparams, fcov = curve_fit(iv_characteristic_function, V, I, p0=params, bounds=bounds)
-            I_fitted = iv_characteristic_function(V, *fparams)
-            fstdevs = np.sqrt(np.diag(fcov))
-            if print_fl:
-                print_params(fparams, fstdevs)
-            return IVFitData(V, I, I_fitted, fparams, fstdevs, iv_characteristic_function)
+    # Guess parameters from previous fitting routines
+        # These are taken from Sam's paper
+        # v_float = self.get_vf()
+        # e_temp = 1  # eV
+        # I_0_sam = 32.774
+        # a_sam = 0.0204
 
-        if fit_simple:
-            # Parameters for the simple fitting function (no sheath expansion)
-            params_simple = [I_0_sam, v_float, e_temp]
-            bounds_simple = ([-np.inf, v_float - 0.01, -np.inf],
-                            [np.inf, v_float, np.inf])
-            I_sam = iv_characteristic_function(V, *params_simple)
+    # Parameters for the full fitting function [I_0, a, v_float, electron_temperature]
+        # params = [I_0_sam, a_sam, v_float, e_temp]
+        # bounds = ([-np.inf, 0, v_float - 0.01, -np.inf],
+        #           [np.inf, np.inf, v_float, np.inf])
 
-            # Run fitting algorithm and create fitted function array
+    # Parameters for the simple fitting function (no sheath expansion)
+        # params_simple = [I_0_sam, v_float, e_temp]
+        # bounds_simple = ([-np.inf, v_float - 0.01, -np.inf],
+        #                 [np.inf, v_float, np.inf])
 
-            fparams_simple, fcov_simple = curve_fit(simple_iv_characteristic_function, V, I, p0=params_simple, bounds=bounds_simple)
-            I_fitted_simple = simple_iv_characteristic_function(V, *fparams_simple)
-            fstdevs_simple = np.sqrt(np.diag(fcov_simple))
-            if print_fl:
-                print_params(fparams_simple, fstdevs_simple, labels=["I_0", "v_float", "T_e"])
-            return V, I_fitted_simple, fparams_simple, fstdevs_simple
-
-        ##################################################
-        #         Straight Line Fitting Function         #
-        ##################################################
-
-        if fit_i:
-            sl_V = np.power(np.abs(V), 0.75)
-            sl_params = [I_0_sam, a_sam]
-            sl_bounds = ([-np.inf, 0],
-                         [np.inf, np.inf])
-
-            sl_fit_params, sl_fit_cov = curve_fit(ion_current_sl_function, sl_V, I_i, p0=sl_params, bounds=sl_bounds)
-            sl_I_fitted = ion_current_sl_function(sl_V, *sl_fit_params)
-            sl_fstdevs = np.sqrt(np.diag(sl_fit_cov))
-            if print_fl:
-                print_params(sl_fit_params, sl_fstdevs, labels=["I_0", "a"])
-            return IVFitData(sl_V, I_i, sl_I_fitted, sl_fit_params, sl_fstdevs, iv_characteristic_function)
+    # Parameters for the straight line fitting function
+        # sl_V = np.power(np.abs(V), 0.75)
+        # sl_params = [I_0_sam, a_sam]
+        # sl_bounds = ([-np.inf, 0],
+        #              [np.inf, np.inf])
 
 ##################################
 #              Plot              #
