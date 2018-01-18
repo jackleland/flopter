@@ -83,7 +83,7 @@ def run_maxwellian_fit():
 
     tdata = f_gap.tfile
     adata = f_gap.afile
-    print(f_gap.tfile.keys())
+    print(f_gap.tfile)
     print(f_gap.afile.keys())
 
     # Get all arrays in the t-file which contain diagnostic histograms and put them into
@@ -92,24 +92,24 @@ def run_maxwellian_fit():
     for hist_name in hist_names:
         diagnostic = hist_name[:-2]
         if diagnostic in diagnostic_histograms:
-            diagnostic_histograms[diagnostic].append(tdata[hist_name])
+            diagnostic_histograms[diagnostic].append(tdata.diagnostics[hist_name])
         else:
-            diagnostic_histograms[diagnostic] = [tdata[hist_name]]
+            diagnostic_histograms[diagnostic] = [tdata.diagnostics[hist_name]]
 
-    ehist1 = f_gap.tfile['eHistSheathx1'][:, 0]
-    ehist2 = f_gap.tfile['eHistSheathx2'][:, 0]
-    ehist3 = f_gap.tfile['eHistSheathx3']
+    ehist1 = f_gap.tfile.diagnostics['eHistSheathx1'][:, 0]
+    ehist2 = f_gap.tfile.diagnostics['eHistSheathx2'][:, 0]
+    ehist3 = f_gap.tfile.diagnostics['eHistSheathx3']
     ehist = np.sqrt(ehist1**2 + ehist2**2)
-    pot = f_gap.tfile['Pot']
-    temp = f_gap.tfile['Temp']
+    pot = f_gap.tfile.pot
+    temp = f_gap.tfile.temp
 
-    fvarrays = tdata['fvarrays']
-    fvbin = tdata['fvbin']
-    fvperparraycount = tdata['fvperparraycount']
-    fvlimits = tdata['fvlimits']
-    histlimits = tdata['histlimits']
-    current = tdata['objectscurrente'][0]
-    time = tdata['t'][:-1]
+    fvarrays = tdata.fvarrays
+    fvbin = tdata.fvbin
+    fvperparraycount = tdata.fvperparraycount
+    fvlimits = tdata.fvlimits
+    histlimits = tdata.histlimits
+    current = tdata.objectscurrente[0]
+    time = tdata.t[:-1]
 
     # vx = adata['vxav02']
     # vx2 = adata['vx2av02']
