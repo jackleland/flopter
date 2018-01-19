@@ -41,6 +41,9 @@ class FitParamList(list):
     def get_errors(self):
         return [param.get_error() for param in self]
 
+    def split(self):
+        return self.get_values(), self.get_errors()
+
 
 class FitData2(object):
     def __init__(self, raw_x, raw_y, fit_y, fit_values, fit_errors, fitter):
@@ -103,8 +106,8 @@ class IVFitData(FitData2):
             fit_data_instance.raw_x,
             fit_data_instance.raw_y,
             fit_data_instance.fit_y,
-            fit_data_instance.fit_params.get_values,
-            fit_data_instance.fit_params.get_errors,
+            fit_data_instance.fit_params.get_values(),
+            fit_data_instance.fit_params.get_errors(),
             fit_data_instance.fitter
         ]
         return cls(*class_data)

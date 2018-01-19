@@ -23,7 +23,7 @@ def run_param_scan():
         ivdata = flopter_gap.trim(trim_end=trim_end)
         ivfitdata = flopter_gap.fit(ivdata)
         flopter_gap.plot_f_fit(ivfitdata, fig=fig, plot_raw=False, plot_vf=False, label=str(trim_end))
-        fit_params, fit_errors = ivfitdata.get_fit_params()
+        fit_params, fit_errors = ivfitdata.get_fit_params().split()
         for i in range(n_params):
             if len(params[i]) == 0:
                 params[i] = [fit_params[i]]
@@ -157,10 +157,10 @@ def run_maxwellian_fit():
     #         plt.plot(data[i], label=name)
     #         plt.legend()
 
-    for name, data in diagnostic_histograms.items():
-        plt.figure()
-        for i in range(len(data)):
-            plt.plot(data[i])
+    # for name, data in diagnostic_histograms.items():
+    #     plt.figure()
+    #     for i in range(len(data)):
+    #         plt.plot(data[i])
     # plt.plot(*fit_data.get_fit_plottables())
     # plt.plot(ehist1x, guess_func)
     # plt.show()
@@ -190,6 +190,6 @@ def run_maxwellian_fit():
 
 
 if __name__ == '__main__':
-    # run_gap_nogap_comparison()
-    # run_param_scan()
+    run_gap_nogap_comparison()
+    run_param_scan()
     run_maxwellian_fit()
