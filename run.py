@@ -189,7 +189,21 @@ def run_maxwellian_fit():
     plt.show()
 
 
+def test():
+    flpt = fl.Flopter('bin/data_local/', 'benchmarking/', 'nogap/', run_name='prebp', ext_run_name='prebpro')
+
+    vf = flpt.get_vf()
+    phi = flpt.get_plasma_potential()
+
+    mu = flpt.denormaliser.mu
+    const = np.log(0.6 * np.sqrt((2 * np.pi) / mu))
+    temperature = (vf - phi)/const
+    print(temperature)
+
+
 if __name__ == '__main__':
-    run_gap_nogap_comparison()
-    run_param_scan()
+    # run_gap_nogap_comparison()
+    # run_param_scan()
     run_maxwellian_fit()
+    # test()
+

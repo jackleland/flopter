@@ -4,9 +4,11 @@ from abc import ABC, abstractmethod
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy as sp
 from scipy import interpolate
 from scipy.io import loadmat
 from scipy.optimize import curve_fit
+from scipy.signal import argrelmax, savgol_filter
 
 from classes.fitdata import IVFitData
 from classes.ivdata import IVData
@@ -114,7 +116,7 @@ class Flopter(IVAnalyser):
         self.tfile_path = data_dir + tfile_pre + file_suf
         self.afile_path = data_dir + ext_run_name + file_suf
         self.tfile = Spice2Data(self.tfile_path)
-        self.afile = loadmat(self.afile_path)
+        # self.afile = loadmat(self.afile_path)
 
         self.parser = None
         self.denormaliser = None
@@ -172,6 +174,34 @@ class Flopter(IVAnalyser):
         v_float = iv_interp([0.0])
         return v_float
 
+    def get_plasma_potential(self, iv_data=None):
+        if not iv_data:
+            iv_data = self.iv_data
+
+        vf = self.get_vf(iv_data)
+        print(vf)
+
+        gradient = np.gradient(-iv_data[CURRENT])
+        gradient2 = np.gradient(gradient)
+        peaks = argrelmax(gradient)
+
+        smoothed_gradient = savgol_filter(gradient, 21, 2)
+        smoothed_peaks = argrelmax(smoothed_gradient)
+
+        # print(gradient)
+        # print(peaks)
+
+        plt.figure()
+        # plt.plot(iv_data[POTENTIAL], iv_data[CURRENT])
+        plt.plot(iv_data[POTENTIAL], gradient)
+        plt.plot(iv_data[POTENTIAL], smoothed_gradient)
+        # plt.plot(iv_data[POTENTIAL], gradient2)
+        phi = iv_data[POTENTIAL][[p for p in smoothed_peaks[0] if iv_data[POTENTIAL][p] > vf][0]]
+        # for p in [p for p in smoothed_peaks[0] if iv_data[POTENTIAL][p] > vf]:
+        #     plt.axvline(iv_data[POTENTIAL][p], linewidth=1, color='r')
+        plt.show()
+        return phi
+
     def fit(self, iv_data, fitter=FullIVFitter(), print_fl=False, bounds=None, initial_vals=None):
         # TODO: Reimplement the finding of floating potential
         assert isinstance(fitter, IVFitter)
@@ -181,6 +211,13 @@ class Flopter(IVAnalyser):
             fit_data.print_fit_params()
 
         return fit_data
+
+    def temperature_fit(self, iv_data=None):
+        vf = self.get_vf(iv_data)
+        phi = self.get_plasma_potential(iv_data)
+        const = np.log(0.6 * np.sqrt((2 * np.pi) / self.denormaliser.get_mu()))
+        temperature = (phi - vf) / const
+        return temperature
 
     # Guess parameters from previous fitting routines
         # These are taken from Sam's paper
