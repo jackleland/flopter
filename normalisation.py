@@ -25,13 +25,13 @@ class Converter(ABC):
     def __init__(self):
         # Conversion types - stored in a dictionary
         self.CONVERSION_TYPES = {
-            c.POTENTIAL_CONV: self._convert_potential,
-            c.CURRENT_CONV: self._convert_current,
-            c.LENGTH_CONV: self._convert_length,
-            c.TIME_CONV: self._convert_time
+            c.CONV_POTENTIAL: self._convert_potential,
+            c.CONV_CURRENT: self._convert_current,
+            c.CONV_LENGTH: self._convert_length,
+            c.CONV_TIME: self._convert_time
         }
 
-    def __call__(self, variable, conversion_type=c.POTENTIAL_CONV, additional_arg=None):
+    def __call__(self, variable, conversion_type=c.CONV_POTENTIAL, additional_arg=None):
         """
         :param variable:            Variable to be converted. Must be scalable, i.e. a float or a numpy array
         :param conversion_type:     Which conversion type should be done (length, potential etc)
@@ -124,21 +124,27 @@ class Denormaliser(Converter):
         if temp:
             self.temperature = temp
         elif 'T_e' in self.simulation_params.keys():
-            self.temperature = self.simulation_params
-        self.debye_length = np.sqrt((_EPSILON_0 * self.simulation_params['T_e'])
-                                    / (_ELEM_CHARGE * self.simulation_params['n_e']))
-        self.omega_i = ((_ELEM_CHARGE * self.simulation_params['B'])
+            self.temperature = self.simulation_params[c.ELEC_TEMP]
+
+        self.ksi = float(parser.get(c.INF_SEC_PLASMA, c.INF_KSI))
+        self.mu = float(parser.get(c.INF_SEC_PLASMA, c.INF_MU))
+        self.tau = float(parser.get(c.INF_SEC_PLASMA, c.INF_TAU))
+
+        self.debye_length = np.sqrt((_EPSILON_0 * self.temperature)
+                                    / (_ELEM_CHARGE * self.simulation_params[c.ELEC_DENS]))
+        self.omega_i = ((_ELEM_CHARGE * self.simulation_params[c.INF_MAGNETIC_FIELD])
                         / _ION_MASS)
-        self.K = ((self.simulation_params['n_e'] * self.debye_length**self.dimensions)
-                  / float(parser.get('geom', 'Npc')[:-1]))
+        self.K = ((self.simulation_params[c.ELEC_DENS] * self.debye_length**self.dimensions)
+                  / float(parser.get(c.INF_SEC_GEOMETRY, c.INF_PART_PER_CELL)[:-1]))
 
-        self.CONVERSION_TYPES[c.IV_CONV] = self._convert_iv_data
+        self.CONVERSION_TYPES[c.CONV_IV] = self._convert_iv_data
+        self.CONVERSION_TYPES[c.CONV_DIST_FUNCTION] = self._convert_distribution_function
 
-    def __call__(self, variable, conversion_type=c.IV_CONV, additional_arg=None):
+    def __call__(self, variable, conversion_type=c.CONV_IV, additional_arg=None):
         super().__call__(variable, conversion_type=conversion_type, additional_arg=additional_arg)
 
     def _convert_potential(self, potential):
-        return potential * (self.simulation_params['T_e'])
+        return potential * self.temperature
 
     def _convert_current(self, current):
         return ((_ELEM_CHARGE * self.K * self.omega_i) / self.dt) * current
@@ -150,7 +156,7 @@ class Denormaliser(Converter):
         return (1 / self.omega_i) * time
 
     def _convert_density(self, density):
-        return self.simulation_params['n_e'] * density
+        return self.simulation_params[c.ELEC_DENS] * density
 
     def _convert_iv_data(self, iv_data):
         time = self._convert_time(iv_data[c.TIME])
@@ -160,6 +166,13 @@ class Denormaliser(Converter):
         current_i = self._convert_current(iv_data[c.ION_CURRENT])
 
         return IVData(potential, current, time, i_current=current_i, e_current=current_e)
+
+    def _convert_distribution_function(self, dist_function):
+        conversion_factor = np.sqrt(self.temperature / _ION_MASS) / self.ksi * np.sqrt(200 / self.mu)
+        return conversion_factor * dist_function
+
+    def get_mu(self):
+        return self.mu
 
 
 class Normaliser(Converter):

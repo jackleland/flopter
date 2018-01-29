@@ -7,7 +7,8 @@ from scipy.io import loadmat
 from classes.ivdata import IVData
 from classes.spicedata import Spice2Data
 from inputparser import InputParser
-from constants import DIAG_PROBE_POT
+from constants import DIAG_PROBE_POT, INF_SEC_SHAPES, INF_SEC_GEOMETRY, INF_SEC_CONTROL, INF_SWEEP_PARAM
+import constants as c
 
 
 class Homogeniser(ABC):
@@ -134,30 +135,30 @@ class Spice2Homogeniser(Homogeniser):
         probe found in the input file is the only probe.
         :return: {int} Index of probe in simulation object array.
         """
-        num_blocks_section = self.parser['num_blocks']
+        num_blocks_section = self.parser[INF_SEC_SHAPES]
         n = 0
         for shape in num_blocks_section:
-            n_shape = self.parser.getint('num_blocks', shape)
+            n_shape = self.parser.getint(INF_SEC_SHAPES, shape)
             n += n_shape
             if n_shape > 0:
                 shape_name = shape[:-1]
                 for i in range(n_shape):
                     section = self.parser[shape_name + str(i)]
-                    if int(section['param1']) == self._PROBE_PARAMETER:
+                    if int(section[INF_SWEEP_PARAM]) == self._PROBE_PARAMETER:
                         return (n - n_shape) + i
         raise ValueError('Could not find a shape set to sweep voltage')
 
     def get_scaling_values(self, len_diag, len_builtin):
         """
         Calculates the scaling values (n' and r) which are needed to extend the diagnostic outputs to the right length
-        and downsample them.
+        and downsample them for homogenisation of SPICE IV sweeps
         :param len_diag:    length of raw diagnostic output array   (n)
         :param len_builtin: length of builtin output array          (M)
         :return n_leading:  size of array to prepend onto the diagnostic array
         :return ratio:      ratio of extended diagnostic output array to builtin output array (e.g. objectscurrent):
         """
-        t_c = self.parser.getfloat('geom', 'tc')
-        t_p = self.parser.getfloat('geom', 'tp')
+        t_c = self.parser.getfloat(INF_SEC_GEOMETRY, c.INF_TIME_SWEEP)
+        t_p = self.parser.getfloat(INF_SEC_GEOMETRY, c.INF_TIME_END)
         # t_c as a fraction of whole time
         t = t_c/t_p
 
@@ -166,8 +167,8 @@ class Spice2Homogeniser(Homogeniser):
         return int(n_leading), int(ratio)
 
     def get_sweep_length(self, len_builtin, raw_voltage):
-        t_a = self.parser.getfloat('geom', 'ta')
-        t_p = self.parser.getfloat('geom', 'tp')
+        t_a = self.parser.getfloat(INF_SEC_GEOMETRY, c.INF_TIME_AV)
+        t_p = self.parser.getfloat(INF_SEC_GEOMETRY, c.INF_TIME_END)
         # t_a as a fraction of whole time
         t = t_a / t_p
 
