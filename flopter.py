@@ -170,9 +170,13 @@ class Flopter(IVAnalyser):
 
         return IVData(V, I, t, i_current=I_i, e_current=I_e)
 
-    def denormalise(self):
+    def denormalise(self, denormalise_t_data=False):
         self.iv_data = self.denormaliser(self.iv_data)
         self.raw_data = self.denormaliser(self.raw_data)
+        if denormalise_t_data:
+            self.denormalise_all()
+
+    def denormalise_all(self):
         self.tdata.denormalise()
 
 ##################################
