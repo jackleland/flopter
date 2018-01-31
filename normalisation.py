@@ -28,7 +28,12 @@ class Converter(ABC):
             c.CONV_POTENTIAL: self._convert_potential,
             c.CONV_CURRENT: self._convert_current,
             c.CONV_LENGTH: self._convert_length,
-            c.CONV_TIME: self._convert_time
+            c.CONV_TIME: self._convert_time,
+            c.CONV_DENSITY: self._convert_density,
+            c.CONV_MASS: self._convert_mass,
+            c.CONV_CHARGE: self._convert_charge,
+            c.CONV_TEMPERATURE: self._convert_temperature,
+            c.CONV_FLUX: self._convert_flux
         }
 
     def __call__(self, variable, conversion_type=c.CONV_POTENTIAL, additional_arg=None):
@@ -58,7 +63,7 @@ class Converter(ABC):
                 return function(variable)
         else:
             raise TypeError('The \'function\' argument should be a conversion type - one of: {a}'
-                            .format(a=str(*self.CONVERSION_TYPES)))
+                            .format(a=list(self.CONVERSION_TYPES.keys())))
 
     @abstractmethod
     def _convert_potential(self, potential):
@@ -78,6 +83,22 @@ class Converter(ABC):
 
     @abstractmethod
     def _convert_density(self, density):
+        pass
+
+    @abstractmethod
+    def _convert_mass(self, mass):
+        pass
+
+    @abstractmethod
+    def _convert_charge(self, charge):
+        pass
+
+    @abstractmethod
+    def _convert_temperature(self, temperature):
+        pass
+
+    @abstractmethod
+    def _convert_flux(self, flux):
         pass
 
 
@@ -141,7 +162,7 @@ class Denormaliser(Converter):
         self.CONVERSION_TYPES[c.CONV_DIST_FUNCTION] = self._convert_distribution_function
 
     def __call__(self, variable, conversion_type=c.CONV_IV, additional_arg=None):
-        super().__call__(variable, conversion_type=conversion_type, additional_arg=additional_arg)
+        return super().__call__(variable, conversion_type=conversion_type, additional_arg=additional_arg)
 
     def _convert_potential(self, potential):
         return potential * self.temperature
@@ -157,6 +178,18 @@ class Denormaliser(Converter):
 
     def _convert_density(self, density):
         return self.simulation_params[c.ELEC_DENS] * density
+
+    def _convert_mass(self, mass):
+        return self.mu * mass
+
+    def _convert_charge(self, charge):
+        return _ELEM_CHARGE * charge
+
+    def _convert_temperature(self, temperature):
+        return self.temperature * temperature
+
+    def _convert_flux(self, flux):
+        return self.simulation_params[c.ELEC_DENS] * self.debye_length * self.omega_i * flux
 
     def _convert_iv_data(self, iv_data):
         time = self._convert_time(iv_data[c.TIME])
@@ -181,6 +214,18 @@ class Normaliser(Converter):
     """
     def __init__(self):
         super().__init__()
+
+    def _convert_mass(self, mass):
+        super()._convert_mass(mass)
+
+    def _convert_charge(self, charge):
+        super()._convert_charge(charge)
+
+    def _convert_temperature(self, temperature):
+        super()._convert_temperature(temperature)
+
+    def _convert_flux(self, flux):
+        super()._convert_flux(flux)
 
     def _convert_length(self, length):
         super()._convert_length(length)

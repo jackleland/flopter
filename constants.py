@@ -41,7 +41,13 @@ CONV_CURRENT = 'current'
 CONV_LENGTH = 'length'
 CONV_TIME = 'time'
 CONV_IV = 'iv_data'
+CONV_DENSITY = 'density'
+CONV_MASS = 'mass'
+CONV_CHARGE = 'charge'
+CONV_TEMPERATURE = 'temperature'
+CONV_FLUX = 'flux'
 CONV_DIST_FUNCTION = 'dist_function'
+
 
 # Standardised diagnostic names for Spice
 DIAG_PROBE_POT = 'ProbePot'

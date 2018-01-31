@@ -5,7 +5,7 @@ import numpy as np
 from scipy.io import loadmat
 
 from classes.ivdata import IVData
-from classes.spicedata import Spice2Data
+from classes.spicedata import Spice2TData
 from inputparser import InputParser
 from constants import DIAG_PROBE_POT, INF_SEC_SHAPES, INF_SEC_GEOMETRY, INF_SEC_CONTROL, INF_SWEEP_PARAM
 import constants as c
@@ -89,7 +89,7 @@ class Spice2Homogeniser(Homogeniser):
             raise ValueError('No valid InputParser object given or able to be created')
 
     def read_data(self):
-        self.data = Spice2Data(self.data_filename)
+        self.data = Spice2TData(self.data_filename)
 
     def homogenise(self):
         self._prehomogenise_checks()
@@ -108,7 +108,6 @@ class Spice2Homogeniser(Homogeniser):
         n = len(probe_bias)
         M = len(probe_current_tot)
         N, r = self.get_scaling_values(n, M)
-        print(N, r)
 
         leading_values = np.zeros(N, dtype=np.int) + probe_bias[0]
         probe_bias_extended = np.concatenate([leading_values, probe_bias])[0:-r:r]

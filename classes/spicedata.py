@@ -1,4 +1,7 @@
 import scipy.io as spio
+import normalisation as norm
+import constants as c
+
 
 NZ = 'Nz'
 NZMAX = 'Nzmax'
@@ -84,126 +87,106 @@ MKSPAR2 = 'mkspar2'
 MKSPAR3 = 'mkspar3'
 
 
+# MATLAB specific values returned by the loadmat function
+HEADER = '__header__'
+VERSION = '__version__'
+GLOBALS = '__globals__'
+
+VERSION_SPICE = 'version' # used by SPICE
+
+
 # Lists of labels specific to each version, those not in these lists are assumed to be diagnostic outputs.
-_GENERAL_LABELS = (NZ,
-    NZMAX,
-    NY,
-    COUNT,
-    HPOS,
-    DELTAH,
-    NPC,
-    DT,
-    DZ,
-    NPROC,
-    Q,
-    M,
-    TEMP,
-    ZG,
-    YG,
-    RHO,
-    ESCZ,
-    ESCY,
-    SURFACEMATRIX,
-    POT,
-    POTVAC,
-    SLICEPROC,
-    EDGECHARGE,
-    T,
-    SNUMBER,
-    TOTALENERGY,
-    ESCT,
-    DPHIQN,
-    PCHI,
-    BX,
-    BY,
-    BZ,
-    NPARTPROC,
-    NODIAGREG,
-    DIAGHISTORIES,
-    FVARRAYS,
-    FVBIN,
-    FVPERARRAYCOUNT,
-    FVLIMITS,
-    HISTLIMITS,
-    TIMEHISTORY_UPPER,
-    TIMEHISTORY_LOWER,
-    FLAGM,
-    EQUIPOTM,
-    FLAG,
-    ITERTIME_UPPER,
-    ITERTIME_LOWER,
-    INJRATE,
-    OBJECTS,
-    EDGES,
-    DIAGM,
-    OBJECTSENUM,
-    OBJECTSCURRENTI,
-    OBJECTSCURRENTE,
-    OBJECTSCURRENTFLUXI,
-    OBJECTSCURRENTFLUXE,
-    RHO1,
-    SOLW01,
-    SOLNS01,
-    RHO2,
-    SOLW02,
-    SOLNS02,
-    KSI,
-    TAU,
-    MU,
-    ALPHAYZ,
-    ALPHAXZ,
-    NC,
-    NA,
-    NP,
-    IREL,
-    FLOATCONSTANT)
-_SPICE2_LABELS = (MKSB,
-    MKSTE,
-    MKSB,
-    MKSMAINIONM,
-    MKSMAINIONQ,
-    MKSPAR1,
-    MKSPAR2,
-    MKSPAR3)
+_GENERAL_LABELS = (NZ, NZMAX, NY, COUNT, HPOS, DELTAH, NPC, DT, DZ, NPROC, Q, M, TEMP, ZG, YG, RHO, ESCZ, ESCY,
+                   SURFACEMATRIX, POT, POTVAC, SLICEPROC, EDGECHARGE, T, SNUMBER, TOTALENERGY, ESCT, DPHIQN, PCHI, BX,
+                   BY, BZ, NPARTPROC, NODIAGREG, DIAGHISTORIES, FVARRAYS, FVBIN, FVPERARRAYCOUNT, FVLIMITS, HISTLIMITS,
+                   TIMEHISTORY_UPPER, TIMEHISTORY_LOWER, FLAGM, EQUIPOTM, FLAG, ITERTIME_UPPER, ITERTIME_LOWER, INJRATE,
+                   OBJECTS, EDGES, DIAGM, OBJECTSENUM, OBJECTSCURRENTI, OBJECTSCURRENTE, OBJECTSCURRENTFLUXI,
+                   OBJECTSCURRENTFLUXE, RHO1, SOLW01, SOLNS01, RHO2, SOLW02, SOLNS02, KSI, TAU, MU, ALPHAYZ, ALPHAXZ,
+                   NC, NA, NP, IREL, FLOATCONSTANT, HEADER, VERSION, GLOBALS, VERSION_SPICE)
+_SPICE2_LABELS = (MKSN0, MKSB, MKSTE, MKSB, MKSMAINIONM, MKSMAINIONQ, MKSPAR1, MKSPAR2, MKSPAR3)
 _SPICE3_LABELS = ()
 
+_GENERAL_CONV_TYPES = {
+    DT: c.CONV_TIME,
+    DZ: c.CONV_LENGTH,
+    M: c.CONV_MASS,
+    Q: c.CONV_CHARGE,
+    TEMP: c.CONV_TEMPERATURE,
+    T: c.CONV_TIME,
+    OBJECTSCURRENTE: c.CONV_CURRENT,
+    OBJECTSCURRENTI: c.CONV_CURRENT,
+    OBJECTSCURRENTFLUXE: c.CONV_FLUX,
+    OBJECTSCURRENTFLUXI: c.CONV_FLUX,
+    POT: c.CONV_POTENTIAL,
+    POTVAC: c.CONV_POTENTIAL
+}
+_SPICE2_CONV_TYPES = {
+    MKSN0: c.CONV_DENSITY,
+    MKSTE: c.CONV_TEMPERATURE,
+    MKSMAINIONQ: c.CONV_CHARGE,
+    MKSMAINIONM: c.CONV_MASS
+}
+DIAGNOSTIC_CONV_TYPES = {
+    'Pot': c.CONV_POTENTIAL,
+    'Hist': c.CONV_DIST_FUNCTION
+}
 
-class SpiceData(object):
+class MatlabData(object):
+    def __init__(self, file):
+        self.version = file[VERSION]
+        self.header = file[HEADER]
+        self.globals = file[GLOBALS]
+
+
+class SpiceTData(object):
     _ALL_LABELS = _GENERAL_LABELS
+    _ALL_CONV_TYPES = _GENERAL_CONV_TYPES
 
-    def __init__(self, t_filename, deallocate=True):
+    def __init__(self, t_filename, deallocate=True, converter=None, convert=False):
         # Read matlab filename into dictionary and then distribute contents into named variables
         self.t_filename = t_filename
+        self.converter = converter
+        self.has_converted = {label: False for label in self._ALL_CONV_TYPES}
         self.t_data = spio.loadmat(t_filename)
 
-        self.Nz = self.t_data[NZ]
-        self.Nzmax = self.t_data[NZMAX]
-        self.Ny = self.t_data[NY]
-        self.count = self.t_data[COUNT]
-        self.hpos = self.t_data[HPOS]
-        self.deltah = self.t_data[DELTAH]
-        self.Npc = self.t_data[NPC]
+        self.matlab_data = MatlabData(self.t_data)
+        self.version = self.t_data[VERSION_SPICE]
+
+        # Convertible variables
         self.dt = self.t_data[DT]
         self.dz = self.t_data[DZ]
-        self.nproc = self.t_data[NPROC]
+        self.t = self.t_data[T]
         self.q = self.t_data[Q]
         self.m = self.t_data[M]
         self.temp = self.t_data[TEMP]
+        self.objectscurrenti = self.t_data[OBJECTSCURRENTI]
+        self.objectscurrente = self.t_data[OBJECTSCURRENTE]
+        self.objectspowerfluxi = self.t_data[OBJECTSCURRENTFLUXI]
+        self.objectspowerfluxe = self.t_data[OBJECTSCURRENTFLUXE]
+        self.pot = self.t_data[POT]
+        self.potvac = self.t_data[POTVAC]
+
+        # Other variables
+        self.nz = self.t_data[NZ]
+        self.nzmax = self.t_data[NZMAX]
+        self.ny = self.t_data[NY]
+        self.count = self.t_data[COUNT]
+        self.hpos = self.t_data[HPOS]
+        self.deltah = self.t_data[DELTAH]
+        self.npc = self.t_data[NPC]
+        self.nproc = self.t_data[NPROC]
         self.zg = self.t_data[ZG]
         self.yg = self.t_data[YG]
         self.rho = self.t_data[RHO]
-        self.Escz = self.t_data[ESCZ]
-        self.Escy = self.t_data[ESCY]
+        self.escz = self.t_data[ESCZ]
+        self.escy = self.t_data[ESCY]
+        self.esct = self.t_data[ESCT]
         self.surfacematrix = self.t_data[SURFACEMATRIX]
-        self.pot = self.t_data[POT]
-        self.potvac = self.t_data[POTVAC]
         self.sliceproc = self.t_data[SLICEPROC]
         self.edgecharge = self.t_data[EDGECHARGE]
-        self.t = self.t_data[T]
         self.snumber = self.t_data[SNUMBER]
         self.totalenergy = self.t_data[TOTALENERGY]
-        self.Esct = self.t_data[ESCT]
-        self.dPHIqn = self.t_data[DPHIQN]
+        self.dphiqn = self.t_data[DPHIQN]
         self.pchi = self.t_data[PCHI]
         self.bx = self.t_data[BX]
         self.by = self.t_data[BY]
@@ -228,10 +211,6 @@ class SpiceData(object):
         self.edges = self.t_data[EDGES]
         self.diagm = self.t_data[DIAGM]
         self.objectsenum = self.t_data[OBJECTSENUM]
-        self.objectscurrenti = self.t_data[OBJECTSCURRENTI]
-        self.objectscurrente = self.t_data[OBJECTSCURRENTE]
-        self.objectspowerfluxi = self.t_data[OBJECTSCURRENTFLUXI]
-        self.objectspowerfluxe = self.t_data[OBJECTSCURRENTFLUXE]
         self.rho01 = self.t_data[RHO1]
         self.solw01 = self.t_data[SOLW01]
         self.solns01 = self.t_data[SOLNS01]
@@ -243,16 +222,22 @@ class SpiceData(object):
         self.mu = self.t_data[MU]
         self.alphayz = self.t_data[ALPHAYZ]
         self.alphaxz = self.t_data[ALPHAXZ]
-        self.Np = self.t_data[NC]
-        self.Na = self.t_data[NA]
-        self.Np = self.t_data[NP]
+        self.np = self.t_data[NC]
+        self.na = self.t_data[NA]
+        self.np = self.t_data[NP]
         self.irel = self.t_data[IREL]
         self.floatconstant = self.t_data[FLOATCONSTANT]
 
         self.diagnostics = {key: value for key, value in self.t_data.items() if key not in self._ALL_LABELS}
+        for label in self.diagnostics:
+            if any(marker in label for marker in DIAGNOSTIC_CONV_TYPES.keys()):
+                self.has_converted[label] = False
 
         if deallocate:
             self.deallocate()
+
+        if convert:
+            self._convert(self.converter.__class__)
 
     def deallocate(self):
         # Deallocate the t_data dictionary as the data is duplicated into individual variables and therefore unnecessary
@@ -260,16 +245,44 @@ class SpiceData(object):
         import gc
         gc.collect()
 
+    def set_converter(self, converter):
+        self.converter = converter
 
-class Spice2Data(SpiceData):
+    def _convert(self, converter_type):
+        if self.converter and isinstance(self.converter, converter_type):
+            for label, conv_type in self._ALL_CONV_TYPES.items():
+                # TODO: This is messy and should be changed. Whole class should probably be a dictionary, but
+                # TODO: this works for now and makes other bits of the code more pythonic
+                if not self.has_converted[label]:
+                    setattr(self, label.lower(), self.converter(getattr(self, label.lower()), conversion_type=conv_type))
+                    self.has_converted[label] = True
+
+            for diag_key, data in self.diagnostics.items():
+                if diag_key in self.has_converted and not self.has_converted[diag_key]:
+                    for marker, conv_type in DIAGNOSTIC_CONV_TYPES.items():
+                        if marker in diag_key:
+                            self.diagnostics[diag_key] = self.converter(self.diagnostics[diag_key], conv_type)
+                            self.has_converted[diag_key] = True
+        else:
+            print('Not ready to be converted, no {} has been specified'.format(converter_type))
+
+    def denormalise(self):
+        self._convert(norm.Denormaliser)
+
+    def normalise(self):
+        self._convert(norm.Normaliser)
+
+
+class Spice2TData(SpiceTData):
     _ALL_LABELS = _GENERAL_LABELS + _SPICE2_LABELS
+    _ALL_CONV_TYPES = {**_GENERAL_CONV_TYPES, **_SPICE2_CONV_TYPES}
 
     def __init__(self, t_filename, deallocate=True):
         super().__init__(t_filename, deallocate=False)
 
         self.mksn0 = self.t_data[MKSN0]
-        self.mksTe = self.t_data[MKSTE]
-        self.mksB = self.t_data[MKSB]
+        self.mkste = self.t_data[MKSTE]
+        self.mksb = self.t_data[MKSB]
         self.mksmainionm = self.t_data[MKSMAINIONM]
         self.mksmainionq = self.t_data[MKSMAINIONQ]
         self.mkspar1 = self.t_data[MKSPAR1]

@@ -12,7 +12,7 @@ from scipy.signal import argrelmax, savgol_filter
 
 from classes.fitdata import IVFitData
 from classes.ivdata import IVData
-from classes.spicedata import Spice2Data
+from classes.spicedata import Spice2TData
 from constants import POTENTIAL, CURRENT, ELEC_CURRENT, ION_CURRENT, TIME
 from homogeniser import Spice2Homogeniser
 from inputparser import InputParser
@@ -57,8 +57,7 @@ class IVAnalyser(ABC):
 
 class Flopter(IVAnalyser):
 
-    def __init__(self, data_mount_dir, group_name, folder_name, run_name='prebpro', ext_run_name='prebprobe',
-                 prepare=True):
+    def __init__(self, data_mount_dir, group_name, folder_name, run_name=None, prepare=True):
         ##################################
         #             Extract            #
         ##################################
@@ -105,18 +104,30 @@ class Flopter(IVAnalyser):
         # input_filename = data_dir + 'prebiasprobe_ng_hg_sbm.inp'
         self.input_filename = data_dir + 'input.inp'
 
-        # file_suf = '.mat'
-        # tfile_pre = 't-'
-        # tfile_path, afile_path = self.get_runnames(data_dir, file_suf, tfile_pre)
+        if not run_name:
+            file_suf = '.mat'
+            tfile_pre = 't-'
+            self.tfile_path, self.afile_path = self.get_runnames(data_dir, file_suf, tfile_pre)
+        else:
+            # run_name = 'prebpro'
+            # ext_run_name = 'prebprobe'
+            run_name_short = run_name[:-2]
 
-        # run_name = 'prebpro'
-        # ext_run_name = 'prebprobe'
-        file_suf = '.mat'
-        tfile_pre = 't-{a}'.format(a=run_name)
-        self.tfile_path = data_dir + tfile_pre + file_suf
-        self.afile_path = data_dir + ext_run_name + file_suf
-        self.tfile = Spice2Data(self.tfile_path)
-        # self.afile = loadmat(self.afile_path)
+            file_suf = '.mat'
+            tfile_pre = 't-{a}'.format(a=run_name_short)
+            self.tfile_path = data_dir + tfile_pre + file_suf
+            self.afile_path = data_dir + run_name + file_suf
+
+        if self.tfile_path:
+            self.tdata = Spice2TData(self.tfile_path)
+        else:
+            raise ValueError('No t-file given')
+
+        if self.afile_path:
+            self.afile = loadmat(self.afile_path)
+        else:
+            print('No a-file given, continuing without')
+            self.afile = None
 
         self.parser = None
         self.denormaliser = None
@@ -131,20 +142,20 @@ class Flopter(IVAnalyser):
         # create flopter objects
         self.parser = InputParser(input_filename=self.input_filename)
         if denormalise:
-            self.denormaliser = Denormaliser(dt=self.tfile.dt, input_parser=self.parser)
+            self.denormaliser = Denormaliser(dt=self.tdata.dt, input_parser=self.parser)
+            self.tdata.converter = self.denormaliser
         if homogenise:
-            self.homogeniser = Spice2Homogeniser(data=self.tfile, input_parser=self.parser)
+            self.homogeniser = Spice2Homogeniser(data=self.tdata, input_parser=self.parser)
             self.iv_data, self.raw_data = self.homogeniser.homogenise()
 
     def get_runnames(self, directory, file_suffix, tfile_prefix):
+        cwd = os.getcwd()
         os.chdir(directory)
         tfile_glob_str = '{}{}*[!0-9]{}'.format(directory, tfile_prefix, file_suffix)
-        print(tfile_glob_str)
         tfile_name = glob.glob(tfile_glob_str)
         afile_name = glob.glob('{}[!{}]*[!0-9]{}'.format(directory, tfile_prefix, file_suffix))
-        print(tfile_name)
-        print(afile_name)
-        return tfile_name, afile_name
+        os.chdir(cwd)
+        return next(iter(tfile_name), None), next(iter(afile_name), None)
 
 ##################################
 #            Trimming            #
@@ -162,6 +173,7 @@ class Flopter(IVAnalyser):
     def denormalise(self):
         self.iv_data = self.denormaliser(self.iv_data)
         self.raw_data = self.denormaliser(self.raw_data)
+        self.tdata.denormalise()
 
 ##################################
 #             Fitting            #
