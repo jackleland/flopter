@@ -13,12 +13,12 @@ _old_filename = 'distpreptest'
 
 
 def create_input_file(new_inp_filename, inp_replacements):
-    with open(_template_path, 'rt') as ftemplate:
-        with open(new_inp_filename, 'wt') as finput:
-            template_contents = ftemplate.read()
-            for name, replacement in inp_replacements.items():
-                template_contents.replace(name, replacement)
-            finput.write(template_contents)
+    with open(_template_path, 'r') as ftemplate:
+        template_contents = ftemplate.read()
+    with open(new_inp_filename, 'x') as finput:
+        for name, replacement in inp_replacements.items():
+            template_contents.replace(name, replacement)
+        finput.write(template_contents)
 
 
 def edit_masala_restart(masala_replacements):
@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
     run_basename = 'distruns'
     run_suffix = '_halfnogap'
-    input_suffix = '_ng_hg_sbmdr'
+    input_suffix = '_ng_hg_sbmdr.inp'
 
     zhigh = 375
     zlow = 85
