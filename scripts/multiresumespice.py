@@ -72,7 +72,7 @@ if __name__ == '__main__':
 
         new_input_filename = _inputs_test_directory + run_basename + str(i + 1) + input_suffix
         new_input_filepath = _inputs_path + new_input_filename
-        replacements_i = {'[z_low]': diag_low, '[z_high]': diag_high}
+        replacements_i = {'[z_low]': str(diag_low), '[z_high]': str(diag_high)}
         print(replacements_i)
         create_input_file(new_input_filepath, replacements_i)
 
