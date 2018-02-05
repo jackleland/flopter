@@ -19,7 +19,7 @@ def create_input_file(new_inp_filename, inp_replacements):
         template_contents = ftemplate.read()
     with open(new_inp_filename, 'x') as finput:
         for name, replacement in inp_replacements.items():
-            template_contents.replace(name, replacement)
+            template_contents = template_contents.replace(name, replacement)
         finput.write(template_contents)
 
 
@@ -27,7 +27,7 @@ def edit_masala_restart(masala_replacements):
     with open(_script_template_path, 'r') as fmasala:
         masala = fmasala.read()
         for name, replacement in masala_replacements.items():
-            masala.replace(name, replacement)
+            masala = masala.replace(name, replacement)
     with open(_script_path, 'w') as fmasala:
         fmasala.write(masala)
 
@@ -85,9 +85,4 @@ if __name__ == '__main__':
         new_filename_short = run_basename + str(i + 1)
         create_run_directory(run_directory, new_filename_short)
 
-        # subprocess.call(spice2_directory + _script_path + ' -r')
-
-
-
-
-
+        subprocess.call(spice2_directory + _script_path + ' -r', shell=True)
