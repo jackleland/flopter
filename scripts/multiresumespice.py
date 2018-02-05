@@ -37,7 +37,9 @@ def create_run_directory(run_directory, new_filename):
     print('Changing directory: {} -> {}'.format(cwd, run_directory))
     os.chdir(run_directory)
 
-    subprocess.call('rename_files {} {}'.format(_old_filename, new_filename))
+    for mat_f in glob.glob('*{}*'.format(_old_filename)):
+        os.rename(mat_f, mat_f.replace(new_filename))
+
     for inp_f in glob.glob('*.inp'):
         os.remove(inp_f)
     os.remove('prepare.txt')
@@ -81,7 +83,7 @@ if __name__ == '__main__':
         new_filename_short = run_basename + str(i + 1)
         create_run_directory(run_directory, new_filename_short)
 
-        # subprocess.call(_script_path + ' -r')
+        # subprocess.call(spice2_directory + _script_path + ' -r')
 
 
 
