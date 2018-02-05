@@ -7,7 +7,8 @@ import glob
 _inputs_path = 'inputs/'
 _inputs_test_directory = 'test/'
 _template_path = _inputs_path + 'disttemplate_ng_hg_sbm.inp'
-_script_path = 'scripts/masala/masala_restart_template.sh'
+_script_template_path = 'scripts/masala/masala_restart_template.sh'
+_script_path = 'scripts/masala/masala_restart.sh'
 _prep_run_directory = 'data/tests/distpreptest_halfnogap1'
 _group_directory = 'data/script_test/'
 _old_filename = 'distpreptest'
@@ -23,7 +24,7 @@ def create_input_file(new_inp_filename, inp_replacements):
 
 
 def edit_masala_restart(masala_replacements):
-    with open(_script_path, 'r') as fmasala:
+    with open(_script_template_path, 'r') as fmasala:
         masala = fmasala.read()
         for name, replacement in masala_replacements.items():
             masala.replace(name, replacement)
@@ -73,12 +74,12 @@ if __name__ == '__main__':
         new_input_filepath = _inputs_path + new_input_filename
         replacements_i = {'[z_low]': diag_low, '[z_high]': diag_high}
         print(replacements_i)
-        # create_input_file(new_input_filepath, replacements_i)
+        create_input_file(new_input_filepath, replacements_i)
 
         run_name = run_basename + str(i + 1) + run_suffix
         replacements_m = {'[run_name]': run_name, '[input_file]': new_input_filename}
         print(replacements_m)
-        # edit_masala_restart(replacements_m)
+        edit_masala_restart(replacements_m)
 
         run_directory = _group_directory + run_name
         new_filename_short = run_basename + str(i + 1)
