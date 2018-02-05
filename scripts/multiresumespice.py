@@ -48,7 +48,7 @@ def create_run_directory(run_directory, new_filename):
 
 
 if __name__ == '__main__':
-    spice2_directory = '~/Spice/spice2/bin/'
+    spice2_directory = '/home/jleland/Spice/spice2/bin/'
     os.chdir(spice2_directory)
 
     run_basename = 'distruns'
