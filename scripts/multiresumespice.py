@@ -5,6 +5,7 @@ import glob
 
 # constants
 _inputs_path = 'inputs/'
+_inputs_test_directory = 'test/'
 _template_path = _inputs_path + 'disttemplate_ng_hg_sbm.inp'
 _script_path = 'scripts/masala/masala_restart_template.sh'
 _prep_run_directory = 'data/tests/distpreptest_halfnogap1'
@@ -38,7 +39,7 @@ def create_run_directory(run_directory, new_filename):
     os.chdir(run_directory)
 
     for mat_f in glob.glob('*{}*'.format(_old_filename)):
-        os.rename(mat_f, mat_f.replace(new_filename))
+        os.rename(mat_f, mat_f.replace(_old_filename, new_filename))
 
     for inp_f in glob.glob('*.inp'):
         os.remove(inp_f)
@@ -68,7 +69,7 @@ if __name__ == '__main__':
         diag_high = int(((i+1)*32)+(zlow-1))
         print(diag_low, diag_high)
 
-        new_input_filename = run_basename + str(i + 1) + input_suffix
+        new_input_filename = _inputs_test_directory + run_basename + str(i + 1) + input_suffix
         new_input_filepath = _inputs_path + new_input_filename
         replacements_i = {'[z_low]': diag_low, '[z_high]': diag_high}
         print(replacements_i)
