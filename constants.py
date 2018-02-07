@@ -26,12 +26,16 @@ INF_TIME_SWEEP = 'tc'
 INF_PART_PER_CELL = 'Npc'
 INF_SWEEP_PARAM = 'param1'
 INF_SHAPE_NAMES = ['rectangle', 'triangle', 'circle']    # Indexed in order listed in input file
+INF_DIAGS_NUM = 'no_diag_reg'
+INF_DIAG_NAME = 'diag_name'
+INF_DIAG_PROPERTY = 'record_property'
 
 # Input File Section Headers
 INF_SEC_PLASMA = 'plasma'
 INF_SEC_GEOMETRY = 'geom'
 INF_SEC_CONTROL = 'control'
 INF_SEC_DIAG = 'diag_reg'
+INF_SEC_DIAGS = 'num_diag_regions'
 INF_SEC_SPECIE = 'specie'
 INF_SEC_SHAPES = 'num_blocks'
 

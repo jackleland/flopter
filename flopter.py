@@ -56,6 +56,8 @@ class IVAnalyser(ABC):
     
 
 class Flopter(IVAnalyser):
+    _tfile_prefix = 't-'
+    _file_suffix = '.mat'
 
     def __init__(self, data_mount_dir, group_name, folder_name, run_name=None, prepare=True):
         ##################################
@@ -105,25 +107,23 @@ class Flopter(IVAnalyser):
         self.input_filename = data_dir + 'input.inp'
 
         if not run_name:
-            file_suf = '.mat'
-            tfile_pre = 't-'
-            self.tfile_path, self.afile_path = self.get_runnames(data_dir, file_suf, tfile_pre)
+            self.tfile_path, self.afile_path = self.get_runnames(data_dir)
         else:
-            # run_name = 'prebpro'
-            # ext_run_name = 'prebprobe'
             run_name_short = run_name[:-2]
-
-            file_suf = '.mat'
-            tfile_pre = 't-{a}'.format(a=run_name_short)
-            self.tfile_path = data_dir + tfile_pre + file_suf
-            self.afile_path = data_dir + run_name + file_suf
+            trun_name = '{a}{b}'.format(a=self._tfile_prefix, b=run_name_short)
+            self.tfile_path = data_dir + trun_name + self._file_suffix
+            self.afile_path = data_dir + run_name + self._file_suffix
 
         if self.tfile_path:
+            if not run_name:
+                self.tfile_path = data_dir + self.tfile_path
             self.tdata = Spice2TData(self.tfile_path)
         else:
             raise ValueError('No t-file given')
 
         if self.afile_path:
+            if not run_name:
+                self.afile_path = data_dir + self.afile_path
             self.afile = loadmat(self.afile_path)
         else:
             print('No a-file given, continuing without')
@@ -148,12 +148,18 @@ class Flopter(IVAnalyser):
             self.homogeniser = Spice2Homogeniser(data=self.tdata, input_parser=self.parser)
             self.iv_data, self.raw_data = self.homogeniser.homogenise()
 
-    def get_runnames(self, directory, file_suffix, tfile_prefix):
+    def get_runnames(self, directory):
         cwd = os.getcwd()
-        os.chdir(directory)
-        tfile_glob_str = '{}{}*[!0-9]{}'.format(directory, tfile_prefix, file_suffix)
-        tfile_name = glob.glob(tfile_glob_str)
-        afile_name = glob.glob('{}[!{}]*[!0-9]{}'.format(directory, tfile_prefix, file_suffix))
+        if os.path.exists(directory):
+            os.chdir(directory)
+        else:
+            raise OSError('Directory \'{}\' invlaid.'.format(directory))
+        tfile_all_glob_str = '{}*{}'.format(self._tfile_prefix, self._file_suffix)
+        tfile_num_glob_str = '{}*[0-9][0-9]{}'.format(self._tfile_prefix, self._file_suffix)
+        all_tfiles = glob.glob(tfile_all_glob_str)
+        numbered_tfiles = glob.glob(tfile_num_glob_str)
+        tfile_name = [tfile for tfile in all_tfiles if tfile not in numbered_tfiles]
+        afile_name = glob.glob('[!{}]*[!0-9]{}'.format(self._tfile_prefix, self._file_suffix))
         os.chdir(cwd)
         return next(iter(tfile_name), None), next(iter(afile_name), None)
 

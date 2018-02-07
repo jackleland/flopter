@@ -1,13 +1,16 @@
 import flopter as fl
 from fitters import Gaussian1DFitter, Maxwellian3Fitter, SimpleIVFitter, IonCurrentSEFitter
-from normalisation import _ELECTRON_MASS as m_e
+import constants as c
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy as sp
+from scipy.io import loadmat
+
 
 
 def run_param_scan():
     flopter_gap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
-    # flopter_nogap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', run_name='prebp', ext_run_name='prebpro')
+    # flopter_nogap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/')
 
     ivdata_g = flopter_gap.trim(trim_end=0.8)
     # ivdata_ng = flopter_nogap.trim()
@@ -45,7 +48,7 @@ def run_param_scan():
 
 def run_gap_nogap_comparison():
     flopter_gap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
-    flopter_nogap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', run_name='prebp', ext_run_name='prebpro')
+    flopter_nogap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/')
 
     ivdata_g = flopter_gap.trim()
     ivdata_ng = flopter_nogap.trim()
@@ -74,20 +77,145 @@ def run_gap_nogap_comparison():
     plt.show()
 
 
-def run_maxwellian_fit():
-    f_gap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/',
-                          run_name='distte', ext_run_name='disttest', prepare=False)
-    # f_gap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/',
-    #                    run_name='prebp', ext_run_name='prebpro', prepare=False)
-    f_gap.prepare(homogenise=False, denormalise=False)
+def run_histogram_extraction():
+    flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/', prepare=False)
+    path = 'bin/data/benchmarking_sam/disttest_fullnogap/'
+    nproc = int(np.squeeze(flopter.tdata.nproc))
 
-    tdata = f_gap.tfile
-    adata = f_gap.afile
-    print(f_gap.tfile)
-    print(f_gap.afile.keys())
+    particles = {
+        'uy': np.array([], dtype=np.float64),
+        'uz': np.array([], dtype=np.float64),
+        'ux': np.array([], dtype=np.float64)
+    }
+    z_high = 374.0
+    z_low = 70.0
+    for i in range(nproc):
+        num = str(i).zfill(2)
+        filename = flopter.tfile_path.replace('.mat', '{}.mat'.format(num))
+        p_file = loadmat(filename)
+
+        # [print(key+': ', str(np.shape(array))) for key, array in p_file.items() if '__' not in key]
+        indices = np.where((p_file['z'] > z_low) & (p_file['z'] <= z_high))
+        for label in particles.keys():
+            p = p_file[label][indices]
+            particles[label] = np.append(particles[label], p)
+            print(np.shape(particles[label]))
+
+    ralpha = -flopter.tdata.alphayz / 180.0 * 3.141591
+    rbeta = (90.0 - flopter.tdata.alphaxz) / 180 * 3.14159
+
+    u_par = (particles['ux'] * np.sin(rbeta) * np.cos(ralpha)) + \
+            (particles['uy'] * np.cos(ralpha) * np.cos(rbeta)) - \
+            (particles['uz'] * np.sin(ralpha))
+    plt.hist(u_par, bins=300)
+    plt.show()
+        
+
+
+def run_current_comparison():
+    flopter_prep = fl.Flopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/', prepare=False)
+    flopter_top = fl.Flopter('bin/data/', 'bms_distruns/', 'disttest_fullnogap_top/', prepare=False)
+    flopter_bottom = fl.Flopter('bin/data/', 'bms_distruns/', 'disttest_fullnogap_bottom/', prepare=False)
+    flopters = {'prep': flopter_prep, 'top': flopter_top, 'bottom': flopter_bottom}
+
+    currents = {}
+    times = {}
+    diagnostics = {}
+    for name, f in flopters.items():
+        currents[name] = f.tdata.objectscurrente[0]
+        times[name] = f.tdata.t[1:]
+        diagnostics[name] = [diag for diag_name, diag in f.tdata.diagnostics.items()
+                             if 'eHist' in diag_name]
+
+    print(np.shape(diagnostics.items()))
+
+    for name in flopters.keys():
+        plt.figure(1)
+        plt.plot(times[name], currents[name], label=name)
+        plt.legend()
+
+        plt.figure(2)
+        for i, diag in enumerate(diagnostics[name]):
+            plt.plot(diag, label=name.join(str(i)))
+        plt.legend()
+
+
+    # current_prep = flopter_prep.tdata.objectscurrente
+    # time_prep = flopter_prep.tdata.t[1:]
+    # print(np.shape(time_prep), np.shape(current_prep))
+    # current_top = flopter_top.tdata.objectscurrente
+    # time_top = flopter_top.tdata.t[1:]
+
+    # for i in range(len(current_prep)):
+    #     plt.figure()
+    #     # current_combo = np.concatenate((current_prep[i], current_run0[i]))
+    #     plt.plot(time_prep, current_prep[i], label='prep')
+    #     plt.plot(time_top, current_top[i], label='top')
+    #     # plt.plot(current_combo)
+    #     plt.legend()
+
+    plt.figure()
+    plt.imshow(flopter_prep.tdata.pot)
+    plt.colorbar()
+
+    plt.figure()
+    plt.imshow(flopter_top.tdata.pot)
+    plt.colorbar()
+
+    plt.figure()
+    plt.imshow(flopter_bottom.tdata.pot)
+    plt.colorbar()
+
+    print(flopter_prep.tdata.diagnostics.keys())
+    print(flopter_top.tdata.diagnostics.keys())
+
+    plt.show()
+
+
+def run_maxwellian_comparison():
+    flopter_sheath = fl.Flopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/', prepare=False)
+    flopter_whole = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', prepare=False)
+
+    fig = plt.figure()
+    run_maxwellian_fit(flopter_sheath, fig=fig)
+    run_maxwellian_fit(flopter_whole, fig=fig)
+    plt.show()
+
+
+def get_diag_index(diag_name, parser):
+    """Find index of diagnostic within an input file"""
+    for i in range(len([section for section in parser.sections() if c.INF_SEC_DIAG in section]) - 1):
+        diag_section_name = c.INF_SEC_DIAG + str(i)
+        if parser.get(diag_section_name, c.INF_DIAG_NAME).strip('\\\'') == diag_name:
+            return i
+    print('No diagnostic region found matching "{}"'.format(diag_name))
+    return None
+
+
+def get_hist_index(hist_name, parser):
+    """Find the index of diagnostics which are histograms within an input file"""
+    count = -1
+    for i in range(len([section for section in parser.sections() if c.INF_SEC_DIAG in section]) - 1):
+        diag_section_name = c.INF_SEC_DIAG + str(i)
+        if parser.getint(diag_section_name, c.INF_DIAG_PROPERTY) == 3:
+            count += 1
+            if parser.get(diag_section_name, c.INF_DIAG_NAME).strip('\\\'') == hist_name:
+                return count
+    print('No diagnostic region making histograms found matching "{}"'.format(hist_name))
+    return None
+
+
+def run_maxwellian_fit(flopter, fig=None, show=False):
+    assert isinstance(flopter, fl.Flopter)
+
+    flopter.prepare(homogenise=False, denormalise=True)
+
+    tdata = flopter.tdata
+    print(flopter.tdata.diagnostics.keys())
 
     # Get all arrays in the t-file which contain diagnostic histograms and put them into
-    hist_names = [hist_name for hist_name in tdata.diagnostics.keys() if 'Hist' in hist_name]
+    hist_names = [hist_name for hist_name in tdata.diagnostics.keys()
+                  if 'eHist' in hist_name and any(tdata.diagnostics[hist_name] != 0.0)]
     diagnostic_histograms = {}
     for hist_name in hist_names:
         diagnostic = hist_name[:-2]
@@ -95,13 +223,6 @@ def run_maxwellian_fit():
             diagnostic_histograms[diagnostic].append(tdata.diagnostics[hist_name])
         else:
             diagnostic_histograms[diagnostic] = [tdata.diagnostics[hist_name]]
-
-    ehist1 = f_gap.tfile.diagnostics['eHistSheathx1'][:, 0]
-    ehist2 = f_gap.tfile.diagnostics['eHistSheathx2'][:, 0]
-    ehist3 = f_gap.tfile.diagnostics['eHistSheathx3']
-    ehist = np.sqrt(ehist1**2 + ehist2**2)
-    pot = f_gap.tfile.pot
-    temp = f_gap.tfile.temp
 
     fvarrays = tdata.fvarrays
     fvbin = tdata.fvbin
@@ -119,60 +240,51 @@ def run_maxwellian_fit():
     # vz2 = adata['vz2av02']
     # t1 = adata['temperature01']
     # t2 = adata['temperature02']
-    # temp = tdata['Temp']
 
-    print('hists', np.shape(diagnostic_histograms))
-    print('ehist', np.shape(ehist))
-    print('ehist2', np.shape(ehist2))
-    print('fvarrays   ', np.shape(fvarrays), fvarrays)
+    # print('hists', np.shape(diagnostic_histograms))
+    # print('fvarrays   ', np.shape(fvarrays), fvarrays)
     print('fvbin   ', np.shape(fvbin), fvbin)
-    print('fvperparraycount   ', np.shape(fvperparraycount), fvperparraycount)
+    # print('fvperparraycount   ', np.shape(fvperparraycount), fvperparraycount)
     print('fvlimits   ', np.shape(fvlimits), fvlimits)
     print('histlimits   ', np.shape(histlimits), histlimits)
 
-    ehist1x = np.linspace(fvlimits[3][0], fvlimits[3][1], fvbin)
-    ehist2x = np.linspace(fvlimits[4][0], fvlimits[4][1], fvbin)
-    ehist3x = np.linspace(fvlimits[5][0], fvlimits[5][1], fvbin)
+    if not fig:
+        plt.figure()
 
-    # ehist2 = f_gap.trim_generic(ehist2, trim_beg=0.49)
-    # ehist2x = f_gap.trim_generic(ehist2x, trim_beg=0.49)
+    for name, data in diagnostic_histograms.items():
+        diag_index = get_hist_index(name, flopter.parser)
+        print(diag_index)
+        for i in range(len(data)):
+            hist_x = np.linspace(fvlimits[(diag_index*3)+i][0], fvlimits[(diag_index*3)+i][1], fvbin)
+            g_fitter = Gaussian1DFitter()
+            guess = [100.0, 1.0, 10, 100]
+            bounds = [
+                [0.0, 0.0, -np.inf, 0.0],
+                [np.inf, np.inf, np.inf, np.inf]
+            ]
+            # fit_data = m_fitter.fit(ehist1x, ehist1, guess, bounds=bounds)
+            # fit_data.print_fit_params()
+            guess_func = g_fitter.fit_function(hist_x, *guess)
 
-    m_fitter = Gaussian1DFitter()
-    guess = [100.0, 1.0, 10, 100]
-    bounds = [
-        [0.0,       0.0,    -np.inf,    0.0],
-        [np.inf,    np.inf, np.inf,     np.inf]
-    ]
-    # fit_data = m_fitter.fit(ehist1x, ehist1, guess, bounds=bounds)
-    # fit_data.print_fit_params()
-    guess_func = m_fitter.fit_function(ehist1x, *guess)
-
-    plt.figure()
-    plt.plot(ehist2)
-    plt.plot(ehist1)
-
-    # for name, data in diagnostic_histograms.items():
-    #     for i in range(len(data)):
-    #         plt.figure(i)
-    #         plt.plot(data[i], label=name)
-    #         plt.legend()
+            plt.figure(i)
+            plt.plot(hist_x, data[i], label=name)
+            plt.legend()
 
     # for name, data in diagnostic_histograms.items():
     #     plt.figure()
     #     for i in range(len(data)):
     #         plt.plot(data[i])
+
     # plt.plot(*fit_data.get_fit_plottables())
     # plt.plot(ehist1x, guess_func)
     # plt.show()
 
-    # plt.figure()
-    # plt.imshow(temp)
     #
     # plt.figure()
     # plt.imshow(pot)
 
-    plt.figure()
-    plt.plot(time, current)
+    # plt.figure()
+    # plt.plot(time, current)
 
     # plt.figure()
     # for t in np.linspace(0.1, 10, 101):
@@ -186,11 +298,12 @@ def run_maxwellian_fit():
     #     guess_func = m_fitter.fit_function(ehist1x, *guess)
     #     plt.plot(ehist1x, guess_func)
 
-    plt.show()
+    if show:
+        plt.show()
 
 
 def test():
-    flpt = fl.Flopter('bin/data_local/', 'benchmarking/', 'nogap/', run_name='prebp', ext_run_name='prebpro')
+    flpt = fl.Flopter('bin/data_local/', 'benchmarking/', 'nogap/')
 
     vf = flpt.get_vf()
     phi = flpt.get_plasma_potential()
@@ -201,9 +314,33 @@ def test():
     print(temperature)
 
 
+def test2():
+    flpt = fl.Flopter('bin/data_local/', 'benchmarking/', 'nogap/')
+
+    # plt.figure()
+
+    print(flpt.tdata.diagnostics.keys())
+    e_hist_before = flpt.tdata.diagnostics['eHistx1']
+    i_hist_before = flpt.tdata.diagnostics['iHistx1']
+    plt.plot(e_hist_before, label='eHistBefore')
+    plt.plot(i_hist_before,label='iHistBefore')
+
+    flpt.denormalise()
+
+    e_hist_after = flpt.tdata.diagnostics['eHistx1']
+    i_hist_after = flpt.tdata.diagnostics['iHistx1']
+    # plt.plot(e_hist_after, label='eHistAfter')
+    # plt.plot(i_hist_after, label='iHistAfter')
+    plt.legend()
+
+    plt.show()
+
+
 if __name__ == '__main__':
     # run_gap_nogap_comparison()
     # run_param_scan()
-    run_maxwellian_fit()
-    # test()
+    # run_maxwellian_comparison()
+    # run_current_comparison()
+    run_histogram_extraction()
+    # test2()
 
