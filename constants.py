@@ -15,6 +15,11 @@ ELEC_DENS = 'n_e'       # Electron density label
 ELEC_MASS = 'm_e'       # Electron mass label
 ION_MASS = 'm_i'        # Ion mass label
 
+# Homogenisation constants
+SWEEP_LOWER = -9.95
+SWEEP_UPPER = 10.05
+PROBE_PARAMETER = 3
+
 # Input File Variables Labels
 INF_MAGNETIC_FIELD = 'B'
 INF_KSI = 'ksi'

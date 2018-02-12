@@ -1,7 +1,8 @@
 from configparser import *
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 import re
 import sys
+import constants as c
 
 
 class InputParser(ConfigParser):
@@ -220,3 +221,88 @@ class InputParser(ConfigParser):
                 continue
             params[comment_parts[1]] = float(comment_parts[3])
         return params
+
+    def get_diag_index(self, diag_name):
+        """Find index of diagnostic within an input file"""
+        for i in range(len([section for section in self.sections() if c.INF_SEC_DIAG in section]) - 1):
+            diag_section_name = c.INF_SEC_DIAG + str(i)
+            if self.get(diag_section_name, c.INF_DIAG_NAME).strip('\\\'') == diag_name:
+                return i
+        print('No diagnostic region found matching "{}"'.format(diag_name))
+        return None
+
+    def get_hist_index(self, hist_name):
+        """Find the index of diagnostics which are histograms within an input file"""
+        count = -1
+        for i in range(len([section for section in self.sections() if c.INF_SEC_DIAG in section]) - 1):
+            diag_section_name = c.INF_SEC_DIAG + str(i)
+            if self.getint(diag_section_name, c.INF_DIAG_PROPERTY) == 3:
+                count += 1
+                if self.get(diag_section_name, c.INF_DIAG_NAME).strip('\\\'') == hist_name:
+                    return count
+        print('No diagnostic region making histograms found matching "{}"'.format(hist_name))
+        return None
+
+    def get_probe_index(self):
+        # TODO: make this return a slice object with each sweeping object index
+        """
+        Returns the index of the object within the simulation which is acting as a probe i.e. has 'param1' set to 3.
+        The index can be used to reference the correct array in objectscurrent, for example. Assumes that the first
+        probe found in the input file is the only probe.
+        :return: {int} Index of probe in simulation object array.
+        """
+        num_blocks_section = self[c.INF_SEC_SHAPES]
+        n = 0
+        for shape in num_blocks_section:
+            n_shape = self.getint(c.INF_SEC_SHAPES, shape)
+            n += n_shape
+            if n_shape > 0:
+                shape_name = shape[:-1]
+                for i in range(n_shape):
+                    section = self[shape_name + str(i)]
+                    if int(section[c.INF_SWEEP_PARAM]) == c.PROBE_PARAMETER:
+                        return (n - n_shape) + i
+        raise ValueError('Could not find a shape set to sweep voltage')
+
+    def get_scaling_values(self, len_diag, len_builtin):
+        """
+        Calculates the scaling values (n' and r) which are needed to extend the diagnostic outputs to the right length
+        and downsample them for homogenisation of SPICE IV sweeps
+        :param len_diag:    length of raw diagnostic output array   (n)
+        :param len_builtin: length of builtin output array          (M)
+        :return n_leading:  size of array to prepend onto the diagnostic array
+        :return ratio:      ratio of extended diagnostic output array to builtin output array (e.g. objectscurrent):
+        """
+        t_c = self.getfloat(c.INF_SEC_GEOMETRY, c.INF_TIME_SWEEP)
+        t_p = self.getfloat(c.INF_SEC_GEOMETRY, c.INF_TIME_END)
+        # t_c as a fraction of whole time
+        t = t_c/t_p
+
+        n_leading = t * len_diag / (1 - t)
+        ratio = len_diag/(len_builtin*(1-t))
+        return int(n_leading), int(ratio)
+
+    def get_sweep_length(self, len_builtin, raw_voltage):
+        t_a = self.getfloat(c.INF_SEC_GEOMETRY, c.INF_TIME_AV)
+        t_p = self.getfloat(c.INF_SEC_GEOMETRY, c.INF_TIME_END)
+        # t_a as a fraction of whole time
+        t = t_a / t_p
+
+        sweep_length = int(t * len_builtin)
+
+        initial_v = raw_voltage[0]
+        if not self._is_within_bounds(initial_v, c.SWEEP_LOWER):
+            corr_sweep_length = sweep_length
+            while raw_voltage[corr_sweep_length] == initial_v and corr_sweep_length < len(raw_voltage):
+                corr_sweep_length += 1
+            sweep_length = corr_sweep_length
+        return sweep_length
+
+    def get_probe_geometry(self):
+        # TODO: (25/10/2017) Write function to retrieve probe geometry from parser. Probably requires the definition
+        # TODO: of a probe-geometry class first.
+        pass
+
+    @staticmethod
+    def _is_within_bounds(value, comparison):
+        return (value > comparison - 0.01) and (value < comparison + 0.01)
