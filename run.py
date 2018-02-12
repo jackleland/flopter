@@ -4,8 +4,8 @@ import constants as c
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sp
+from mpl_toolkits.axes_grid1 import make_axes_locatable, axes_size
 from scipy.io import loadmat
-
 
 
 def run_param_scan():
@@ -77,40 +77,110 @@ def run_gap_nogap_comparison():
     plt.show()
 
 
-def run_histogram_extraction():
-    flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/', prepare=False)
-    path = 'bin/data/benchmarking_sam/disttest_fullnogap/'
+def run_histogram_extr(z_high=370.0, z_low=70.0, fig=None, show=False, normalise_v=True, species=2):
+    flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
+    flopter.prepare(denormalise=True, homogenise=False)
+    # path = 'bin/data_local/benchmarking/disttest_fullnogap/'
     nproc = int(np.squeeze(flopter.tdata.nproc))
 
-    particles = {
-        'uy': np.array([], dtype=np.float64),
-        'uz': np.array([], dtype=np.float64),
-        'ux': np.array([], dtype=np.float64)
-    }
-    z_high = 374.0
-    z_low = 70.0
+    u_par = np.array([])
+    ralpha = (-flopter.tdata.alphayz / 180.0) * 3.141591
+    rbeta = ((90.0 - flopter.tdata.alphaxz) / 180) * 3.14159
+
     for i in range(nproc):
         num = str(i).zfill(2)
         filename = flopter.tfile_path.replace('.mat', '{}.mat'.format(num))
         p_file = loadmat(filename)
 
         # [print(key+': ', str(np.shape(array))) for key, array in p_file.items() if '__' not in key]
-        indices = np.where((p_file['z'] > z_low) & (p_file['z'] <= z_high))
-        for label in particles.keys():
-            p = p_file[label][indices]
-            particles[label] = np.append(particles[label], p)
-            print(np.shape(particles[label]))
+        indices = np.where((p_file['z'] > z_low) & (p_file['z'] <= z_high) & (p_file['stype'] == species))
+        u_par = np.append(u_par, (p_file['uy'][indices] * np.cos(ralpha) * np.cos(rbeta))
+                          - (p_file['uz'][indices] * np.sin(ralpha)))
 
-    ralpha = -flopter.tdata.alphayz / 180.0 * 3.141591
-    rbeta = (90.0 - flopter.tdata.alphaxz) / 180 * 3.14159
+    print('Finished compiling ')
+    if normalise_v:
+        u_par = -flopter.denormaliser(u_par, c.CONV_VELOCITY)
 
-    u_par = (particles['ux'] * np.sin(rbeta) * np.cos(ralpha)) + \
-            (particles['uy'] * np.cos(ralpha) * np.cos(rbeta)) - \
-            (particles['uz'] * np.sin(ralpha))
-    plt.hist(u_par, bins=300)
-    plt.show()
+    if not fig:
+        fig = plt.figure()
+
+    hist, gaps = np.histogram(u_par, bins='auto', density=True)
+
+    # guess = [5000.0, 180000.0]
+    guess = [6000, 34000]
+    fitter = Gaussian1DFitter()
+    fitdata = fitter.fit(gaps[:-1], hist, initial_vals=guess)
+    fitdata.print_fit_params()
+    guess_data = fitter.fit_function(gaps[:-1], *guess)
+
+    plt.plot(gaps[:-1], hist, label='z: {} - {}'.format(z_low, z_high))
+    plt.plot(gaps[:-1], fitdata.fit_y, label=fitter.name)
+    plt.plot(gaps[:-1], guess_data, label='Initial Guess')
+    plt.legend()
+
+    plt.figure(2)
+    plt.plot(gaps[:-1], fitdata.get_residual())
+
+    if show:
+        plt.show()
+
+
+def run_multihistogram_extr(z_high=370.0, z_low=70.0, num_samples=11, fig=None, show=None):
+    flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
+    # path = 'bin/data_local/benchmarking/disttest_fullnogap/'
+    nproc = int(np.squeeze(flopter.tdata.nproc))
+
+    u_pars = {}
+    assert isinstance(num_samples, int)
+    if num_samples <= 1:
+        num_samples = 2
+    z_vals = np.linspace(z_low, z_high, num_samples)
+    for z in z_vals[:-1]:
+        u_pars[z] = np.array([], dtype=np.float64)
+
+    ralpha = (-flopter.tdata.alphayz / 180.0) * 3.141591
+    rbeta = ((90.0 - flopter.tdata.alphaxz) / 180) * 3.14159
+
+    for i in range(nproc):
+        num = str(i).zfill(2)
+        filename = flopter.tfile_path.replace('.mat', '{}.mat'.format(num))
+        p_file = loadmat(filename)
+
+        # [print(key+': ', str(np.shape(array))) for key, array in p_file.items() if '__' not in key]
+        for j in range(len(z_vals) - 1):
+            print('int(j)', int(j))
+            print('z_vals[int(j)]', z_vals[int(j)])
+            print('z_vals[int(j+1)]', z_vals[int(j+1)])
+            indices = np.where((p_file['z'] > z_vals[int(j)]) & (p_file['z'] <= z_vals[int(j+1)]) & (p_file['stype'] == 2))
+            u_pars[z_vals[int(j)]] = np.append(u_pars[z_vals[int(j)]],
+                                               (p_file['uy'][indices] * np.cos(ralpha) * np.cos(rbeta))
+                                               - (p_file['uz'][indices] * np.sin(ralpha)))
+
+    # u_par = (u_pars['uy'] * np.cos(ralpha) * np.cos(rbeta)) - (u_pars['uz'] * np.sin(ralpha))
+    # u_par = (u_pars['ux'] * np.sin(rbeta) * np.cos(ralpha)) + \
+    #         (u_pars['uy'] * np.cos(ralpha) * np.cos(rbeta)) - \
+    #         (u_pars['uz'] * np.sin(ralpha))
+
+    # sp.io.savemat('test.mat', u_par)
+    print('Finished compiling ')
+
+    if not fig:
+        fig = plt.figure()
+
+    # plt.hist(u_pars['u_par'], bins=500)
+    # plt.title('z_high = {}, z_low = {}'.format(z_high, z_low))
+    # run_spice_df_analysis(flopter, fig=fig)
+
+    for z_val, u_par in u_pars.items():
+        print(u_par)
+        hist, gaps = np.histogram(u_par, bins='auto', density=True)
+        plt.plot(gaps[:-1], hist, label='z_low = {}'.format(z_val))
+
+    plt.legend()
+
+    if show:
+        plt.show()
         
-
 
 def run_current_comparison():
     flopter_prep = fl.Flopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/', prepare=False)
@@ -138,7 +208,6 @@ def run_current_comparison():
         for i, diag in enumerate(diagnostics[name]):
             plt.plot(diag, label=name.join(str(i)))
         plt.legend()
-
 
     # current_prep = flopter_prep.tdata.objectscurrente
     # time_prep = flopter_prep.tdata.t[1:]
@@ -177,8 +246,8 @@ def run_maxwellian_comparison():
     flopter_whole = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', prepare=False)
 
     fig = plt.figure()
-    run_maxwellian_fit(flopter_sheath, fig=fig)
-    run_maxwellian_fit(flopter_whole, fig=fig)
+    run_spice_df_analysis(flopter_sheath, fig=fig)
+    run_spice_df_analysis(flopter_whole, fig=fig)
     plt.show()
 
 
@@ -205,7 +274,7 @@ def get_hist_index(hist_name, parser):
     return None
 
 
-def run_maxwellian_fit(flopter, fig=None, show=False):
+def run_spice_df_analysis(flopter, fig=None, show=False):
     assert isinstance(flopter, fl.Flopter)
 
     flopter.prepare(homogenise=False, denormalise=True)
@@ -301,6 +370,35 @@ def run_maxwellian_fit(flopter, fig=None, show=False):
     if show:
         plt.show()
 
+def draw_potential():
+    # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/', prepare=False)
+    flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/', prepare=False)
+
+    pot = np.flip(flopter.tdata.pot, 0)
+    objects = np.zeros(np.shape(pot))
+
+    wall_indices = np.where(pot == 0)
+    probe_indices = np.where(pot > 10.0)
+
+    pot[wall_indices] = np.NaN
+    pot[probe_indices] = np.NaN
+    objects[wall_indices] = 3.0
+    objects[probe_indices] = 1.5
+
+    plt.figure()
+    plt.imshow(objects, cmap='Greys', extent=[0, len(pot[0]) / 2, 0, len(pot) / 2])
+
+    # plt.figure()
+    # plt.contour(edges, extent=[0, len(pot[0]) / 2, 0, len(pot) / 2], linewidths=0.5, cmap='Greys')
+    # plt.axhline(70, linewidth=1, color='black')
+    ax = plt.gca()
+    im = ax.imshow(pot, extent=[0, len(pot[0]) / 2, 0, len(pot) / 2], interpolation=None)
+    plt.xlabel(r'y / $\lambda_D$', fontsize=15)
+    plt.ylabel(r'z / $\lambda_D$', fontsize=15)
+    plt.title('Electrostatic potential for a flush mounted probe', fontsize=20)
+    plt.colorbar(im, fraction=0.035, pad=0.04)
+    plt.show()
+
 
 def test():
     flpt = fl.Flopter('bin/data_local/', 'benchmarking/', 'nogap/')
@@ -336,11 +434,26 @@ def test2():
     plt.show()
 
 
+def run_multi_hist_analysis():
+    plt.figure()
+    plt.axvline()
+    run_multihistogram_extr(z_high=370, z_low=340)
+    run_multihistogram_extr(z_high=280, z_low=250)
+    run_multihistogram_extr(z_high=190, z_low=160)
+    run_multihistogram_extr(z_high=100, z_low=70)
+    plt.legend()
+    plt.show()
+
+
 if __name__ == '__main__':
     # run_gap_nogap_comparison()
     # run_param_scan()
     # run_maxwellian_comparison()
     # run_current_comparison()
-    run_histogram_extraction()
     # test2()
-
+    # run_multi_hist_analysis()
+    # fig = plt.figure()
+    # run_histogram_extr(z_high=100, z_low=70, show=True, fig=fig)
+    # run_histogram_extr(z_high=370, z_low=340, show=True, fig=fig)
+    # run_multihistogram_extr()
+    draw_potential()

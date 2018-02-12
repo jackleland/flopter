@@ -82,6 +82,13 @@ class FitData2(object):
             print("{a} = {b} +/- {c}".format(a=param_labels[i], b=param_values[i], c=param_errors[i]))
         print("")
 
+    def get_param_str(self):
+        return ''.join(['{}:{},'.format(label, self.fit_params.get_values()[i])
+                        for i, label in enumerate(self.fitter.get_param_labels())])
+
+    def get_residual(self):
+        return self.fit_y - self.raw_y
+
 
 class IVFitData(FitData2):
     def __init__(self, raw_voltage, raw_current, fit_current, fit_params, fit_stdevs, fitter):

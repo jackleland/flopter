@@ -226,6 +226,35 @@ class Gaussian1DFitter(GenericFitter):
         super().__init__()
         self._param_labels = {
             ELEC_TEMP: 0,
+            "v_0": 1
+        }
+        self.default_values = (1.0, 0.0)
+        self.default_bounds = (
+            (     0, -np.inf),
+            (np.inf,  np.inf)
+        )
+        self.name = '1D Gaussian Distribution Fit'
+
+    def fit_function(self, v, *parameters):
+        T_e = parameters[self._param_labels[ELEC_TEMP]]
+        v_0 = parameters[self._param_labels["v_0"]]
+        a = _ELECTRON_MASS / (2 * _BOLTZMANN * T_e)
+        # a = m / (2 * T_e)
+        # v = np.abs(v - x_0)
+        return np.sqrt(a / np.pi) * np.exp(-a * np.power(v - v_0, 2))
+
+    def get_temp_index(self):
+        return self._param_labels[ELEC_TEMP]
+
+    def get_mass_index(self):
+        return self._param_labels[ELEC_MASS]
+
+
+class ScalableGaussian1DFitter(GenericFitter):
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            ELEC_TEMP: 0,
             ELEC_MASS: 1,
             "x_0": 2,
             "A": 3

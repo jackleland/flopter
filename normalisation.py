@@ -11,7 +11,7 @@ _EPSILON_0 = 8.85418782e-12  # m^-3 kg^-1 s^4 A^2
 _ELEM_CHARGE = 1.60217662e-19 # C
 _PROTON_MASS = 1.6726219e-27 # kg
 _ION_MASS = 2.01410178 * _PROTON_MASS # kg
-_ELECTRON_MASS = 9.10938356e-31 #kg
+_ELECTRON_MASS = 9.10938356e-31 # kg
 _I_E_MASS_RATIO = _ION_MASS / _ELECTRON_MASS
 
 
@@ -33,7 +33,8 @@ class Converter(ABC):
             c.CONV_MASS: self._convert_mass,
             c.CONV_CHARGE: self._convert_charge,
             c.CONV_TEMPERATURE: self._convert_temperature,
-            c.CONV_FLUX: self._convert_flux
+            c.CONV_FLUX: self._convert_flux,
+            c.CONV_VELOCITY: self._convert_velocity,
         }
 
     def __call__(self, variable, conversion_type=c.CONV_POTENTIAL, additional_arg=None):
@@ -83,6 +84,10 @@ class Converter(ABC):
 
     @abstractmethod
     def _convert_density(self, density):
+        pass
+
+    @abstractmethod
+    def _convert_velocity(self, velocity):
         pass
 
     @abstractmethod
@@ -175,6 +180,9 @@ class Denormaliser(Converter):
 
     def _convert_time(self, time):
         return (1 / self.omega_i) * time
+
+    def _convert_velocity(self, velocity):
+        return (self.debye_length * self.omega_i) * velocity
 
     def _convert_density(self, density):
         return self.simulation_params[c.ELEC_DENS] * density
