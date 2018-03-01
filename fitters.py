@@ -5,8 +5,9 @@ from scipy.optimize import curve_fit
 
 from classes.ivdata import IVData
 from classes.fitdata import FitData2, IVFitData
-from constants import ELEC_TEMP, ION_SAT, SHEATH_EXP, FLOAT_POT, ELEC_MASS, POTENTIAL, CURRENT, ION_CURRENT
-from normalisation import _BOLTZMANN, _ELECTRON_MASS
+# from constants import ELEC_TEMP, ION_SAT, SHEATH_EXP, FLOAT_POT, ELEC_MASS, POTENTIAL, CURRENT, ION_CURRENT
+import constants as c
+from normalisation import _BOLTZMANN, _ELECTRON_MASS, _ELEM_CHARGE, _PROTON_MASS, _P_E_MASS_RATIO
 from warnings import warn
 
 # Curve-fit default values and bounds
@@ -81,8 +82,8 @@ class IVFitter(GenericFitter, ABC):
 
     def fit_iv_data(self, iv_data, initial_vals=None, bounds=None):
         assert isinstance(iv_data, IVData)
-        potential = iv_data[POTENTIAL]
-        current = iv_data[CURRENT]
+        potential = iv_data[c.POTENTIAL]
+        current = iv_data[c.CURRENT]
         return self.fit(potential, current, initial_vals, bounds)
 
 
@@ -93,10 +94,10 @@ class FullIVFitter(IVFitter):
     def __init__(self):
         super().__init__()
         self._param_labels = {
-            ION_SAT: 0,
-            SHEATH_EXP: 1,
-            FLOAT_POT: 2,
-            ELEC_TEMP: 3
+            c.ION_SAT: 0,
+            c.SHEATH_EXP: 1,
+            c.FLOAT_POT: 2,
+            c.ELEC_TEMP: 3
         }
         self.default_values = (30.0, -1.5, 0.0204, 1)
         self.default_bounds = (
@@ -106,10 +107,10 @@ class FullIVFitter(IVFitter):
         self.name = '4 Parameter Fit'
 
     def fit_function(self, v, *parameters):
-        I_0 = parameters[self._param_labels[ION_SAT]]
-        a = parameters[self._param_labels[SHEATH_EXP]]
-        v_f = parameters[self._param_labels[FLOAT_POT]]
-        T_e = parameters[self._param_labels[ELEC_TEMP]]
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        a = parameters[self._param_labels[c.SHEATH_EXP]]
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
         V = (v_f - v) / T_e
         return I_0 * (1 - np.exp(-V) + (a * np.float_power(np.absolute(V), [0.75])))
 
@@ -117,25 +118,25 @@ class FullIVFitter(IVFitter):
         return self._param_labels[label]
 
     def get_temp_index(self):
-        return self._param_labels[ELEC_TEMP]
+        return self._param_labels[c.ELEC_TEMP]
 
     def get_isat_index(self):
-        return self._param_labels[ION_SAT]
+        return self._param_labels[c.ION_SAT]
 
     def get_vf_index(self):
-        return self._param_labels[FLOAT_POT]
+        return self._param_labels[c.FLOAT_POT]
 
     def get_a_index(self):
-        return self._param_labels[SHEATH_EXP]
+        return self._param_labels[c.SHEATH_EXP]
 
 
 class SimpleIVFitter(IVFitter):
     def __init__(self):
         super().__init__()
         self._param_labels = {
-            ION_SAT: 0,
-            FLOAT_POT: 1,
-            ELEC_TEMP: 2
+            c.ION_SAT: 0,
+            c.FLOAT_POT: 1,
+            c.ELEC_TEMP: 2
         }
         self.default_values = (30.0, -1.5,  1)
         self.default_bounds = (
@@ -145,28 +146,28 @@ class SimpleIVFitter(IVFitter):
         self.name = '3 Parameter Fit'
 
     def fit_function(self, v, *parameters):
-        I_0 = parameters[self._param_labels[ION_SAT]]
-        v_f = parameters[self._param_labels[FLOAT_POT]]
-        T_e = parameters[self._param_labels[ELEC_TEMP]]
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
         V = (v_f - v) / T_e
         return I_0 * (1 - np.exp(-V))
 
     def get_temp_index(self):
-        return self._param_labels[ELEC_TEMP]
+        return self._param_labels[c.ELEC_TEMP]
 
     def get_isat_index(self):
-        return self._param_labels[ION_SAT]
+        return self._param_labels[c.ION_SAT]
 
     def get_vf_index(self):
-        return self._param_labels[FLOAT_POT]
+        return self._param_labels[c.FLOAT_POT]
 
 
 class IonCurrentSEFitter(IVFitter):
     def __init__(self):
         super().__init__()
         self._param_labels = {
-            ION_SAT: 0,
-            SHEATH_EXP: 1
+            c.ION_SAT: 0,
+            c.SHEATH_EXP: 1
         }
         self.default_values = (30.0, 0.0204)
         self.default_bounds = (
@@ -177,56 +178,65 @@ class IonCurrentSEFitter(IVFitter):
 
     def fit_iv_data(self, iv_data, initial_vals=None, bounds=None):
         assert isinstance(iv_data, IVData)
-        potential = np.power(np.abs(iv_data[POTENTIAL]), 0.75)
-        current = iv_data[ION_CURRENT]
+        potential = np.power(np.abs(iv_data[c.POTENTIAL]), 0.75)
+        current = iv_data[c.ION_CURRENT]
         return self.fit(potential, current, initial_vals, bounds)
 
     def fit_function(self, v, *parameters):
-        I_0 = parameters[self._param_labels[ION_SAT]]
-        a = parameters[self._param_labels[SHEATH_EXP]]
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        a = parameters[self._param_labels[c.SHEATH_EXP]]
         return I_0 * (1 + (a * v))
 
     def get_isat_index(self):
-        return self._param_labels[ION_SAT]
+        return self._param_labels[c.ION_SAT]
 
     def get_a_index(self):
-        return self._param_labels[SHEATH_EXP]
+        return self._param_labels[c.SHEATH_EXP]
 
 
-class Maxwellian3Fitter(GenericFitter):
-    def __init__(self):
+class MaxwellianVelFitter(GenericFitter):
+    def __init__(self, si_units=False, mu=_P_E_MASS_RATIO):
         super().__init__()
         self._param_labels = {
-            ELEC_TEMP: 0,
-            ELEC_MASS: 1,
+            c.ELEC_TEMP: 0,
+            c.FLOW_VEL: 1
         }
         self.default_values = (1, 1)
         self.default_bounds = (
-            (     0,      0),
+            (0, -np.inf),
             (np.inf, np.inf)
         )
+        if si_units:
+            self.temp_conversion = _BOLTZMANN
+        else:
+            self.temp_conversion = _ELEM_CHARGE
+
+        self.mass = mu * _ELECTRON_MASS
         self.name = '3D Maxwellian Distribution Fit'
 
     def fit_function(self, v, *parameters):
-        T_e = parameters[self._param_labels[ELEC_TEMP]]
-        m = parameters[self._param_labels[ELEC_MASS]]
-        a = np.sqrt((T_e * _BOLTZMANN) / (2*m))
-        v = np.abs(v)
-        return np.power(a/np.sqrt(np.pi), 3) * 4 * np.pi * np.power(v, 2) * np.exp(-np.power(a*v, 2))
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        a = self.mass / (2 * self.temp_conversion * T_e)
+        return np.power(a / np.pi, 1.5) * 4 * np.pi * np.power(v, 2) * np.exp(-a * np.power(v, 2))
 
     def get_temp_index(self):
-        return self._param_labels[ELEC_TEMP]
+        return self._param_labels[c.ELEC_TEMP]
 
-    def get_mass_index(self):
-        return self._param_labels[ELEC_MASS]
+    def get_flow_velocity(self):
+        return self._param_labels[c.FLOW_VEL]
 
 
-class Gaussian1DFitter(GenericFitter):
+class GaussianVelFitter(GenericFitter):
+    """
+        Generic Gaussian velocity distribution fitter in SI units
+         - V_th in m/s
+         - V_0 in m/s
+    """
     def __init__(self):
         super().__init__()
         self._param_labels = {
-            ELEC_TEMP: 0,
-            "v_0": 1
+            c.THERM_VEL: 0,
+            c.FLOW_VEL: 1
         }
         self.default_values = (1.0, 0.0)
         self.default_bounds = (
@@ -236,27 +246,134 @@ class Gaussian1DFitter(GenericFitter):
         self.name = '1D Gaussian Distribution Fit'
 
     def fit_function(self, v, *parameters):
-        T_e = parameters[self._param_labels[ELEC_TEMP]]
-        v_0 = parameters[self._param_labels["v_0"]]
+        v_th2 = parameters[self._param_labels[c.THERM_VEL]]
+        v_0 = parameters[self._param_labels[c.FLOW_VEL]]
+        return np.sqrt(1 / v_th2 * np.pi) * np.exp(-np.power(v - v_0, 2) / v_th2)
+
+    def get_vtherm_index(self):
+        return self._param_labels[c.ELEC_TEMP]
+
+    def get_vflow_index(self):
+        return self._param_labels[c.FLOW_VEL]
+
+
+class GaussianVelElecFitter(GenericFitter):
+    """
+        Gaussian velocity distribution fitter in SI units
+         - T_e in K
+         - V_0 in m/s
+         - Electron mass used
+    """
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.ELEC_TEMP: 0,
+            c.FLOW_VEL: 1
+        }
+        self.default_values = (1.0, 0.0)
+        self.default_bounds = (
+            (     0, -np.inf),
+            (np.inf,  np.inf)
+        )
+        self.name = '1D Gaussian Distribution Fit'
+
+    def fit_function(self, v, *parameters):
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        v_0 = parameters[self._param_labels[c.c.FLOW_VEL]]
         a = _ELECTRON_MASS / (2 * _BOLTZMANN * T_e)
         # a = m / (2 * T_e)
         # v = np.abs(v - x_0)
         return np.sqrt(a / np.pi) * np.exp(-a * np.power(v - v_0, 2))
 
     def get_temp_index(self):
-        return self._param_labels[ELEC_TEMP]
+        return self._param_labels[c.ELEC_TEMP]
 
-    def get_mass_index(self):
-        return self._param_labels[ELEC_MASS]
+    def get_vflow_index(self):
+        return self._param_labels[c.FLOW_VEL]
+
+
+class GaussianVelIonEvFitter(GenericFitter):
+    """
+        Gaussian velocity distribution fitter for ions in alternative units
+         - T_e in eV
+         - V_0 in m/s
+         - Ion mass used
+    """
+    def __init__(self, mu=_P_E_MASS_RATIO):
+        super().__init__()
+        self._param_labels = {
+            c.ELEC_TEMP: 0,
+            c.FLOW_VEL: 1
+        }
+        self.mass = _ELECTRON_MASS * mu
+        self.default_values = (1.0, 0.0)
+        self.default_bounds = (
+            (     0, -np.inf),
+            (np.inf,  np.inf)
+        )
+        self.name = 'Gauss. V-Dist Fit'
+
+    def fit_function(self, v, *parameters):
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        v_0 = parameters[self._param_labels[c.FLOW_VEL]]
+        a = self.mass / (2 * _ELEM_CHARGE * T_e)
+        # a = m / (2 * T_e)
+        # v = np.abs(v - x_0)
+        return np.sqrt(a / np.pi) * np.exp(-(a) * np.power(v - v_0, 2))
+
+    def get_temp_index(self):
+        return self._param_labels[c.ELEC_TEMP]
+
+    def get_vflow_index(self):
+        return self._param_labels[c.FLOW_VEL]
+
+
+class GaussianVelElecEvFitter(GenericFitter):
+    """
+        Gaussian velocity distribution fitter for ions in alternative units
+         - T_e in eV
+         - V_0 in m/s
+         - Electron mass used
+    """
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.ELEC_TEMP: 0,
+            c.FLOW_VEL: 1
+        }
+        self.mass = _ELECTRON_MASS
+        self.default_values = (1.0, 0.0)
+        self.default_bounds = (
+            (     0, -np.inf),
+            (np.inf,  np.inf)
+        )
+        self.name = 'Alternative 1D Gaussian Distribution Fit'
+
+    def fit_function(self, v, *parameters):
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        v_0 = parameters[self._param_labels[c.FLOW_VEL]]
+        a = self.mass / (2 * _ELEM_CHARGE * T_e)
+        # a = m / (2 * T_e)
+        # v = np.abs(v - x_0)
+        return np.sqrt(a / np.pi) * np.exp(-a * np.power(v - v_0, 2))
+
+    def set_mass_scaler(self, scaling_val):
+        self.mass = _ELECTRON_MASS * scaling_val
+
+    def get_temp_index(self):
+        return self._param_labels[c.ELEC_TEMP]
+
+    def get_vflow_index(self):
+        return self._param_labels[c.FLOW_VEL]
 
 
 class ScalableGaussian1DFitter(GenericFitter):
     def __init__(self):
         super().__init__()
         self._param_labels = {
-            ELEC_TEMP: 0,
-            ELEC_MASS: 1,
-            "x_0": 2,
+            c.ELEC_TEMP: 0,
+            c.ELEC_MASS: 1,
+            c.FLOW_VEL: 2,
             "A": 3
         }
         self.default_values = (1.0, 1.0, 0.0, 1)
@@ -267,16 +384,16 @@ class ScalableGaussian1DFitter(GenericFitter):
         self.name = '1D Gaussian Distribution Fit'
 
     def fit_function(self, v, *parameters):
-        T_e = parameters[self._param_labels[ELEC_TEMP]]
-        m = parameters[self._param_labels[ELEC_MASS]]
-        x_0 = parameters[self._param_labels["x_0"]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        m = parameters[self._param_labels[c.ELEC_MASS]]
+        x_0 = parameters[self._param_labels[c.FLOW_VEL]]
         A = parameters[self._param_labels["A"]]
         a = m * _ELECTRON_MASS / (2 * _BOLTZMANN * T_e)
         # v = np.abs(v - x_0)
         return A * np.sqrt(a / np.pi) * np.exp(-a * np.power(np.abs(v - x_0), 2))
 
     def get_temp_index(self):
-        return self._param_labels[ELEC_TEMP]
+        return self._param_labels[c.ELEC_TEMP]
 
     def get_mass_index(self):
-        return self._param_labels[ELEC_MASS]
+        return self._param_labels[c.ELEC_MASS]

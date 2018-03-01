@@ -15,12 +15,6 @@ class FitParam(object):
     def get_ve_pair(self):
         return self.value, self.error
 
-    def get_value(self):
-        return self.value
-
-    def get_error(self):
-        return self.error
-
 
 class FitParamList(list):
     """
@@ -36,10 +30,10 @@ class FitParamList(list):
             self.append(param)
 
     def get_values(self):
-        return [param.get_value() for param in self]
+        return [param.value for param in self]
 
     def get_errors(self):
-        return [param.get_error() for param in self]
+        return [param.error for param in self]
 
     def split(self):
         return self.get_values(), self.get_errors()
@@ -67,7 +61,7 @@ class FitData2(object):
         if errors_fl:
             return self.fit_params[index]
         else:
-            return self.fit_params[index].get_value()
+            return self.fit_params[index].value
 
     def get_fitter(self):
         return self.fitter

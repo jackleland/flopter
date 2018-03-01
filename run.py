@@ -1,10 +1,11 @@
 import flopter as fl
-from fitters import Gaussian1DFitter, Maxwellian3Fitter, SimpleIVFitter, IonCurrentSEFitter
+import fitters as f
 import constants as c
+import normalisation as n
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.signal import argrelmax, savgol_filter
 import scipy as sp
-from mpl_toolkits.axes_grid1 import make_axes_locatable, axes_size
 from scipy.io import loadmat
 
 
@@ -56,8 +57,8 @@ def run_gap_nogap_comparison():
     ivdata_g2 = flopter_gap.trim(trim_end=0.5)
     ivdata_ng2 = flopter_nogap.trim(trim_end=0.5)
 
-    ifit_g = flopter_gap.fit(ivdata_g, IonCurrentSEFitter(), print_fl=True)
-    ifit_ng = flopter_nogap.fit(ivdata_ng, IonCurrentSEFitter(), print_fl=True)
+    ifit_g = flopter_gap.fit(ivdata_g, f.IonCurrentSEFitter(), print_fl=True)
+    ifit_ng = flopter_nogap.fit(ivdata_ng, f.IonCurrentSEFitter(), print_fl=True)
 
     ffit_g2 = flopter_gap.fit(ivdata_g2, print_fl=True)
     ffit_ng2 = flopter_nogap.fit(ivdata_ng2, print_fl=True)
@@ -77,8 +78,10 @@ def run_gap_nogap_comparison():
     plt.show()
 
 
-def run_histogram_extr(z_high=370.0, z_low=70.0, fig=None, show=False, normalise_v=True, species=2):
-    flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
+def run_histogram_extr(flopter=None, z_high=370.0, z_low=70.0, fig=None, show=False, normalise_v=True, species=2,
+                       t_flag=False, fitter=None):
+    if not flopter:
+        flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
     flopter.prepare(denormalise=True, homogenise=False)
     # path = 'bin/data_local/benchmarking/disttest_fullnogap/'
     nproc = int(np.squeeze(flopter.tdata.nproc))
@@ -97,32 +100,74 @@ def run_histogram_extr(z_high=370.0, z_low=70.0, fig=None, show=False, normalise
         u_par = np.append(u_par, (p_file['uy'][indices] * np.cos(ralpha) * np.cos(rbeta))
                           - (p_file['uz'][indices] * np.sin(ralpha)))
 
-    print('Finished compiling ')
+    print('Finished compiling...')
+    v_scale = 1000
+    mass = {1: n._ELECTRON_MASS * flopter.denormaliser.mu,
+            2: n._ELECTRON_MASS}
     if normalise_v:
-        u_par = -flopter.denormaliser(u_par, c.CONV_VELOCITY)
+        u_par = -flopter.denormaliser(u_par, c.CONV_VELOCITY) / v_scale
+
+    hist, gaps = np.histogram(u_par, bins='auto', density=True)
+    hist_bins = (gaps[:-1] + gaps[1:]) / 2
+
+    # guess = [5000.0, 180000.0]
+    # guess = [8000, 720000]
+    # guess = [6, 710000]
+    # guess = [6000.0, 34000]
+    # guess = [6e6, 671]
+    fitdata = get_histogram_fit(flopter, hist, hist_bins, fitter=fitter, v_scale=v_scale)
+
+    if t_flag:
+        T_e = (fitdata.fit_params[0].value * mass[species]) / (2 * n._ELEM_CHARGE)
+        T_e_err = (fitdata.fit_params[0].error * mass[species]) / (2 * n._ELEM_CHARGE)
+        print('T_e = {} +/- {}'.format(T_e, T_e_err))
+    else:
+        fitdata.fit_params[0].value *= v_scale ** 2
+        fitdata.fit_params[0].error *= v_scale ** 2
+        # fitdata.fit_params[1].value *= v_scale
+        # fitdata.fit_params[1].error *= v_scale
+    fitdata.print_fit_params()
 
     if not fig:
         fig = plt.figure()
 
-    hist, gaps = np.histogram(u_par, bins='auto', density=True)
-
-    # guess = [5000.0, 180000.0]
-    guess = [6000, 34000]
-    fitter = Gaussian1DFitter()
-    fitdata = fitter.fit(gaps[:-1], hist, initial_vals=guess)
-    fitdata.print_fit_params()
-    guess_data = fitter.fit_function(gaps[:-1], *guess)
-
-    plt.plot(gaps[:-1], hist, label='z: {} - {}'.format(z_low, z_high))
-    plt.plot(gaps[:-1], fitdata.fit_y, label=fitter.name)
-    plt.plot(gaps[:-1], guess_data, label='Initial Guess')
+    plt.plot(hist_bins, hist, label='z: {} - {}'.format(z_low, z_high))
+    plt.plot(hist_bins, fitdata.fit_y, label="T_e = {t:2.1f}eV".format(t=fitdata.get_param(c.ELEC_TEMP, errors_fl=False)))
+    plt.xlabel(r'Velocity ($m s^{-1}$)')
+    plt.ylabel(r'Normalised f(v)')
     plt.legend()
-
-    plt.figure(2)
-    plt.plot(gaps[:-1], fitdata.get_residual())
 
     if show:
         plt.show()
+
+    return fitdata
+
+
+def get_histogram_fit(flopter, hist, hist_bins, fitter=None, v_scale=1, plot_fl=False):
+    if not fitter:
+        fitter = f.GaussianVelElecEvFitter()
+        fitter.set_mass_scaler(0.5)
+
+    # estimate values for the initial guess based on the
+    grad_fv = np.gradient(hist)
+    sm_grad_fv = savgol_filter(grad_fv, 21, 2)
+    min = np.argmin(sm_grad_fv)
+    max = np.argmax(sm_grad_fv)
+
+    if plot_fl:
+        plt.figure()
+        plt.plot(sm_grad_fv)
+        plt.plot(grad_fv)
+        plt.axvline(min)
+        plt.axvline(max)
+        plt.show()
+
+    v_0_guess = hist_bins[int((max + min) / 2)]
+    # print(((hist_bins[min] - hist_bins[max]) * mass[species] * v_scale ** 2 * 0.5) / (2 * n._ELEM_CHARGE))
+    t_e_guess = flopter.denormaliser.temperature / (v_scale**2)
+    guess = [t_e_guess, v_0_guess]
+
+    return fitter.fit(hist_bins, hist, initial_vals=guess)
 
 
 def run_multihistogram_extr(z_high=370.0, z_low=70.0, num_samples=11, fig=None, show=None):
@@ -138,8 +183,8 @@ def run_multihistogram_extr(z_high=370.0, z_low=70.0, num_samples=11, fig=None, 
     for z in z_vals[:-1]:
         u_pars[z] = np.array([], dtype=np.float64)
 
-    ralpha = (-flopter.tdata.alphayz / 180.0) * 3.141591
-    rbeta = ((90.0 - flopter.tdata.alphaxz) / 180) * 3.14159
+    ralpha = (-flopter.tdata.alphayz / 180.0) * np.pi
+    rbeta = ((90.0 - flopter.tdata.alphaxz) / 180) * np.pi
 
     for i in range(nproc):
         num = str(i).zfill(2)
@@ -325,7 +370,7 @@ def run_spice_df_analysis(flopter, fig=None, show=False):
         print(diag_index)
         for i in range(len(data)):
             hist_x = np.linspace(fvlimits[(diag_index*3)+i][0], fvlimits[(diag_index*3)+i][1], fvbin)
-            g_fitter = Gaussian1DFitter()
+            g_fitter = f.GaussianVelFitter()
             guess = [100.0, 1.0, 10, 100]
             bounds = [
                 [0.0, 0.0, -np.inf, 0.0],
@@ -371,8 +416,8 @@ def run_spice_df_analysis(flopter, fig=None, show=False):
         plt.show()
 
 def draw_potential():
-    # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/', prepare=False)
-    flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/', prepare=False)
+    flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
+    # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/', prepare=False)
 
     pot = np.flip(flopter.tdata.pot, 0)
     objects = np.zeros(np.shape(pot))
@@ -434,15 +479,86 @@ def test2():
     plt.show()
 
 
-def run_multi_hist_analysis():
-    plt.figure()
-    plt.axvline()
-    run_multihistogram_extr(z_high=370, z_low=340)
-    run_multihistogram_extr(z_high=280, z_low=250)
-    run_multihistogram_extr(z_high=190, z_low=160)
-    run_multihistogram_extr(z_high=100, z_low=70)
+def run_multi_hist_analysis(flopter=None, species=2, fitter=None, show_fl=False):
+    if not fitter:
+        fitter = f.GaussianVelElecEvFitter()
+    fitdata_sheath = run_histogram_extr(flopter=flopter, z_high=90, z_low=75, show=False, species=species, fitter=fitter)
+    fitdata_mid = run_histogram_extr(flopter=flopter, z_high=180, z_low=165, show=False, species=species, fitter=fitter)
+    fitdata_mid2 = run_histogram_extr(flopter=flopter, z_high=270, z_low=255, show=False, species=species, fitter=fitter)
+    fitdata_inj = run_histogram_extr(flopter=flopter, z_high=370, z_low=340, show=False, species=species, fitter=fitter)
     plt.legend()
-    plt.show()
+
+    hists = {
+        'Sheath': fitdata_sheath,
+        'Lower-mid': fitdata_mid,
+        'Upper-mid': fitdata_mid2,
+        'Injection': fitdata_inj
+    }
+
+    plt.figure()
+    plt.axvline(linestyle='--', color='black')
+    for label, hist in hists.items():
+        plt.plot(hist.raw_x, hist.raw_y, label=label)
+    plt.legend()
+
+    print(fitdata_sheath.get_param(c.ELEC_TEMP, errors_fl=False) / fitdata_inj.get_param(c.ELEC_TEMP, errors_fl=False))
+    if show_fl:
+        plt.show()
+
+
+def injection_dist_function(gauss_fl=True, show_fl=True):
+    flopter = fl.Flopter('bin/data_local/', 'tests/', 'injtestperp_halfnogap2/')
+    # flopter = fl.Flopter('bin/data_local/', 'tests/', 'injtest_halfnogap1/')
+    flopter.prepare(homogenise=False)
+    v_scale = 1000
+
+    i_inj_path = flopter.afile_path.replace('.mat', '.i_inj')
+    e_inj_path = flopter.afile_path.replace('.mat', '.e_inj')
+    i_inj = -flopter.denormaliser(np.loadtxt(i_inj_path), c.CONV_VELOCITY) / v_scale
+    e_inj = -flopter.denormaliser(np.loadtxt(e_inj_path), c.CONV_VELOCITY) / v_scale
+
+    # runpath = 'data/'
+    # i_inj_path = runpath + 'injtest_halfnogap.i_inj'
+    # e_inj_path = runpath + 'injtest_halfnogap.e_inj'
+    # i_inj = np.loadtxt(i_inj_path)
+    # e_inj = np.loadtxt(e_inj_path)
+
+    i_hist, i_gaps = np.histogram(i_inj, density=True, bins='auto')
+    i_bins = (i_gaps[:-1] + i_gaps[1:]) / 2
+    e_hist, e_gaps = np.histogram(e_inj, density=True, bins='auto')
+    e_bins = (e_gaps[:-1] + e_gaps[1:]) / 2
+
+    t_e_guess = flopter.denormaliser.temperature / (v_scale ** 2)
+    guess = [t_e_guess, 1]
+
+    if gauss_fl:
+        i_fitter = f.GaussianVelIonEvFitter(mu=flopter.denormaliser.mu)
+        i_fdata = get_histogram_fit(flopter, i_hist, i_bins, i_fitter, v_scale=v_scale)
+    else:
+        i_fitter = f.MaxwellianVelFitter(mu=flopter.denormaliser.mu)
+        i_fdata = i_fitter.fit(i_bins, i_hist, initial_vals=guess)
+    i_fdata.print_fit_params()
+
+    if gauss_fl:
+        e_fitter = f.GaussianVelElecEvFitter()
+        e_fdata = get_histogram_fit(flopter, e_hist, e_bins, e_fitter, v_scale=v_scale)
+    else:
+        e_fitter = f.MaxwellianVelFitter(mu=1)
+        e_fdata = e_fitter.fit(e_bins, e_hist, initial_vals=guess)
+    e_fdata.print_fit_params()
+
+    plt.figure()
+    plt.plot(i_bins, i_hist)
+    plt.plot(i_bins, i_fdata.fit_y)
+    plt.title('Ion injection DF')
+
+    plt.figure()
+    plt.plot(e_bins, e_hist)
+    plt.plot(e_bins, e_fdata.fit_y)
+    plt.title('Electron injection DF')
+
+    if show_fl:
+        plt.show()
 
 
 if __name__ == '__main__':
@@ -451,9 +567,16 @@ if __name__ == '__main__':
     # run_maxwellian_comparison()
     # run_current_comparison()
     # test2()
-    # run_multi_hist_analysis()
-    # fig = plt.figure()
-    # run_histogram_extr(z_high=100, z_low=70, show=True, fig=fig)
+    flopter = fl.Flopter('bin/data_local/', 'tests/', 'disttest2_halfnogap/', prepare=False)
+    run_multi_hist_analysis(flopter=flopter, fitter=f.GaussianVelElecEvFitter(), show_fl=False)
+    # draw_potential()
+
+    # run_histogram_extr(z_high=100, z_low=70, show=True, species=1, fit_guess=[6, 15000],
+    #                    fitter=f.Gaussian1DIonEvFitter(mu=450))
     # run_histogram_extr(z_high=370, z_low=340, show=True, fig=fig)
-    # run_multihistogram_extr()
-    draw_potential()
+    # draw_potential()
+
+    injection_dist_function(show_fl=False)
+    injection_dist_function(gauss_fl=False)
+
+

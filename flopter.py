@@ -59,7 +59,7 @@ class Flopter(IVAnalyser):
     _tfile_prefix = 't-'
     _file_suffix = '.mat'
 
-    def __init__(self, data_mount_dir, group_name, folder_name, run_name=None, prepare=True):
+    def __init__(self, data_mount_dir, group_name, folder_name, run_name=None, prepare=False):
         ##################################
         #             Extract            #
         ##################################
@@ -97,33 +97,33 @@ class Flopter(IVAnalyser):
         # group_name = 'rundata'
         # folder/name '6-s-halfgrid'
 
-        data_dir = spice_dir + data_mount_dir + group_name + folder_name
+        self.data_dir = spice_dir + data_mount_dir + group_name + folder_name
 
         # input_filename = input_dir + 'jleland.3.inp'
         # input_filename = input_dir + 'jleland.2.inp'
         # input_filename = data_dir + 's_benchmarking_nogap.inp'
         # input_filename = data_dir + 'reversede_ng_hg_sbm.inp'
         # input_filename = data_dir + 'prebiasprobe_ng_hg_sbm.inp'
-        self.input_filename = data_dir + 'input.inp'
+        self.input_filename = self.data_dir + 'input.inp'
 
         if not run_name:
-            self.tfile_path, self.afile_path = self.get_runnames(data_dir)
+            self.tfile_path, self.afile_path = self.get_runnames(self.data_dir)
         else:
             run_name_short = run_name[:-2]
             trun_name = '{a}{b}'.format(a=self._tfile_prefix, b=run_name_short)
-            self.tfile_path = data_dir + trun_name + self._file_suffix
-            self.afile_path = data_dir + run_name + self._file_suffix
+            self.tfile_path = self.data_dir + trun_name + self._file_suffix
+            self.afile_path = self.data_dir + run_name + self._file_suffix
 
         if self.tfile_path:
             if not run_name:
-                self.tfile_path = data_dir + self.tfile_path
+                self.tfile_path = self.data_dir + self.tfile_path
             self.tdata = Spice2TData(self.tfile_path)
         else:
             raise ValueError('No t-file given')
 
         if self.afile_path:
             if not run_name:
-                self.afile_path = data_dir + self.afile_path
+                self.afile_path = self.data_dir + self.afile_path
             self.afile = loadmat(self.afile_path)
         else:
             print('No a-file given, continuing without')
@@ -148,18 +148,19 @@ class Flopter(IVAnalyser):
             self.homogeniser = Spice2Homogeniser(data=self.tdata, input_parser=self.parser)
             self.iv_data, self.raw_data = self.homogeniser.homogenise()
 
-    def get_runnames(self, directory):
+    @classmethod
+    def get_runnames(cls, directory):
         cwd = os.getcwd()
         if os.path.exists(directory):
             os.chdir(directory)
         else:
             raise OSError('Directory \'{}\' invlaid.'.format(directory))
-        tfile_all_glob_str = '{}*{}'.format(self._tfile_prefix, self._file_suffix)
-        tfile_num_glob_str = '{}*[0-9][0-9]{}'.format(self._tfile_prefix, self._file_suffix)
+        tfile_all_glob_str = '{}*{}'.format(cls._tfile_prefix, cls._file_suffix)
+        tfile_num_glob_str = '{}*[0-9][0-9]{}'.format(cls._tfile_prefix, cls._file_suffix)
         all_tfiles = glob.glob(tfile_all_glob_str)
         numbered_tfiles = glob.glob(tfile_num_glob_str)
         tfile_name = [tfile for tfile in all_tfiles if tfile not in numbered_tfiles]
-        afile_name = glob.glob('[!{}]*[!0-9]{}'.format(self._tfile_prefix, self._file_suffix))
+        afile_name = glob.glob('[!{}]*[!0-9]{}'.format(cls._tfile_prefix, cls._file_suffix))
         os.chdir(cwd)
         return next(iter(tfile_name), None), next(iter(afile_name), None)
 

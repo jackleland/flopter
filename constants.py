@@ -14,6 +14,8 @@ ELEC_TEMP = 'T_e'       # Electron temperature label
 ELEC_DENS = 'n_e'       # Electron density label
 ELEC_MASS = 'm_e'       # Electron mass label
 ION_MASS = 'm_i'        # Ion mass label
+FLOW_VEL = 'v_0'        # Flow velocity label
+THERM_VEL = 'v_th'      # Thermal velocity label
 
 # Homogenisation constants
 SWEEP_LOWER = -9.95

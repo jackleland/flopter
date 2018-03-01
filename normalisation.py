@@ -12,6 +12,7 @@ _ELEM_CHARGE = 1.60217662e-19 # C
 _PROTON_MASS = 1.6726219e-27 # kg
 _ION_MASS = 2.01410178 * _PROTON_MASS # kg
 _ELECTRON_MASS = 9.10938356e-31 # kg
+_P_E_MASS_RATIO = _PROTON_MASS / _ELECTRON_MASS
 _I_E_MASS_RATIO = _ION_MASS / _ELECTRON_MASS
 
 
@@ -159,7 +160,7 @@ class Denormaliser(Converter):
         self.debye_length = np.sqrt((_EPSILON_0 * self.temperature)
                                     / (_ELEM_CHARGE * self.simulation_params[c.ELEC_DENS]))
         self.omega_i = ((_ELEM_CHARGE * self.simulation_params[c.INF_MAGNETIC_FIELD])
-                        / _ION_MASS)
+                        / (self.mu * _ELECTRON_MASS))
         self.K = ((self.simulation_params[c.ELEC_DENS] * self.debye_length**self.dimensions)
                   / float(parser.get(c.INF_SEC_GEOMETRY, c.INF_PART_PER_CELL)[:-1]))
 
