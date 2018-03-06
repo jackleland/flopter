@@ -2,10 +2,10 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 from scipy.optimize import curve_fit
+from scipy.signal import savgol_filter
 
 from classes.ivdata import IVData
 from classes.fitdata import FitData2, IVFitData
-# from constants import ELEC_TEMP, ION_SAT, SHEATH_EXP, FLOAT_POT, ELEC_MASS, POTENTIAL, CURRENT, ION_CURRENT
 import constants as c
 from normalisation import _BOLTZMANN, _ELECTRON_MASS, _ELEM_CHARGE, _PROTON_MASS, _P_E_MASS_RATIO
 from warnings import warn
@@ -226,45 +226,8 @@ class MaxwellianVelFitter(GenericFitter):
         return self._param_labels[c.FLOW_VEL]
 
 
-class GaussianVelFitter(GenericFitter):
-    """
-        Generic Gaussian velocity distribution fitter in SI units
-         - V_th in m/s
-         - V_0 in m/s
-    """
-    def __init__(self):
-        super().__init__()
-        self._param_labels = {
-            c.THERM_VEL: 0,
-            c.FLOW_VEL: 1
-        }
-        self.default_values = (1.0, 0.0)
-        self.default_bounds = (
-            (     0, -np.inf),
-            (np.inf,  np.inf)
-        )
-        self.name = '1D Gaussian Distribution Fit'
-
-    def fit_function(self, v, *parameters):
-        v_th2 = parameters[self._param_labels[c.THERM_VEL]]
-        v_0 = parameters[self._param_labels[c.FLOW_VEL]]
-        return np.sqrt(1 / v_th2 * np.pi) * np.exp(-np.power(v - v_0, 2) / v_th2)
-
-    def get_vtherm_index(self):
-        return self._param_labels[c.ELEC_TEMP]
-
-    def get_vflow_index(self):
-        return self._param_labels[c.FLOW_VEL]
-
-
-class GaussianVelElecFitter(GenericFitter):
-    """
-        Gaussian velocity distribution fitter in SI units
-         - T_e in K
-         - V_0 in m/s
-         - Electron mass used
-    """
-    def __init__(self):
+class GaussianFitter(GenericFitter):
+    def __init__(self, si_units=False, mu=_P_E_MASS_RATIO, v_scale=1):
         super().__init__()
         self._param_labels = {
             c.ELEC_TEMP: 0,
@@ -272,89 +235,67 @@ class GaussianVelElecFitter(GenericFitter):
         }
         self.default_values = (1.0, 0.0)
         self.default_bounds = (
-            (     0, -np.inf),
+            (   0.0, -np.inf),
             (np.inf,  np.inf)
         )
-        self.name = '1D Gaussian Distribution Fit'
+        self.si_units = si_units
+        if si_units:
+            self.temp_conversion = _BOLTZMANN
+        else:
+            self.temp_conversion = _ELEM_CHARGE
 
-    def fit_function(self, v, *parameters):
-        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
-        v_0 = parameters[self._param_labels[c.c.FLOW_VEL]]
-        a = _ELECTRON_MASS / (2 * _BOLTZMANN * T_e)
-        # a = m / (2 * T_e)
-        # v = np.abs(v - x_0)
-        return np.sqrt(a / np.pi) * np.exp(-a * np.power(v - v_0, 2))
+        self.v_scale = v_scale
+        self.mass = mu * _ELECTRON_MASS
+        self.name = 'Gaussian Dist Fit'
 
-    def get_temp_index(self):
-        return self._param_labels[c.ELEC_TEMP]
+    @staticmethod
+    def _get_v0_guess(hist, hist_bins):
+        # estimate values for the initial guess based on the mid point between the points of greatest +ve and -ve
+        # curvature
+        grad_fv = np.gradient(hist)
+        sm_grad_fv = savgol_filter(grad_fv, 21, 2)
+        min = np.argmin(sm_grad_fv)
+        max = np.argmax(sm_grad_fv)
 
-    def get_vflow_index(self):
-        return self._param_labels[c.FLOW_VEL]
+        v_0_guess = hist_bins[int((max + min) / 2)]
+        return v_0_guess
 
+    def fit(self, x_data, y_data, initial_vals=None, bounds=None, temp=None):
+        """
+            Override of the fit method with included provision for automatic finding of the flow velocity if one is not
+            specified. A separate temperature can be specified with the temp keyword.
+        :param x_data:          x-data for fit
+        :param y_data:          y-data for fit
+        :param initial_vals:    [optional] initial values to be fed to the fitting algorithm. If left None, v_0 will be
+                                populated automatically using _get_v0_guess() and Temperature will be taken as a kwarg
+                                or taken from the default values.
+        :param bounds:          The bounds for the fitting algorithm. If none are specified then the default parameters
+                                are
+        :param temp:            [optional] temperature to use as an initial value for the fitting algorithm if v_0 is
+                                to be estimated automatically. Ignored if initial_vals is not None.
+        :return fitdata:        fitdata from fit, scaled back to normal values.
+        """
+        temp_ind = self._param_labels[c.ELEC_TEMP]
+        flow_ind = self._param_labels[c.FLOW_VEL]
+        if not initial_vals:
+            v_0 = self._get_v0_guess(y_data, x_data) / self.v_scale
+            if temp:
+                initial_vals = [temp / (self.v_scale ** 2), v_0]
+            else:
+                initial_vals = [self.default_values[temp_ind] / (self.v_scale ** 2), v_0]
 
-class GaussianVelIonEvFitter(GenericFitter):
-    """
-        Gaussian velocity distribution fitter for ions in alternative units
-         - T_e in eV
-         - V_0 in m/s
-         - Ion mass used
-    """
-    def __init__(self, mu=_P_E_MASS_RATIO):
-        super().__init__()
-        self._param_labels = {
-            c.ELEC_TEMP: 0,
-            c.FLOW_VEL: 1
-        }
-        self.mass = _ELECTRON_MASS * mu
-        self.default_values = (1.0, 0.0)
-        self.default_bounds = (
-            (     0, -np.inf),
-            (np.inf,  np.inf)
-        )
-        self.name = 'Gauss. V-Dist Fit'
+        fitdata = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds)
 
-    def fit_function(self, v, *parameters):
-        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
-        v_0 = parameters[self._param_labels[c.FLOW_VEL]]
-        a = self.mass / (2 * _ELEM_CHARGE * T_e)
-        # a = m / (2 * T_e)
-        # v = np.abs(v - x_0)
-        return np.sqrt(a / np.pi) * np.exp(-(a) * np.power(v - v_0, 2))
-
-    def get_temp_index(self):
-        return self._param_labels[c.ELEC_TEMP]
-
-    def get_vflow_index(self):
-        return self._param_labels[c.FLOW_VEL]
-
-
-class GaussianVelElecEvFitter(GenericFitter):
-    """
-        Gaussian velocity distribution fitter for ions in alternative units
-         - T_e in eV
-         - V_0 in m/s
-         - Electron mass used
-    """
-    def __init__(self):
-        super().__init__()
-        self._param_labels = {
-            c.ELEC_TEMP: 0,
-            c.FLOW_VEL: 1
-        }
-        self.mass = _ELECTRON_MASS
-        self.default_values = (1.0, 0.0)
-        self.default_bounds = (
-            (     0, -np.inf),
-            (np.inf,  np.inf)
-        )
-        self.name = 'Alternative 1D Gaussian Distribution Fit'
+        fitdata.fit_params[temp_ind].value *= self.v_scale ** 2
+        fitdata.fit_params[temp_ind].error *= self.v_scale ** 2
+        fitdata.fit_params[flow_ind].value *= self.v_scale
+        fitdata.fit_params[flow_ind].error *= self.v_scale
+        return fitdata
 
     def fit_function(self, v, *parameters):
         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
         v_0 = parameters[self._param_labels[c.FLOW_VEL]]
-        a = self.mass / (2 * _ELEM_CHARGE * T_e)
-        # a = m / (2 * T_e)
-        # v = np.abs(v - x_0)
+        a = self.mass / (2 * self.temp_conversion * T_e)
         return np.sqrt(a / np.pi) * np.exp(-a * np.power(v - v_0, 2))
 
     def set_mass_scaler(self, scaling_val):
@@ -367,33 +308,85 @@ class GaussianVelElecEvFitter(GenericFitter):
         return self._param_labels[c.FLOW_VEL]
 
 
-class ScalableGaussian1DFitter(GenericFitter):
-    def __init__(self):
-        super().__init__()
-        self._param_labels = {
-            c.ELEC_TEMP: 0,
-            c.ELEC_MASS: 1,
-            c.FLOW_VEL: 2,
-            "A": 3
-        }
-        self.default_values = (1.0, 1.0, 0.0, 1)
-        self.default_bounds = (
-            (     0,      0, -np.inf, -np.inf),
-            (np.inf, np.inf,  np.inf,  np.inf)
-        )
-        self.name = '1D Gaussian Distribution Fit'
+class GaussianVelFitter(GaussianFitter):
+    """
+        Generic Gaussian velocity distribution fitter in SI units
+         - V_th in m/s
+         - V_0 in m/s
+    """
+    def __init__(self, v_scale=1):
+        super().__init__(v_scale=v_scale, si_units=True)
+        self.name = 'Generic Gaussian Vel Dist'
+
+    def fit_function(self, v, *parameters):
+        v_th2 = parameters[self._param_labels[c.THERM_VEL]]
+        v_0 = parameters[self._param_labels[c.FLOW_VEL]]
+        return np.sqrt(1 / v_th2 * np.pi) * np.exp(-np.power(v - v_0, 2) / v_th2)
+
+
+class GaussianVelElecFitter(GaussianFitter):
+    """
+        Gaussian velocity distribution fitter in SI units
+         - T_e in K
+         - V_0 in m/s
+         - Electron mass used
+    """
+    def __init__(self, v_scale=1):
+        super().__init__(v_scale=v_scale, si_units=True, mu=1)
+        self.name = 'Gauss. Elec V-Dist (SI)'
+
+
+class GaussianVelIonEvFitter(GaussianFitter):
+    """
+        Gaussian velocity distribution fitter for ions in alternative units
+         - T_e in eV
+         - V_0 in m/s
+         - Ion mass used
+    """
+    def __init__(self, mu=_P_E_MASS_RATIO, v_scale=1):
+        super().__init__(mu=mu, v_scale=v_scale, si_units=False)
+        self.name = 'Gauss. Ion V-Dist (eV)'
 
     def fit_function(self, v, *parameters):
         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
-        m = parameters[self._param_labels[c.ELEC_MASS]]
+        v_0 = parameters[self._param_labels[c.FLOW_VEL]]
+        a = self.mass / (2 * _ELEM_CHARGE * T_e)
+        return np.sqrt(a / np.pi) * np.exp(-(a) * np.power(v - v_0, 2))
+
+
+class GaussianVelElecEvFitter(GaussianFitter):
+    """
+        Gaussian velocity distribution fitter for ions in alternative units
+         - T_e in eV
+         - V_0 in m/s
+         - Electron mass used
+    """
+    def __init__(self, v_scale=1):
+        super().__init__(mu=1, v_scale=v_scale, si_units=False)
+        self.name = 'Gauss. Elec V-Dist (eV)'
+
+
+class ScalableGaussianFitter(GaussianFitter):
+    def __init__(self, mu=_P_E_MASS_RATIO, si_units=False, v_scale=1):
+        super().__init__(mu=mu, v_scale=v_scale, si_units=si_units)
+        self._param_labels = {
+            c.ELEC_TEMP: 0,
+            c.FLOW_VEL: 1,
+            c.DIST_SCALER: 2
+        }
+        self.default_values = (1.0, 0.0, 1.0)
+        self.default_bounds = (
+            (     0, -np.inf, -np.inf),
+            (np.inf,  np.inf,  np.inf)
+        )
+        self.name = 'Scalable Gauss. V-Dist'
+
+    def fit_function(self, v, *parameters):
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
         x_0 = parameters[self._param_labels[c.FLOW_VEL]]
-        A = parameters[self._param_labels["A"]]
-        a = m * _ELECTRON_MASS / (2 * _BOLTZMANN * T_e)
-        # v = np.abs(v - x_0)
+        A = parameters[self._param_labels[c.DIST_SCALER]]
+        a = self.mass / (2 * self.temp_conversion * T_e)
         return A * np.sqrt(a / np.pi) * np.exp(-a * np.power(np.abs(v - x_0), 2))
 
-    def get_temp_index(self):
-        return self._param_labels[c.ELEC_TEMP]
-
-    def get_mass_index(self):
-        return self._param_labels[c.ELEC_MASS]
+    def get_scaler_index(self):
+        return self._param_labels[c.DIST_SCALER]

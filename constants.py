@@ -16,6 +16,7 @@ ELEC_MASS = 'm_e'       # Electron mass label
 ION_MASS = 'm_i'        # Ion mass label
 FLOW_VEL = 'v_0'        # Flow velocity label
 THERM_VEL = 'v_th'      # Thermal velocity label
+DIST_SCALER = 'A'       # Distribution function scaler
 
 # Homogenisation constants
 SWEEP_LOWER = -9.95
