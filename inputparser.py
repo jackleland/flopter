@@ -7,8 +7,7 @@ import constants as c
 
 class InputParser(ConfigParser):
     """
-    Subclass of ConfigParser, edited to parse spicerack input files which are
-    sectioned by dollar signed headings.
+    Subclass of ConfigParser, edited to parse SPICE input files which are sectioned by dollar signed headings.
 
     Also changes the default comment_prefixes to:
      - the exclamation mark (!) used in Spice input files
@@ -26,7 +25,8 @@ class InputParser(ConfigParser):
     EXPECTED_DUPES = ('rectangle', 'triangle', 'circle', 'diag_reg', 'specie')
     COMMENT_PARAMS_SECTNAME = 'commented_params'
 
-    def __init__(self, *args, comment_prefixes=('!', '$end'), expected_dupes=EXPECTED_DUPES, input_filename=None, **kwargs):
+    def __init__(self, *args, comment_prefixes=('!', '$end'), expected_dupes=EXPECTED_DUPES, input_filename=None,
+                 **kwargs):
         self._duplicate_sects = defaultdict(int)
         for dupe in expected_dupes:
             self._duplicate_sects[dupe] = 0
