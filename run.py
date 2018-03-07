@@ -48,8 +48,8 @@ def run_param_scan():
 
 
 def run_gap_nogap_comparison():
-    flopter_gap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
-    flopter_nogap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/')
+    flopter_gap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullgap/', prepare=True)
+    flopter_nogap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullnogap/', prepare=True)
 
     ivdata_g = flopter_gap.trim()
     ivdata_ng = flopter_nogap.trim()
@@ -110,11 +110,6 @@ def run_histogram_extr(flopter=None, z_high=370.0, z_low=70.0, fig=None, show=Fa
     hist, gaps = np.histogram(u_par, bins='auto', density=True)
     hist_bins = (gaps[:-1] + gaps[1:]) / 2
 
-    # guess = [5000.0, 180000.0]
-    # guess = [8000, 720000]
-    # guess = [6, 710000]
-    # guess = [6000.0, 34000]
-    # guess = [6e6, 671]
     fitdata = get_histogram_fit(flopter, hist, hist_bins, fitter=fitter, v_scale=v_scale)
 
     if t_flag:
@@ -415,6 +410,7 @@ def run_spice_df_analysis(flopter, fig=None, show=False):
     if show:
         plt.show()
 
+
 def draw_potential():
     flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
     # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/', prepare=False)
@@ -567,8 +563,11 @@ if __name__ == '__main__':
     # run_maxwellian_comparison()
     # run_current_comparison()
     # test2()
-    flopter = fl.Flopter('bin/data_local/', 'tests/', 'disttest2_halfnogap/', prepare=False)
-    run_multi_hist_analysis(flopter=flopter, fitter=f.GaussianVelElecEvFitter(), show_fl=False)
+    # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullnogap/', prepare=True)
+
+    run_gap_nogap_comparison()
+
+    # run_multi_hist_analysis(flopter=flopter, fitter=f.GaussianVelElecEvFitter(), show_fl=False)
     # draw_potential()
 
     # run_histogram_extr(z_high=100, z_low=70, show=True, species=1, fit_guess=[6, 15000],
@@ -576,7 +575,7 @@ if __name__ == '__main__':
     # run_histogram_extr(z_high=370, z_low=340, show=True, fig=fig)
     # draw_potential()
 
-    injection_dist_function(show_fl=False)
-    injection_dist_function(gauss_fl=False)
+    # injection_dist_function(show_fl=False)
+    # injection_dist_function(gauss_fl=False)
 
 
