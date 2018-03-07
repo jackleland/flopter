@@ -14,10 +14,11 @@ from classes.fitdata import IVFitData
 from classes.ivdata import IVData
 from classes.spicedata import Spice2TData
 from constants import POTENTIAL, CURRENT, ELEC_CURRENT, ION_CURRENT, TIME
+import constants as c
 from homogeniser import Spice2Homogeniser
 from inputparser import InputParser
 from normalisation import Denormaliser
-from fitters import IVFitter, FullIVFitter
+from fitters import IVFitter, FullIVFitter, GaussianFitter
 
 
 class IVAnalyser(ABC):
@@ -45,6 +46,11 @@ class IVAnalyser(ABC):
         full_length = len(data)
         # Cut off the noise in the electron saturation region
         return data[int(full_length * trim_beg):int(full_length * trim_end)]
+
+    @classmethod
+    def create_from_file(cls, filename):
+        # TODO: Implement a saving and loading system
+        pass
 
     # @abstractmethod
     # def plot(self):
@@ -107,7 +113,7 @@ class Flopter(IVAnalyser):
         self.input_filename = self.data_dir + 'input.inp'
 
         if not run_name:
-            self.tfile_path, self.afile_path = self.get_runnames(self.data_dir)
+            self.tfile_path, self.afile_path = self.get_ta_filenames(self.data_dir)
         else:
             run_name_short = run_name[:-2]
             trun_name = '{a}{b}'.format(a=self._tfile_prefix, b=run_name_short)
@@ -139,17 +145,26 @@ class Flopter(IVAnalyser):
             self.prepare()
 
     def prepare(self, homogenise=True, denormalise=True):
-        # create flopter objects
-        self.parser = InputParser(input_filename=self.input_filename)
-        if denormalise:
+        """ Check existence of and then populate flopter objects """
+        if not self.parser:
+            self.parser = InputParser(input_filename=self.input_filename)
+
+        if denormalise and not self.denormaliser:
             self.denormaliser = Denormaliser(dt=self.tdata.dt, input_parser=self.parser)
+            ratio = self.find_se_temp_ratio()
+            self.denormaliser.set_se_temperature(ratio)
             self.tdata.converter = self.denormaliser
-        if homogenise:
+        elif denormalise and self.denormaliser is not None:
+            print('Cannot denormalise, data has already been denormalised!')
+
+        if homogenise and not self.homogeniser:
             self.homogeniser = Spice2Homogeniser(data=self.tdata, input_parser=self.parser)
             self.iv_data, self.raw_data = self.homogeniser.homogenise()
+        elif homogenise and self.homogeniser is not None:
+            print('Cannot homogenise, data has already been homogenised!')
 
     @classmethod
-    def get_runnames(cls, directory):
+    def get_ta_filenames(cls, directory):
         cwd = os.getcwd()
         if os.path.exists(directory):
             os.chdir(directory)
@@ -181,9 +196,9 @@ class Flopter(IVAnalyser):
         self.iv_data = self.denormaliser(self.iv_data)
         self.raw_data = self.denormaliser(self.raw_data)
         if denormalise_t_data:
-            self.denormalise_all()
+            self.denormalise_t_data()
 
-    def denormalise_all(self):
+    def denormalise_t_data(self):
         self.tdata.denormalise()
 
 ##################################
@@ -225,9 +240,12 @@ class Flopter(IVAnalyser):
         plt.show()
         return phi
 
-    def fit(self, iv_data, fitter=FullIVFitter(), print_fl=False, bounds=None, initial_vals=None):
+    def fit(self, iv_data, fitter=None, print_fl=False, initial_vals=None, bounds=None):
         # TODO: Reimplement the finding of floating potential
-        assert isinstance(fitter, IVFitter)
+        if fitter:
+            assert isinstance(fitter, IVFitter)
+        else:
+            fitter = FullIVFitter()
 
         fit_data = fitter.fit_iv_data(iv_data, initial_vals=initial_vals, bounds=bounds)
         if print_fl:
@@ -235,7 +253,7 @@ class Flopter(IVAnalyser):
 
         return fit_data
 
-    def temperature_fit(self, iv_data=None):
+    def temperature_estimation(self, iv_data=None):
         vf = self.get_vf(iv_data)
         phi = self.get_plasma_potential(iv_data)
         const = np.log(0.6 * np.sqrt((2 * np.pi) / self.denormaliser.get_mu()))
@@ -264,6 +282,74 @@ class Flopter(IVAnalyser):
         # sl_params = [I_0_sam, a_sam]
         # sl_bounds = ([-np.inf, 0],
         #              [np.inf, np.inf])
+
+    def find_se_temp_ratio(self, v_scale=1000, plot_fl=False, species=2):
+        # TODO: Make function to find regions automatically
+        regions = [
+            [74, 80, 0, 200],       # Sheath edge
+            [364, 370, 0, 200]      # Injection area
+        ]
+        hists = self.extract_histograms(regions, denormalise=True, v_scale=v_scale, species=species)
+        temperature = self.parser.get_commented_params()[c.ELEC_TEMP]
+
+        fitdatas = []
+        fitter = GaussianFitter(si_units=False, mu=1, v_scale=v_scale)
+        for hist_data in hists:
+            fitdata = fitter.fit(hist_data[0], hist_data[1], temp=temperature)
+            fitdatas.append(fitdata)
+
+        if plot_fl:
+            for i in range(len(hists)):
+                fitdatas[i].print_fit_params()
+                plt.figure()
+                plt.plot(*hists[i], label='Hist')
+                plt.plot(*fitdatas[i].get_fit_plottables(), label='Fit')
+                plt.legend()
+            plt.show()
+
+        ratio = fitdatas[0].fit_params[0].value / fitdatas[1].fit_params[0].value
+        print(ratio)
+        return ratio
+
+    def extract_histograms(self, regions, denormalise=False, v_scale=1, species=2):
+        if denormalise and not self.denormaliser:
+            self.prepare(homogenise=False)
+        elif not self.parser:
+            self.prepare(homogenise=False, denormalise=False)
+
+        nproc = int(np.squeeze(self.tdata.nproc))
+        region_vels = [np.array([])] * len(regions)
+        ralpha = (-self.tdata.alphayz / 180.0) * 3.141591
+        rbeta = ((90.0 - self.tdata.alphaxz) / 180) * 3.14159
+
+        for i in range(nproc):
+            num = str(i).zfill(2)
+            filename = self.tfile_path.replace('.mat', '{}.mat'.format(num))
+            p_file = loadmat(filename)
+
+            for j, region in enumerate(regions):
+                z_low = region[0]
+                z_high = region[1]
+                y_low = region[2]
+                y_high = region[3]
+                indices = np.where((p_file['z'] > z_low) & (p_file['z'] <= z_high)
+                                   & (p_file['y'] > y_low) & (p_file['y'] <= y_high)
+                                   & (p_file['stype'] == species))
+                region_vels[j] = np.append(region_vels[j], (p_file['uy'][indices] * np.cos(ralpha) * np.cos(rbeta))
+                                           - (p_file['uz'][indices] * np.sin(ralpha)))
+
+        hists = []
+        for i in range(len(region_vels)):
+            if denormalise:
+                region_vels[i] = self.denormaliser(region_vels[i], c.CONV_VELOCITY)
+            if v_scale:
+                region_vels[i] = region_vels[i] / v_scale
+
+            hist, gaps = np.histogram(-region_vels[i], bins='auto', density=True)
+            bins = (gaps[:-1] + gaps[1:]) / 2
+            hists.append([bins, hist])
+
+        return hists
 
 ##################################
 #              Plot              #

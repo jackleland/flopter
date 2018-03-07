@@ -264,21 +264,21 @@ class GaussianFitter(GenericFitter):
         """
             Override of the fit method with included provision for automatic finding of the flow velocity if one is not
             specified. A separate temperature can be specified with the temp keyword.
-        :param x_data:          x-data for fit
-        :param y_data:          y-data for fit
-        :param initial_vals:    [optional] initial values to be fed to the fitting algorithm. If left None, v_0 will be
-                                populated automatically using _get_v0_guess() and Temperature will be taken as a kwarg
-                                or taken from the default values.
-        :param bounds:          The bounds for the fitting algorithm. If none are specified then the default parameters
-                                are
-        :param temp:            [optional] temperature to use as an initial value for the fitting algorithm if v_0 is
-                                to be estimated automatically. Ignored if initial_vals is not None.
-        :return fitdata:        fitdata from fit, scaled back to normal values.
+            :param x_data:          x-data for fit
+            :param y_data:          y-data for fit
+            :param initial_vals:    [optional] initial values to be fed to the fitting algorithm. If left None, v_0 will be
+                                    populated automatically using _get_v0_guess() and Temperature will be taken as a kwarg
+                                    or taken from the default values.
+            :param bounds:          The bounds for the fitting algorithm. If none are specified then the default parameters
+                                    are
+            :param temp:            [optional] temperature to use as an initial value for the fitting algorithm if v_0 is
+                                    to be estimated automatically. Ignored if initial_vals is not None.
+            :return fitdata:        fitdata from fit, scaled back to normal values.
         """
         temp_ind = self._param_labels[c.ELEC_TEMP]
         flow_ind = self._param_labels[c.FLOW_VEL]
         if not initial_vals:
-            v_0 = self._get_v0_guess(y_data, x_data) / self.v_scale
+            v_0 = self._get_v0_guess(y_data, x_data)
             if temp:
                 initial_vals = [temp / (self.v_scale ** 2), v_0]
             else:
@@ -286,6 +286,7 @@ class GaussianFitter(GenericFitter):
 
         fitdata = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds)
 
+        # Convert values back to pre-scaled magnitude
         fitdata.fit_params[temp_ind].value *= self.v_scale ** 2
         fitdata.fit_params[temp_ind].error *= self.v_scale ** 2
         fitdata.fit_params[flow_ind].value *= self.v_scale
@@ -296,7 +297,7 @@ class GaussianFitter(GenericFitter):
         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
         v_0 = parameters[self._param_labels[c.FLOW_VEL]]
         a = self.mass / (2 * self.temp_conversion * T_e)
-        return np.sqrt(a / np.pi) * np.exp(-a * np.power(v - v_0, 2))
+        return np.squeeze(np.sqrt(a / np.pi) * np.exp(-a * np.power(v - v_0, 2)))
 
     def set_mass_scaler(self, scaling_val):
         self.mass = _ELECTRON_MASS * scaling_val

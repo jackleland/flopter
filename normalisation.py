@@ -115,7 +115,7 @@ class Denormaliser(Converter):
     Stores an input parser object containing the used input file and then builds conversion values from this.
     """
 
-    def __init__(self, dt=1.0, dimensions=2, input_parser=None, input_filename=None, temp=None):
+    def __init__(self, dt=1.0, dimensions=2, input_parser=None, input_filename=None, edge_ratio=1, temperature=None):
         """
         Creates a denormaliser object by using InputParser to parse an input file for some parameters (principally n_e,
         T_e, B and N_pc) which are needed for the denormalisation process.
@@ -148,10 +148,16 @@ class Denormaliser(Converter):
 
         # Save parameters from commented params
         self.simulation_params = parser.get_commented_params()
-        if temp:
-            self.temperature = temp
+        if temperature:
+            self.temperature = temperature
         elif 'T_e' in self.simulation_params.keys():
             self.temperature = self.simulation_params[c.ELEC_TEMP]
+        else:
+            self.temperature = 1
+
+        if edge_ratio:
+            self.edge_ratio = edge_ratio
+            self.sheath_edge_temp = self.temperature * edge_ratio
 
         self.ksi = float(parser.get(c.INF_SEC_PLASMA, c.INF_KSI))
         self.mu = float(parser.get(c.INF_SEC_PLASMA, c.INF_MU))
@@ -169,6 +175,13 @@ class Denormaliser(Converter):
 
     def __call__(self, variable, conversion_type=c.CONV_IV, additional_arg=None):
         return super().__call__(variable, conversion_type=conversion_type, additional_arg=additional_arg)
+
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def set_se_temperature(self, ratio):
+        self.edge_ratio = ratio
+        self.sheath_edge_temp = self.temperature * self.edge_ratio
 
     def _convert_potential(self, potential):
         return potential * self.temperature
