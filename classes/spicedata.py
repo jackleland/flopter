@@ -142,93 +142,93 @@ class SpiceTData(object):
     _ALL_LABELS = _GENERAL_LABELS
     _ALL_CONV_TYPES = _GENERAL_CONV_TYPES
 
-    def __init__(self, t_filename, deallocate=True, converter=None, convert=False):
+    def __init__(self, t_filename, deallocate=False, converter=None, convert=False):
         # Read matlab filename into dictionary and then distribute contents into named variables
         self.t_filename = t_filename
         self.converter = converter
         self.has_converted = {label: False for label in self._ALL_CONV_TYPES}
-        self.t_data = spio.loadmat(t_filename)
+        self.t_dict = spio.loadmat(t_filename)
 
-        self.matlab_data = MatlabData(self.t_data)
-        self.version = self.t_data[VERSION_SPICE]
+        self.matlab_data = MatlabData(self.t_dict)
+        self.version = self.t_dict[VERSION_SPICE]
 
         # Convertible variables
-        self.dt = self.t_data[DT]
-        self.dz = self.t_data[DZ]
-        self.t = self.t_data[T]
-        self.q = self.t_data[Q]
-        self.m = self.t_data[M]
-        self.temp = self.t_data[TEMP]
-        self.objectscurrenti = self.t_data[OBJECTSCURRENTI]
-        self.objectscurrente = self.t_data[OBJECTSCURRENTE]
-        self.objectspowerfluxi = self.t_data[OBJECTSCURRENTFLUXI]
-        self.objectspowerfluxe = self.t_data[OBJECTSCURRENTFLUXE]
-        self.pot = self.t_data[POT]
-        self.potvac = self.t_data[POTVAC]
+        self.dt = self.t_dict[DT]
+        self.dz = self.t_dict[DZ]
+        self.t = self.t_dict[T]
+        self.q = self.t_dict[Q]
+        self.m = self.t_dict[M]
+        self.temp = self.t_dict[TEMP]
+        self.objectscurrenti = self.t_dict[OBJECTSCURRENTI]
+        self.objectscurrente = self.t_dict[OBJECTSCURRENTE]
+        self.objectspowerfluxi = self.t_dict[OBJECTSCURRENTFLUXI]
+        self.objectspowerfluxe = self.t_dict[OBJECTSCURRENTFLUXE]
+        self.pot = self.t_dict[POT]
+        self.potvac = self.t_dict[POTVAC]
 
         # Other variables
-        self.nz = self.t_data[NZ]
-        self.nzmax = self.t_data[NZMAX]
-        self.ny = self.t_data[NY]
-        self.count = self.t_data[COUNT]
-        self.hpos = self.t_data[HPOS]
-        self.deltah = self.t_data[DELTAH]
-        self.npc = self.t_data[NPC]
-        self.nproc = self.t_data[NPROC]
-        self.zg = self.t_data[ZG]
-        self.yg = self.t_data[YG]
-        self.rho = self.t_data[RHO]
-        self.escz = self.t_data[ESCZ]
-        self.escy = self.t_data[ESCY]
-        self.esct = self.t_data[ESCT]
-        self.surfacematrix = self.t_data[SURFACEMATRIX]
-        self.sliceproc = self.t_data[SLICEPROC]
-        self.edgecharge = self.t_data[EDGECHARGE]
-        self.snumber = self.t_data[SNUMBER]
-        self.totalenergy = self.t_data[TOTALENERGY]
-        self.dphiqn = self.t_data[DPHIQN]
-        self.pchi = self.t_data[PCHI]
-        self.bx = self.t_data[BX]
-        self.by = self.t_data[BY]
-        self.bz = self.t_data[BZ]
-        self.npartproc = self.t_data[NPARTPROC]
-        self.nodiagreg = self.t_data[NODIAGREG]
-        self.diaghistories = self.t_data[DIAGHISTORIES]
-        self.fvarrays = self.t_data[FVARRAYS]
-        self.fvbin = self.t_data[FVBIN]
-        self.fvperparraycount = self.t_data[FVPERARRAYCOUNT]
-        self.fvlimits = self.t_data[FVLIMITS]
-        self.histlimits = self.t_data[HISTLIMITS]
-        self.timehistory_upper = self.t_data[TIMEHISTORY_UPPER]
-        self.timehistory_lower = self.t_data[TIMEHISTORY_LOWER]
-        self.flagm = self.t_data[FLAGM]
-        self.equipotm = self.t_data[EQUIPOTM]
-        self.flag = self.t_data[FLAG]
-        self.itertime_upper = self.t_data[ITERTIME_UPPER]
-        self.itertime_lower = self.t_data[ITERTIME_LOWER]
-        self.injrate = self.t_data[INJRATE]
-        self.objects = self.t_data[OBJECTS]
-        self.edges = self.t_data[EDGES]
-        self.diagm = self.t_data[DIAGM]
-        self.objectsenum = self.t_data[OBJECTSENUM]
-        self.rho01 = self.t_data[RHO1]
-        self.solw01 = self.t_data[SOLW01]
-        self.solns01 = self.t_data[SOLNS01]
-        self.rho02 = self.t_data[RHO2]
-        self.solw02 = self.t_data[SOLW02]
-        self.solns02 = self.t_data[SOLNS02]
-        self.ksi = self.t_data[KSI]
-        self.tau = self.t_data[TAU]
-        self.mu = self.t_data[MU]
-        self.alphayz = self.t_data[ALPHAYZ]
-        self.alphaxz = self.t_data[ALPHAXZ]
-        self.np = self.t_data[NC]
-        self.na = self.t_data[NA]
-        self.np = self.t_data[NP]
-        self.irel = self.t_data[IREL]
-        self.floatconstant = self.t_data[FLOATCONSTANT]
+        self.nz = self.t_dict[NZ]
+        self.nzmax = self.t_dict[NZMAX]
+        self.ny = self.t_dict[NY]
+        self.count = self.t_dict[COUNT]
+        self.hpos = self.t_dict[HPOS]
+        self.deltah = self.t_dict[DELTAH]
+        self.npc = self.t_dict[NPC]
+        self.nproc = self.t_dict[NPROC]
+        self.zg = self.t_dict[ZG]
+        self.yg = self.t_dict[YG]
+        self.rho = self.t_dict[RHO]
+        self.escz = self.t_dict[ESCZ]
+        self.escy = self.t_dict[ESCY]
+        self.esct = self.t_dict[ESCT]
+        self.surfacematrix = self.t_dict[SURFACEMATRIX]
+        self.sliceproc = self.t_dict[SLICEPROC]
+        self.edgecharge = self.t_dict[EDGECHARGE]
+        self.snumber = self.t_dict[SNUMBER]
+        self.totalenergy = self.t_dict[TOTALENERGY]
+        self.dphiqn = self.t_dict[DPHIQN]
+        self.pchi = self.t_dict[PCHI]
+        self.bx = self.t_dict[BX]
+        self.by = self.t_dict[BY]
+        self.bz = self.t_dict[BZ]
+        self.npartproc = self.t_dict[NPARTPROC]
+        self.nodiagreg = self.t_dict[NODIAGREG]
+        self.diaghistories = self.t_dict[DIAGHISTORIES]
+        self.fvarrays = self.t_dict[FVARRAYS]
+        self.fvbin = self.t_dict[FVBIN]
+        self.fvperparraycount = self.t_dict[FVPERARRAYCOUNT]
+        self.fvlimits = self.t_dict[FVLIMITS]
+        self.histlimits = self.t_dict[HISTLIMITS]
+        self.timehistory_upper = self.t_dict[TIMEHISTORY_UPPER]
+        self.timehistory_lower = self.t_dict[TIMEHISTORY_LOWER]
+        self.flagm = self.t_dict[FLAGM]
+        self.equipotm = self.t_dict[EQUIPOTM]
+        self.flag = self.t_dict[FLAG]
+        self.itertime_upper = self.t_dict[ITERTIME_UPPER]
+        self.itertime_lower = self.t_dict[ITERTIME_LOWER]
+        self.injrate = self.t_dict[INJRATE]
+        self.objects = self.t_dict[OBJECTS]
+        self.edges = self.t_dict[EDGES]
+        self.diagm = self.t_dict[DIAGM]
+        self.objectsenum = self.t_dict[OBJECTSENUM]
+        self.rho01 = self.t_dict[RHO1]
+        self.solw01 = self.t_dict[SOLW01]
+        self.solns01 = self.t_dict[SOLNS01]
+        self.rho02 = self.t_dict[RHO2]
+        self.solw02 = self.t_dict[SOLW02]
+        self.solns02 = self.t_dict[SOLNS02]
+        self.ksi = self.t_dict[KSI]
+        self.tau = self.t_dict[TAU]
+        self.mu = self.t_dict[MU]
+        self.alphayz = self.t_dict[ALPHAYZ]
+        self.alphaxz = self.t_dict[ALPHAXZ]
+        self.np = self.t_dict[NC]
+        self.na = self.t_dict[NA]
+        self.np = self.t_dict[NP]
+        self.irel = self.t_dict[IREL]
+        self.floatconstant = self.t_dict[FLOATCONSTANT]
 
-        self.diagnostics = {key: value for key, value in self.t_data.items() if key not in self._ALL_LABELS}
+        self.diagnostics = {key: value for key, value in self.t_dict.items() if key not in self._ALL_LABELS}
         for label in self.diagnostics:
             if any(marker in label for marker in DIAGNOSTIC_CONV_TYPES.keys()):
                 self.has_converted[label] = False
@@ -240,8 +240,8 @@ class SpiceTData(object):
             self._convert(self.converter.__class__)
 
     def deallocate(self):
-        # Deallocate the t_data dictionary as the data is duplicated into individual variables and therefore unnecessary
-        del self.t_data
+        # Deallocate the t_dict dictionary if deemed unnecessary to keep the data in dict form.
+        del self.t_dict
         import gc
         gc.collect()
 
@@ -280,14 +280,14 @@ class Spice2TData(SpiceTData):
     def __init__(self, t_filename, deallocate=True):
         super().__init__(t_filename, deallocate=False)
 
-        self.mksn0 = self.t_data[MKSN0]
-        self.mkste = self.t_data[MKSTE]
-        self.mksb = self.t_data[MKSB]
-        self.mksmainionm = self.t_data[MKSMAINIONM]
-        self.mksmainionq = self.t_data[MKSMAINIONQ]
-        self.mkspar1 = self.t_data[MKSPAR1]
-        self.mkspar2 = self.t_data[MKSPAR2]
-        self.mkspar3 = self.t_data[MKSPAR3]
+        self.mksn0 = self.t_dict[MKSN0]
+        self.mkste = self.t_dict[MKSTE]
+        self.mksb = self.t_dict[MKSB]
+        self.mksmainionm = self.t_dict[MKSMAINIONM]
+        self.mksmainionq = self.t_dict[MKSMAINIONQ]
+        self.mkspar1 = self.t_dict[MKSPAR1]
+        self.mkspar2 = self.t_dict[MKSPAR2]
+        self.mkspar3 = self.t_dict[MKSPAR3]
 
         if deallocate:
             self.deallocate()
