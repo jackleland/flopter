@@ -22,6 +22,7 @@ DIST_SCALER = 'A'       # Distribution function scaler
 SWEEP_LOWER = -9.95
 SWEEP_UPPER = 10.05
 PROBE_PARAMETER = 3
+WALL_PARAMETER = 2
 
 # Input File Variables Labels
 INF_MAGNETIC_FIELD = 'B'
