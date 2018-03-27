@@ -4,29 +4,30 @@ import constants as c
 import normalisation as n
 import matplotlib.pyplot as plt
 import numpy as np
+import classes.spicedata as sd
 from scipy.signal import argrelmax, savgol_filter
 import scipy as sp
 from scipy.io import loadmat
 
 
-def run_param_scan():
-    flopter_gap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
+def run_param_scan(flopter):
+    # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
     # flopter_nogap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/')
 
-    ivdata_g = flopter_gap.trim(trim_end=0.8)
+    ivdata_g = flopter.trim(trim_end=0.8)
     # ivdata_ng = flopter_nogap.trim()
 
     fig = plt.figure()
-    flopter_gap.plot_iv(iv_data=ivdata_g, fig=fig, plot_tot=True, label='Gap')
+    flopter.plot_iv(iv_data=ivdata_g, fig=fig, plot_tot=True, label='Gap')
     n_params = 4
     params = [[]]*n_params
     errors = [[]]*n_params
     trim_space = np.linspace(0.4, 0.5, 11)
     print(params)
     for trim_end in trim_space:
-        ivdata = flopter_gap.trim(trim_end=trim_end)
-        ivfitdata = flopter_gap.fit(ivdata)
-        flopter_gap.plot_f_fit(ivfitdata, fig=fig, plot_raw=False, plot_vf=False, label=str(trim_end))
+        ivdata = flopter.trim(trim_end=trim_end)
+        ivfitdata = flopter.fit(ivdata)
+        flopter.plot_f_fit(ivfitdata, fig=fig, plot_raw=False, plot_vf=False, label=str(trim_end))
         fit_params, fit_errors = ivfitdata.get_fit_params().split()
         for i in range(n_params):
             if len(params[i]) == 0:
@@ -46,6 +47,15 @@ def run_param_scan():
         plt.errorbar(trim_space, params[j], yerr=errors[j])
     plt.show()
 
+
+def run_iv_analysis(flopter):
+    iv_data = flopter.trim()
+    # flopter.fit(iv_data)
+
+    flopter.plot_raw(plot_list=[c.CURRENT, c.ION_CURRENT, c.ELEC_CURRENT])
+
+    flopter.plot_iv(plot_vf=True, plot_tot=True, show_fl=True)
+    plt.show()
 
 def run_gap_nogap_comparison():
     flopter_gap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullgap/', prepare=True)
@@ -82,7 +92,7 @@ def run_histogram_extr(flopter=None, z_high=370.0, z_low=70.0, fig=None, show=Fa
                        t_flag=False, fitter=None):
     if not flopter:
         flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
-    flopter.prepare(denormalise=True, homogenise=False)
+    flopter.prepare(make_denormaliser=True, homogenise=False)
     # path = 'bin/data_local/benchmarking/disttest_fullnogap/'
     nproc = int(np.squeeze(flopter.tdata.nproc))
 
@@ -317,7 +327,7 @@ def get_hist_index(hist_name, parser):
 def run_spice_df_analysis(flopter, fig=None, show=False):
     assert isinstance(flopter, fl.Flopter)
 
-    flopter.prepare(homogenise=False, denormalise=True)
+    flopter.prepare(homogenise=False, make_denormaliser=True)
 
     tdata = flopter.tdata
     print(flopter.tdata.diagnostics.keys())
@@ -411,32 +421,40 @@ def run_spice_df_analysis(flopter, fig=None, show=False):
         plt.show()
 
 
-def draw_potential():
-    flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
-    # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/', prepare=False)
+def draw_potential(flopter=None, t_dict_label=sd.POT, plot_obj_fl=False):
+    if not flopter:
+        flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
+        # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/', prepare=False)
 
-    pot = np.flip(flopter.tdata.pot, 0)
-    objects = np.zeros(np.shape(pot))
+    plasma_parameter = np.flip(flopter.tdata.t_dict[t_dict_label], 0)
+    objects_raw = np.flip(flopter.tdata.objectsenum, 0)
+    probe_obj_indices = flopter.parser.get_probe_obj_indices()
+    objects = np.zeros(np.shape(plasma_parameter))
 
-    wall_indices = np.where(pot == 0)
-    probe_indices = np.where(pot > 10.0)
+    wall_indices = np.where(plasma_parameter == 0)
+    probe_objs = [np.where(objects_raw == index + 1) for index in probe_obj_indices]
 
-    pot[wall_indices] = np.NaN
-    pot[probe_indices] = np.NaN
+    if plot_obj_fl:
+        plt.figure()
+        plt.imshow(objects_raw, cmap='Greys')
+        plt.colorbar()
+
+    plasma_parameter[wall_indices] = np.NaN
+    for probe_obj in probe_objs:
+        plasma_parameter[probe_obj] = np.NaN
     objects[wall_indices] = 3.0
-    objects[probe_indices] = 1.5
+    for probe_obj in probe_objs:
+        objects[probe_obj] = 1.5
 
     plt.figure()
-    plt.imshow(objects, cmap='Greys', extent=[0, len(pot[0]) / 2, 0, len(pot) / 2])
+    plt.imshow(objects, cmap='Greys', extent=[0, len(plasma_parameter[0]) / 2, 0, len(plasma_parameter) / 2])
 
-    # plt.figure()
-    # plt.contour(edges, extent=[0, len(pot[0]) / 2, 0, len(pot) / 2], linewidths=0.5, cmap='Greys')
-    # plt.axhline(70, linewidth=1, color='black')
     ax = plt.gca()
-    im = ax.imshow(pot, extent=[0, len(pot[0]) / 2, 0, len(pot) / 2], interpolation=None)
+    im = ax.imshow(plasma_parameter, extent=[0, len(plasma_parameter[0]) / 2, 0, len(plasma_parameter) / 2], interpolation=None)
     plt.xlabel(r'y / $\lambda_D$', fontsize=15)
     plt.ylabel(r'z / $\lambda_D$', fontsize=15)
-    plt.title('Electrostatic potential for a flush mounted probe', fontsize=20)
+    # plt.title('Electrostatic potential for a flush mounted probe', fontsize=20)
+    plt.quiver([200], [200], flopter.tdata.by, flopter.tdata.bz, scale=5)
     plt.colorbar(im, fraction=0.035, pad=0.04)
     plt.show()
 
@@ -563,9 +581,17 @@ if __name__ == '__main__':
     # run_maxwellian_comparison()
     # run_current_comparison()
     # test2()
+    # flopter = fl.Flopter('bin/data/', 'tests/', 'nproctest_fullnogap/', prepare=True)
+    # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullgap/', prepare=True)
     # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullnogap/', prepare=True)
+    # flopter = fl.Flopter('bin/data/', 'angledtip/', 'angledtiptest/', prepare=False)
+    flopter = fl.Flopter('bin/data/', 'angledtip/', 'angledtiptest1/', prepare=False)
+    flopter.prepare(homogenise=False, make_denormaliser=False)
+    draw_potential(flopter=flopter)
 
-    run_gap_nogap_comparison()
+    # run_iv_analysis(flopter)
+
+    # run_gap_nogap_comparison()
 
     # run_multi_hist_analysis(flopter=flopter, fitter=f.GaussianVelElecEvFitter(), show_fl=False)
     # draw_potential()
