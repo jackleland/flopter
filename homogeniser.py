@@ -91,11 +91,14 @@ class Spice2Homogeniser(Homogeniser):
         self._prehomogenise_checks()
 
         # Extract relevant arrays from the matlab file
-        probe_index = self.parser.get_probe_index()
+        probe_indices = self.parser.get_probe_obj_indices()
+        probe_current_e = 0.0
+        probe_current_i = 0.0
 
         time = np.squeeze(self.data.t)[:-1]
-        probe_current_e = np.squeeze(self.data.objectscurrente)[probe_index]
-        probe_current_i = np.squeeze(self.data.objectscurrenti)[probe_index]
+        for index in probe_indices:
+            probe_current_e += np.squeeze(self.data.objectscurrente)[index]
+            probe_current_i += np.squeeze(self.data.objectscurrenti)[index]
         probe_bias = np.squeeze(self.data.diagnostics[DIAG_PROBE_POT])
         probe_current_tot = probe_current_i + probe_current_e
 

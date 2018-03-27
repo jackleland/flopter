@@ -243,26 +243,55 @@ class InputParser(ConfigParser):
         print('No diagnostic region making histograms found matching "{}"'.format(hist_name))
         return None
 
-    def get_probe_index(self):
-        # TODO: make this return a slice object with each sweeping object index
+    def get_probe_obj_indices(self):
         """
-        Returns the index of the object within the simulation which is acting as a probe i.e. has 'param1' set to 3.
-        The index can be used to reference the correct array in objectscurrent, for example. Assumes that the first
-        probe found in the input file is the only probe.
-        :return: {int} Index of probe in simulation object array.
+        Returns the index (or indices if the probe is a compound shape) of the object within the simulation which is
+        acting as a probe i.e. has 'param1' set to 3. The indices can be used to reference the correct array in
+        objectscurrent, for example.
+        :return: [int]    Indices of probes in simulation object array, returned as a list.
         """
         num_blocks_section = self[c.INF_SEC_SHAPES]
         n = 0
+        probes = []
         for shape in num_blocks_section:
             n_shape = self.getint(c.INF_SEC_SHAPES, shape)
             n += n_shape
             if n_shape > 0:
+                # shave off the trailing s from the label
                 shape_name = shape[:-1]
                 for i in range(n_shape):
                     section = self[shape_name + str(i)]
                     if int(section[c.INF_SWEEP_PARAM]) == c.PROBE_PARAMETER:
-                        return (n - n_shape) + i
-        raise ValueError('Could not find a shape set to sweep voltage')
+                        probes.append((n - n_shape) + i)
+        if len(probes) > 0:
+            return probes
+        else:
+            raise ValueError('Could not find a shape set to sweep voltage')
+
+    def get_wall_obj_indices(self):
+        """
+        Returns the index (or indices if using a compound shape) of the object within the simulation which is acting set
+        to have a floating potential i.e. has 'param1' set to 2. The indices can be used to reference the correct array
+        in objectscurrent, for example.
+        :return: [int]    Indices of floating potential walls in simulation object array, returned as a list.
+        """
+        num_blocks_section = self[c.INF_SEC_SHAPES]
+        n = 0
+        probes = []
+        for shape in num_blocks_section:
+            n_shape = self.getint(c.INF_SEC_SHAPES, shape)
+            n += n_shape
+            if n_shape > 0:
+                # shave off the trailing s from the label
+                shape_name = shape[:-1]
+                for i in range(n_shape):
+                    section = self[shape_name + str(i)]
+                    if int(section[c.INF_SWEEP_PARAM]) == c.WALL_PARAMETER:
+                        probes.append((n - n_shape) + i)
+        if len(probes) > 0:
+            return probes
+        else:
+            raise ValueError('Could not find a shape set to sweep voltage')
 
     def get_scaling_values(self, len_diag, len_builtin):
         """
