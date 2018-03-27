@@ -12,8 +12,8 @@ from scipy.signal import argrelmax, savgol_filter
 
 from classes.fitdata import IVFitData
 from classes.ivdata import IVData
-from classes.spicedata import Spice2TData
-from constants import POTENTIAL, CURRENT, ELEC_CURRENT, ION_CURRENT, TIME
+import classes.spicedata as sd
+# from constants import POTENTIAL, CURRENT, ELEC_CURRENT, ION_CURRENT, TIME
 import constants as c
 from homogeniser import Spice2Homogeniser
 from inputparser import InputParser
@@ -123,7 +123,7 @@ class Flopter(IVAnalyser):
         if self.tfile_path:
             if not run_name:
                 self.tfile_path = self.data_dir + self.tfile_path
-            self.tdata = Spice2TData(self.tfile_path)
+            self.tdata = sd.Spice2TData(self.tfile_path)
         else:
             raise ValueError('No t-file given')
 
@@ -144,18 +144,25 @@ class Flopter(IVAnalyser):
         if prepare:
             self.prepare()
 
-    def prepare(self, homogenise=True, denormalise=True):
-        """ Check existence of and then populate flopter objects """
+    def prepare(self, homogenise=True, make_denormaliser=True):
+        """
+            Check existence of and then populate the main flopter objects: inputparser, denormaliser and homogeniser.
+
+            Default behaviour is to populate all, mandatory behaviour is only to create input parser. Homogeniser and
+            Denormaliser creation is controlled through the boolean input flags. Note that specifying the
+            make_denormaliser flag does not automatically denormalise all data, it merely populates the denormaliser
+            object.
+        """
         if not self.parser:
             self.parser = InputParser(input_filename=self.input_filename)
 
-        if denormalise and not self.denormaliser:
+        if make_denormaliser and not self.denormaliser:
             self.denormaliser = Denormaliser(dt=self.tdata.dt, input_parser=self.parser)
             ratio = self.find_se_temp_ratio()
             self.denormaliser.set_se_temperature(ratio)
             self.tdata.converter = self.denormaliser
-        elif denormalise and self.denormaliser is not None:
-            print('Cannot denormalise, data has already been denormalised!')
+        elif make_denormaliser and self.denormaliser is not None:
+            print('Cannot make_denormaliser, data has already been denormalised!')
 
         if homogenise and not self.homogeniser:
             self.homogeniser = Spice2Homogeniser(data=self.tdata, input_parser=self.parser)
@@ -182,13 +189,16 @@ class Flopter(IVAnalyser):
 ##################################
 #            Trimming            #
 ##################################
-    def trim(self, trim_beg=0.01, trim_end=0.35):
+    def trim(self, iv_data=None, trim_beg=0.01, trim_end=0.35):
+        if not iv_data:
+            iv_data = self.iv_data
+
         # Cut off the noise in the electron saturation region
-        t = Flopter.trim_generic(self.iv_data[TIME], trim_beg=trim_beg, trim_end=trim_end)
-        V = Flopter.trim_generic(self.iv_data[POTENTIAL], trim_beg=trim_beg, trim_end=trim_end)
-        I = Flopter.trim_generic(self.iv_data[CURRENT], trim_beg=trim_beg, trim_end=trim_end)
-        I_e = Flopter.trim_generic(self.iv_data[ELEC_CURRENT], trim_beg=trim_beg, trim_end=trim_end)
-        I_i = Flopter.trim_generic(self.iv_data[ION_CURRENT], trim_beg=trim_beg, trim_end=trim_end)
+        t = Flopter.trim_generic(iv_data[c.TIME], trim_beg=trim_beg, trim_end=trim_end)
+        V = Flopter.trim_generic(iv_data[c.POTENTIAL], trim_beg=trim_beg, trim_end=trim_end)
+        I = Flopter.trim_generic(iv_data[c.CURRENT], trim_beg=trim_beg, trim_end=trim_end)
+        I_e = Flopter.trim_generic(iv_data[c.ELEC_CURRENT], trim_beg=trim_beg, trim_end=trim_end)
+        I_i = Flopter.trim_generic(iv_data[c.ION_CURRENT], trim_beg=trim_beg, trim_end=trim_end)
 
         return IVData(V, I, t, i_current=I_i, e_current=I_e)
 
@@ -208,7 +218,7 @@ class Flopter(IVAnalyser):
         if not iv_data:
             iv_data = self.iv_data
 
-        iv_interp = interpolate.interp1d(iv_data[CURRENT], iv_data[POTENTIAL])
+        iv_interp = interpolate.interp1d(iv_data[c.CURRENT], iv_data[c.POTENTIAL])
         v_float = iv_interp([0.0])
         return v_float
 
@@ -219,7 +229,7 @@ class Flopter(IVAnalyser):
         vf = self.get_vf(iv_data)
         print(vf)
 
-        gradient = np.gradient(-iv_data[CURRENT])
+        gradient = np.gradient(-iv_data[c.CURRENT])
         gradient2 = np.gradient(gradient)
         peaks = argrelmax(gradient)
 
@@ -231,17 +241,22 @@ class Flopter(IVAnalyser):
 
         plt.figure()
         # plt.plot(iv_data[POTENTIAL], iv_data[CURRENT])
-        plt.plot(iv_data[POTENTIAL], gradient)
-        plt.plot(iv_data[POTENTIAL], smoothed_gradient)
+        plt.plot(iv_data[c.POTENTIAL], gradient)
+        plt.plot(iv_data[c.POTENTIAL], smoothed_gradient)
         # plt.plot(iv_data[POTENTIAL], gradient2)
-        phi = iv_data[POTENTIAL][[p for p in smoothed_peaks[0] if iv_data[POTENTIAL][p] > vf][0]]
+        phi = iv_data[c.POTENTIAL][[p for p in smoothed_peaks[0] if iv_data[c.POTENTIAL][p] > vf][0]]
         # for p in [p for p in smoothed_peaks[0] if iv_data[POTENTIAL][p] > vf]:
         #     plt.axvline(iv_data[POTENTIAL][p], linewidth=1, color='r')
         plt.show()
         return phi
 
-    def fit(self, iv_data, fitter=None, print_fl=False, initial_vals=None, bounds=None):
+    def fit(self, iv_data=None, fitter=None, print_fl=False, initial_vals=None, bounds=None):
         # TODO: Reimplement the finding of floating potential
+        if not iv_data:
+            iv_data = self.iv_data
+
+        v_f = self.get_vf(iv_data)
+
         if fitter:
             assert isinstance(fitter, IVFitter)
         else:
@@ -283,6 +298,10 @@ class Flopter(IVAnalyser):
         # sl_bounds = ([-np.inf, 0],
         #              [np.inf, np.inf])
 
+###########################################
+#              DF Extraction              #
+###########################################
+
     def find_se_temp_ratio(self, v_scale=1000, plot_fl=False, species=2):
         # TODO: Make function to find regions automatically
         regions = [
@@ -315,12 +334,12 @@ class Flopter(IVAnalyser):
         if denormalise and not self.denormaliser:
             self.prepare(homogenise=False)
         elif not self.parser:
-            self.prepare(homogenise=False, denormalise=False)
+            self.prepare(homogenise=False, make_denormaliser=False)
 
         nproc = int(np.squeeze(self.tdata.nproc))
         region_vels = [np.array([])] * len(regions)
         ralpha = (-self.tdata.alphayz / 180.0) * 3.141591
-        rbeta = ((90.0 - self.tdata.alphaxz) / 180) * 3.14159
+        rbeta = ((90.0 - self.tdata.alphaxz) / 180) * 3.141591
 
         for i in range(nproc):
             num = str(i).zfill(2)
@@ -362,7 +381,7 @@ class Flopter(IVAnalyser):
     }
 
     def plot_iv(self, fig=None, iv_data=None, plot_vf=False, plot_tot=False, plot_i=False, plot_e=False,
-                label='Total', is_final=False):
+                label='Total', show_fl=False):
         if not fig:
             fig = plt.figure()
 
@@ -370,13 +389,13 @@ class Flopter(IVAnalyser):
             iv_data = self.iv_data
 
         if plot_tot:
-            plt.plot(iv_data[POTENTIAL][:-1], iv_data[CURRENT][:-1], label=label) #, linestyle='dashed')
+            plt.plot(iv_data[c.POTENTIAL][:-1], iv_data[c.CURRENT][:-1], label=label)
 
         if plot_e:
-            plt.plot(iv_data[POTENTIAL][:-1], iv_data[ELEC_CURRENT][:-1], label='Electron')
+            plt.plot(iv_data[c.POTENTIAL][:-1], iv_data[c.ELEC_CURRENT][:-1], label='Electron')
 
         if plot_i:
-            plt.plot(iv_data[POTENTIAL][:-1], iv_data[ION_CURRENT][:-1], label='Ion')
+            plt.plot(iv_data[c.POTENTIAL][:-1], iv_data[c.ION_CURRENT][:-1], label='Ion')
 
         # plt.plot(V, I_i, label='Ion')
         # plt.plot(V, I_e, label='Electron')
@@ -394,7 +413,7 @@ class Flopter(IVAnalyser):
         plt.xlabel(r'$\hat{V}$')
         plt.ylabel(r'$\hat{I}$')
         plt.legend()
-        if is_final:
+        if show_fl:
             plt.show()
 
     def plot_f_fit(self, iv_fit_data, fig=None, label=None, plot_raw=True, plot_vf=True):
@@ -429,15 +448,15 @@ class Flopter(IVAnalyser):
 ######################
 #    Raw Data Plot   #
 ######################
-    def plot_raw(self, fig=None, plot_list=('V', 'I', 'I_e', 'I_i')):
+    def plot_raw(self, fig=None, plot_list=('V', 'I', 'I_e', 'I_i'), show_fl=False):
         if not fig:
             fig = plt.figure()
 
         _PLOTTABLE = {
-            'V': 'Raw Voltage',
-            'I': 'Raw Current',
-            'I_e': 'Raw Electron Current',
-            'I_i': 'Raw Ion Current'
+            c.POTENTIAL: 'Raw Voltage',
+            c.CURRENT: 'Raw Current',
+            c.ELEC_CURRENT: 'Raw Electron Current',
+            c.ION_CURRENT: 'Raw Ion Current'
         }
 
         if not plot_list:
@@ -446,6 +465,40 @@ class Flopter(IVAnalyser):
 
         for var in plot_list:
             if var in _PLOTTABLE.keys():
-                plt.plot(self.iv_data[TIME][:-1], self.raw_data[var][-1], label=_PLOTTABLE[var])
+                plt.plot(self.iv_data[c.TIME][:-1], self.raw_data[var][:-1], label=_PLOTTABLE[var])
         plt.legend()
+        if show_fl:
+            plt.show()
+
+    def plot_potential(self, t_dict_label=sd.POT, plot_obj_fl=False):
+        plasma_parameter = np.flip(self.tdata.t_dict[t_dict_label], 0)
+        objects_raw = np.flip(self.tdata.objectsenum, 0)
+        probe_obj_indices = self.parser.get_probe_obj_indices()
+        objects = np.zeros(np.shape(plasma_parameter))
+
+        wall_indices = np.where(plasma_parameter == 0)
+        probe_objs = [np.where(objects_raw == index + 1) for index in probe_obj_indices]
+
+        if plot_obj_fl:
+            plt.figure()
+            plt.imshow(objects_raw, cmap='Greys')
+            plt.colorbar()
+
+        plasma_parameter[wall_indices] = np.NaN
+        for probe_obj in probe_objs:
+            plasma_parameter[probe_obj] = np.NaN
+        objects[wall_indices] = 3.0
+        for probe_obj in probe_objs:
+            objects[probe_obj] = 1.5
+
+        plt.figure()
+        plt.imshow(objects, cmap='Greys', extent=[0, len(plasma_parameter[0]) / 2, 0, len(plasma_parameter) / 2])
+
+        ax = plt.gca()
+        im = ax.imshow(plasma_parameter, extent=[0, len(plasma_parameter[0]) / 2, 0, len(plasma_parameter) / 2], interpolation=None)
+        plt.xlabel(r'y / $\lambda_D$', fontsize=15)
+        plt.ylabel(r'z / $\lambda_D$', fontsize=15)
+        # plt.title('Electrostatic potential for a flush mounted probe', fontsize=20)
+        plt.quiver([200], [200], self.tdata.by, self.tdata.bz, scale=5)
+        plt.colorbar(im, fraction=0.035, pad=0.04)
         plt.show()
