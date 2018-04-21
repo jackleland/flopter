@@ -5,12 +5,13 @@ import fitters as f
 import pandas as pd
 
 # Estimated parameters
-v_f = 8        # V
+# v_f = 8        # V
 a_est = 0.0208  # V
 
 # Known parameters
-T_i = 6       # eV
-T_e = 6       # eV
+T_e = 3        # eV
+T_i = T_e        # eV
+v_f = 3 * T_e   # V - Approximation from Stangeby
 n_e = 1e19  # m^-3
 
 # Flush probe measurements
@@ -24,20 +25,6 @@ a_probe = []
 alphas = np.arange(0.5, 11, 0.5)
 
 plot_fl = False
-# for alpha in alphas:
-#     theta_p = np.radians(10)
-#     theta_perp = np.radians(alpha)
-#     A_coll = (d * np.sin(np.abs(theta_perp) + np.abs(theta_p)) *
-#               ((L / np.cos(theta_p)) - ((d_perp - (g * np.tan(theta_perp)))
-#                                         / (np.sin(theta_p) + (np.tan(theta_perp) * np.cos(theta_p))))))
-#     a_probe.append(A_probe * np.sin(theta_perp))
-#     a_coll.append(A_coll)
-# plt.figure(0)
-# plt.plot(alphas, a_coll, label='A_coll')
-# plt.plot(alphas, a_probe, label='A_probe')
-# plt.legend()
-# plt.show()
-# exit()
 
 # Constants
 m_i = nrm._PROTON_MASS
@@ -46,15 +33,12 @@ deg_freedom = 3
 gamma_i = (deg_freedom + 2) / 2
 c_1 = 0.9
 c_2 = 0.6
-# alpha_high = np.radians(10)
-# alpha_low = np.radians(0.5)
-# alphas = [alpha_low, alpha_high]
 
-for v_max in [100, 150]:
-    V_range = np.arange(-2*v_max, 20, 1) / 2
+for v_max in [100, 150, 300]:
+    V_range = np.arange(-2*v_max, 2*(v_f + 10), 1) / 2
     V = (v_f - V_range) / T_e
 
-    num_samples = 10000
+    num_samples = 500
 
     currents = {}
     noise = {}
@@ -95,22 +79,24 @@ for v_max in [100, 150]:
             except RuntimeError:
                 count += 1
                 continue
-            if i == 0 and alpha == 10.5 and plot_fl:
-                plt.figure()
-                plt.plot(V_range, I, label='Analytical')
-                plt.xlabel('V (V)')
-                plt.ylabel('Current (A)')
-                plt.legend()
+            if i == 0 and alpha == 10.5 and v_max == 100 and plot_fl:
+                # plt.figure()
+                # plt.plot(V_range, I, label='Analytical')
+                # plt.axvline(0, color='gray', linewidth=1, linestyle='dashed')
+                # plt.xlabel('V (V)')
+                # plt.ylabel('Current (A)')
+                # plt.legend()
 
-                plt.figure()
-                plt.plot(V_range, noisey, label='Noisified')
-                plt.xlabel('V (V)')
-                plt.ylabel('Current (A)')
-                plt.legend()
+                # plt.figure()
+                # plt.plot(V_range, noisey, label='Noisified')
+                # plt.xlabel('V (V)')
+                # plt.ylabel('Current (A)')
+                # plt.legend()
 
                 plt.figure()
                 plt.plot(V_range, noisey, label='Noisified')
                 plt.plot(V_range, fit_data.fit_y, label='Pseudo-measurement')
+                plt.axvline(0, color='gray', linewidth=1, linestyle='dashed')
                 plt.xlabel('V (V)')
                 plt.ylabel('Current (A)')
                 plt.legend()
@@ -128,23 +114,23 @@ for v_max in [100, 150]:
         isats_stderr.append(np.array(isats_t).std() / np.sqrt(num_samples - count))
         failed_fits.append(count)
 
-    plt.figure(1)
+    plt.figure(10)
     plt.errorbar(alphas, temps, temps_stderr, label=r'$T_e - V_{}={}$'.format('{max}', v_max))
     # plt.hist(failed_fits, alphas, color='gray', alpha=0.5, label='Unfittable - V_{}={}'.format('{max}', v_max))
 
-    plt.figure(2)
+    plt.figure(11)
     plt.errorbar(alphas, isats, isats_stderr, label=r'$I_{} - V_{}={}$'.format('{sat}', '{max}', v_max))
     # if v_max == 100:
     #     plt.plot(alphas, isats_def, label=r'Defined $I_{sat}$', color='gray', linewidth=1, linestyle='dashed')
     # plt.hist(failed_fits, alphas, color='gray', alpha=0.5, label='Unfittable - V_{}={}'.format('{max}', v_max))
 
-plt.figure(1)
+plt.figure(10)
 plt.axhline(T_e, color='gray', linewidth=1, linestyle='dashed', label=r'Defined $T_e$')
 plt.legend()
 plt.xlabel(r'$\alpha$ ($^{\circ}$)')
 plt.ylabel(r'$T_e$ (eV)')
 
-plt.figure(2)
+plt.figure(11)
 plt.axhline(0, color='gray', linewidth=1, linestyle='dashed', label=r'Defined $I_{sat}$')
 plt.legend()
 plt.xlabel(r'$\alpha$ ($^{\circ}$)')
