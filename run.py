@@ -48,15 +48,6 @@ def run_param_scan(flopter):
     plt.show()
 
 
-def run_iv_analysis(flopter):
-    iv_data = flopter.trim()
-    # flopter.fit(iv_data)
-
-    flopter.plot_raw(plot_list=[c.CURRENT, c.ION_CURRENT, c.ELEC_CURRENT])
-
-    flopter.plot_iv(plot_vf=True, plot_tot=True, show_fl=True)
-    plt.show()
-
 def run_gap_nogap_comparison():
     flopter_gap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullgap/', prepare=True)
     flopter_nogap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullnogap/', prepare=True)
@@ -575,22 +566,66 @@ def injection_dist_function(gauss_fl=True, show_fl=True):
         plt.show()
 
 
+def extract_density(flopter):
+    nproc = int(np.squeeze(flopter.tdata.nproc))
+    print(flopter.afile.keys())
+    for i in range(nproc):
+        num = str(i).zfill(2)
+        filename = flopter.tfile_path.replace('.mat', '{}.mat'.format(num))
+        p_file = loadmat(filename)
+        if len(p_file.keys()) != 13:
+            print(i)
+
+    plt.figure()
+    plt.imshow(np.flip(flopter.afile['dens01'], 0))
+    plt.colorbar()
+
+    plt.figure()
+    plt.imshow(np.flip(flopter.afile['temperature01'], 0))
+    plt.colorbar()
+
+    for sp in [1, 2]:
+        for proc_num in range(32):
+            print(sp, proc_num, int(float(sp)/(proc_num + 1)) * (proc_num + 1))
+
+    plt.figure()
+    # plt.imshow(np.flip(p_file['temperature01'], 0))
+    # plt.colorbar()
+
+    for label, data in flopter.afile.items():
+        if isinstance(data, np.ndarray):
+            shape = np.shape(data)
+        else:
+            shape = 1
+        print(label, shape)
+
+    plt.show()
+
+
 if __name__ == '__main__':
     # run_gap_nogap_comparison()
     # run_param_scan()
     # run_maxwellian_comparison()
     # run_current_comparison()
     # test2()
+    flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/')
+    # flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'gap/')
+
     # flopter = fl.Flopter('bin/data/', 'tests/', 'nproctest_fullnogap/', prepare=True)
     # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullgap/', prepare=True)
     # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullnogap/', prepare=True)
     # flopter = fl.Flopter('bin/data/', 'angledtip/', 'angledtiptest/', prepare=False)
-    flopter = fl.Flopter('bin/data/', 'angledtip/', 'angledtiptest1/', prepare=False)
+    # flopter = fl.Flopter('bin/data/', 'angledtip/', 'angledtiptest1/', prepare=False)
+    # flopter = fl.Flopter('bin/data/', 'test/', 'floatingpottest/', prepare=False)
     flopter.prepare(homogenise=False, make_denormaliser=False)
-    draw_potential(flopter=flopter)
+    # flopter.plot_2d_variable(show_fl=False)
 
-    # run_iv_analysis(flopter)
+    # flopter.analyse_iv(show_fl=True)
+    # flopter.plot_1d_variable(variable_label=c.DIAG_WALL_POT, time_dep_fl=True, diagnostic_fl=True)
+    # flopter.plot_1d_variable(variable_label=sd.NZ)
 
+    # extract_density(flopter)
+    run_multi_hist_analysis(flopter=flopter, show_fl=True, species=1)
     # run_gap_nogap_comparison()
 
     # run_multi_hist_analysis(flopter=flopter, fitter=f.GaussianVelElecEvFitter(), show_fl=False)
