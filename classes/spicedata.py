@@ -131,6 +131,7 @@ DIAGNOSTIC_CONV_TYPES = {
     'Hist': c.CONV_DIST_FUNCTION
 }
 
+
 class MatlabData(object):
     def __init__(self, file):
         self.version = file[VERSION]
@@ -222,7 +223,7 @@ class SpiceTData(object):
         self.mu = self.t_dict[MU]
         self.alphayz = self.t_dict[ALPHAYZ]
         self.alphaxz = self.t_dict[ALPHAXZ]
-        self.np = self.t_dict[NC]
+        self.nc = self.t_dict[NC]
         self.na = self.t_dict[NA]
         self.np = self.t_dict[NP]
         self.irel = self.t_dict[IREL]
@@ -277,7 +278,7 @@ class Spice2TData(SpiceTData):
     _ALL_LABELS = _GENERAL_LABELS + _SPICE2_LABELS
     _ALL_CONV_TYPES = {**_GENERAL_CONV_TYPES, **_SPICE2_CONV_TYPES}
 
-    def __init__(self, t_filename, deallocate=True):
+    def __init__(self, t_filename, deallocate=False):
         super().__init__(t_filename, deallocate=False)
 
         self.mksn0 = self.t_dict[MKSN0]
