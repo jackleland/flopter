@@ -9,10 +9,10 @@ import pandas as pd
 a_est = 0.0208  # V
 
 # Known parameters
-T_e = 3        # eV
-T_i = T_e        # eV
+T_e = 5        # eV
+T_i = T_e       # eV
 v_f = 3 * T_e   # V - Approximation from Stangeby
-n_e = 1e19  # m^-3
+n_e = 1e18      # m^-3
 
 # Flush probe measurements
 L = 5e-3            # m
@@ -34,11 +34,12 @@ gamma_i = (deg_freedom + 2) / 2
 c_1 = 0.9
 c_2 = 0.6
 
-for v_max in [100, 150, 300]:
+# for v_max in [100, 150, 300]:
+for v_max in [100]:
     V_range = np.arange(-2*v_max, 2*(v_f + 10), 1) / 2
     V = (v_f - V_range) / T_e
 
-    num_samples = 500
+    num_samples = 20
 
     currents = {}
     noise = {}
@@ -49,6 +50,7 @@ for v_max in [100, 150, 300]:
     isats = []
     isats_err = []
     isats_stderr = []
+    isats_raw = []
     failed_fits = []
     for alpha in alphas:
         theta_p = np.radians(10)
@@ -60,6 +62,9 @@ for v_max in [100, 150, 300]:
         c_s = np.sqrt((nrm._ELEM_CHARGE * (T_e + gamma_i * T_i)) / m_i)
         a = ((c_1 + (c_2 / np.tan(np.radians(alpha)))) / np.sqrt(np.sin(np.radians(alpha)))) * (lambda_D / (L + g))
         I_0 = n_e * nrm._ELEM_CHARGE * c_s * A_coll
+        J_0 = I_0 / A_coll
+        q_par = 8 * T_e * J_0
+        print('Heat flux: {}'.format(q_par))
         # I_0 = n_e * nrm._ELEM_CHARGE * c_s * np.sin(np.radians(alpha)) * A_probe
         isats_def.append(I_0)
 
@@ -112,6 +117,7 @@ for v_max in [100, 150, 300]:
         isats.append(np.array(isats_t).mean() - I_0)
         isats_err.append(np.array(isats_err_t).mean())
         isats_stderr.append(np.array(isats_t).std() / np.sqrt(num_samples - count))
+        isats_raw.append(np.array(isats_t).mean())
         failed_fits.append(count)
 
     plt.figure(10)
@@ -119,9 +125,9 @@ for v_max in [100, 150, 300]:
     # plt.hist(failed_fits, alphas, color='gray', alpha=0.5, label='Unfittable - V_{}={}'.format('{max}', v_max))
 
     plt.figure(11)
-    plt.errorbar(alphas, isats, isats_stderr, label=r'$I_{} - V_{}={}$'.format('{sat}', '{max}', v_max))
-    # if v_max == 100:
-    #     plt.plot(alphas, isats_def, label=r'Defined $I_{sat}$', color='gray', linewidth=1, linestyle='dashed')
+    plt.errorbar(alphas, isats_raw, isats_stderr, label=r'$I_{} - V_{}={}$'.format('{sat}', '{max}', v_max))
+    if v_max == 100:
+        plt.plot(alphas, isats_def, label=r'Defined $I_{sat}$', color='gray', linewidth=1, linestyle='dashed')
     # plt.hist(failed_fits, alphas, color='gray', alpha=0.5, label='Unfittable - V_{}={}'.format('{max}', v_max))
 
 plt.figure(10)
@@ -131,9 +137,10 @@ plt.xlabel(r'$\alpha$ ($^{\circ}$)')
 plt.ylabel(r'$T_e$ (eV)')
 
 plt.figure(11)
-plt.axhline(0, color='gray', linewidth=1, linestyle='dashed', label=r'Defined $I_{sat}$')
+# plt.axhline(0, color='gray', linewidth=1, linestyle='dashed', label=r'Defined $I_{sat}$')
 plt.legend()
 plt.xlabel(r'$\alpha$ ($^{\circ}$)')
-plt.ylabel(r'Difference from defined $I_sat$ (A)')
+plt.ylabel(r'$I_sat$ (A)')
+# plt.ylabel(r'Difference from defined $I_sat$ (A)')
 
 plt.show()
