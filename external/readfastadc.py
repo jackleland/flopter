@@ -1,21 +1,23 @@
-
 # coding: utf-8
 import traceback
 import os, struct
 import numpy as np
-from os.path import join
 
+"""
+    File provided by Alex Poelman for the reading of binary data output from the Magnum fast ADC. Minor alterations 
+    made by Jack Leland 07/05/18
+"""
 
-
-def read_header(f):
+def read_header(f, print_fl=False):
     header = dict(zip(['freq', 'number', 'version', 'active'], 
                        struct.unpack(">diHH", f.read(16))))
     header['dsize'] = 2 * header['number']
     header['tsize'] = header['dsize'] * bin(header['active']).count('1')
-    print('Frequency=', header['freq'])
-    print('Nr samples=', header['number'])
-    print('Version=', header['version'])
-    print('Active Channels=', bin(header['active']))
+    if print_fl:
+        print('Frequency=', header['freq'])
+        print('Nr samples=', header['number'])
+        print('Version=', header['version'])
+        print('Active Channels=', bin(header['active']))
     if header['version'] == 0:
         header['hsize'] = 160
         format = ">2d" + 8*"16s"
@@ -27,9 +29,10 @@ def read_header(f):
     data = struct.unpack(format, f.read(header['hsize'] - 16))
     for i in range(8):
         header[i] = dict(zip(['offset', 'sensitivity', 'name'], data[i::8]))
-        print('Channel', i, 'Name =', header[i]['name'])
-        print('Channel', i, 'Offset =', header[i]['offset'])
-        print('Channel', i, 'Sensitivity =', header[i]['sensitivity'])
+        if print_fl:
+            print('Channel', i, 'Name =', header[i]['name'])
+            print('Channel', i, 'Offset =', header[i]['offset'])
+            print('Channel', i, 'Sensitivity =', header[i]['sensitivity'])
     return header
 
 
@@ -42,24 +45,27 @@ def print_data(ch, d):
         _i += 100
 
 
-def process_adc_file(directory, filename):
-    print('processing file: %s' % filename)
-    with open(join(directory, filename), 'rb') as f:
-        header = read_header(f)
+def process_adc_file(fullpath, filename, print_fl=False):
+    if print_fl:
+        print('processing file: %s' % filename)
+    data = {}
+    with open(fullpath, 'rb') as f:
+        header = read_header(f, print_fl)
         if header['dsize'] == 0:
             return
         for ch in (ch for ch in range(8) if ((header['active'] >> ch) & 1)):
             rawData = np.frombuffer(f.read(header['dsize']), dtype='>i2')
             if len(rawData) == 0:
-                print("no data in file for adc %i??" % i)
+                print("no data in file for adc %i??" % ch)
                 continue
             _offset      = header[ch]['offset']
             _sensitivity = header[ch]['sensitivity']
-            #print("Offset=",     _offset)
-            #print("Sensitivity", _sensitivity)
             physData = _offset + rawData * _sensitivity
-            print_data(ch, physData)
+            if print_fl:
+                print_data(ch, physData)
+            data[ch] = physData
     f.close()
+    return header, data
 
 
 if __name__ == '__main__':
