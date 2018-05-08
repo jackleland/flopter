@@ -75,8 +75,19 @@ class GenericFitter(ABC):
         return self.default_bounds
 
 
+# --- IV Fitters --- #
+
 class IVFitter(GenericFitter, ABC):
+    _DEFAULT_V_F = -1
+
+    def __init__(self, floating_potential=None):
+        super().__init__()
+        self.v_f = floating_potential
+
     def fit(self, x_data, y_data, initial_vals=None, bounds=None):
+        if not self.v_f:
+            print('No floating potential specified, using default value ({}).'.format(self._DEFAULT_V_F))
+            self.v_f = self._DEFAULT_V_F
         fit_data = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds)
         return IVFitData.from_fit_data(fit_data)
 
@@ -86,32 +97,33 @@ class IVFitter(GenericFitter, ABC):
         current = iv_data[c.CURRENT]
         return self.fit(potential, current, initial_vals, bounds)
 
+    def set_floating_pot(self, floating_pot):
+        self.v_f = floating_pot
+
 
 class FullIVFitter(IVFitter):
     """
     IV Fitter implementation utilising the full, 4 parameter IV Curve fitting method.
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, floating_potential=None):
+        super().__init__(floating_potential=floating_potential)
         self._param_labels = {
             c.ION_SAT: 0,
             c.SHEATH_EXP: 1,
-            c.FLOAT_POT: 2,
-            c.ELEC_TEMP: 3
+            c.ELEC_TEMP: 2
         }
-        self.default_values = (30.0, -1.5, 0.0204, 1)
+        self.default_values = (30.0, 0.0204, 1)
         self.default_bounds = (
-            (-np.inf, -np.inf,      0, -np.inf),
-            ( np.inf,  np.inf, np.inf,  np.inf)
+            (-np.inf,       0,       0),
+            ( np.inf,  np.inf,  np.inf)
         )
         self.name = '4 Parameter Fit'
 
     def fit_function(self, v, *parameters):
         I_0 = parameters[self._param_labels[c.ION_SAT]]
         a = parameters[self._param_labels[c.SHEATH_EXP]]
-        v_f = parameters[self._param_labels[c.FLOAT_POT]]
         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
-        V = (v_f - v) / T_e
+        V = (self.v_f - v) / T_e
         return I_0 * (1 - np.exp(-V) + (a * np.float_power(np.absolute(V), [0.75])))
 
     def get_param_index(self, label):
@@ -123,33 +135,28 @@ class FullIVFitter(IVFitter):
     def get_isat_index(self):
         return self._param_labels[c.ION_SAT]
 
-    def get_vf_index(self):
-        return self._param_labels[c.FLOAT_POT]
-
     def get_a_index(self):
         return self._param_labels[c.SHEATH_EXP]
 
 
 class SimpleIVFitter(IVFitter):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, floating_potential=None):
+        super().__init__(floating_potential=floating_potential)
         self._param_labels = {
             c.ION_SAT: 0,
-            c.FLOAT_POT: 1,
-            c.ELEC_TEMP: 2
+            c.ELEC_TEMP: 1
         }
-        self.default_values = (30.0, -1.5,  1)
+        self.default_values = (30.0,  1)
         self.default_bounds = (
-            (-np.inf, -np.inf, -np.inf),
-            ( np.inf,  np.inf,  np.inf)
+            (-np.inf,       0),
+            ( np.inf,  np.inf)
         )
         self.name = '3 Parameter Fit'
 
     def fit_function(self, v, *parameters):
         I_0 = parameters[self._param_labels[c.ION_SAT]]
-        v_f = parameters[self._param_labels[c.FLOAT_POT]]
         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
-        V = (v_f - v) / T_e
+        V = (self.v_f - v) / T_e
         return I_0 * (1 - np.exp(-V))
 
     def get_temp_index(self):
@@ -158,13 +165,10 @@ class SimpleIVFitter(IVFitter):
     def get_isat_index(self):
         return self._param_labels[c.ION_SAT]
 
-    def get_vf_index(self):
-        return self._param_labels[c.FLOAT_POT]
-
 
 class IonCurrentSEFitter(IVFitter):
     def __init__(self):
-        super().__init__()
+        super().__init__(floating_potential=None)
         self._param_labels = {
             c.ION_SAT: 0,
             c.SHEATH_EXP: 1
@@ -193,6 +197,8 @@ class IonCurrentSEFitter(IVFitter):
     def get_a_index(self):
         return self._param_labels[c.SHEATH_EXP]
 
+
+# --- Maxwellian Fitters --- #
 
 class MaxwellianVelFitter(GenericFitter):
     def __init__(self, si_units=False, mu=_P_E_MASS_RATIO):

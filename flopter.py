@@ -13,7 +13,6 @@ from scipy.signal import argrelmax, savgol_filter
 from classes.fitdata import IVFitData
 from classes.ivdata import IVData
 import classes.spicedata as sd
-# from constants import POTENTIAL, CURRENT, ELEC_CURRENT, ION_CURRENT, TIME
 import constants as c
 from homogeniser import Spice2Homogeniser
 from inputparser import InputParser
@@ -62,6 +61,9 @@ class IVAnalyser(ABC):
     
 
 class Flopter(IVAnalyser):
+    """
+        Implementation of IVAnalyser for the analysis of probe data from SPICE
+    """
     _tfile_prefix = 't-'
     _file_suffix = '.mat'
 
@@ -190,7 +192,11 @@ class Flopter(IVAnalyser):
 #            Trimming            #
 ##################################
     def trim(self, iv_data=None, trim_beg=0.01, trim_end=0.35):
-        if not iv_data:
+        if not iv_data and self.iv_data:
+            iv_data = self.iv_data
+        elif not self.iv_data:
+            print('self.iv_data not set, running homogenise now...')
+            self.prepare(make_denormaliser=False)
             iv_data = self.iv_data
 
         # Cut off the noise in the electron saturation region
@@ -238,6 +244,7 @@ class Flopter(IVAnalyser):
 
         # print(gradient)
         # print(peaks)
+        print(len(gradient))
 
         plt.figure()
         # plt.plot(iv_data[POTENTIAL], iv_data[CURRENT])
@@ -256,11 +263,15 @@ class Flopter(IVAnalyser):
             iv_data = self.iv_data
 
         v_f = self.get_vf(iv_data)
+        print(v_f)
 
         if fitter:
             assert isinstance(fitter, IVFitter)
         else:
             fitter = FullIVFitter()
+
+        if not fitter.v_f:
+            fitter.set_floating_pot(v_f)
 
         fit_data = fitter.fit_iv_data(iv_data, initial_vals=initial_vals, bounds=bounds)
         if print_fl:
@@ -470,7 +481,29 @@ class Flopter(IVAnalyser):
         if show_fl:
             plt.show()
 
-    def plot_potential(self, t_dict_label=sd.POT, plot_obj_fl=False):
+    def plot_1d_variable(self, variable_label=sd.OBJECTSCURRENTE, time_dep_fl=False, diagnostic_fl=False, fig=None,
+                         show_fl=True):
+        if not diagnostic_fl:
+            y_var = self.tdata.t_dict[variable_label]
+        else:
+            y_var = self.tdata.diagnostics[variable_label]
+
+        if time_dep_fl:
+            x_var = self.tdata.t
+        else:
+            x_var = None
+
+        if not fig:
+            plt.figure()
+        if x_var is not None and len(x_var) == len(y_var):
+            plt.plot(x_var, y_var)
+        else:
+            plt.plot(y_var)
+
+        if show_fl:
+            plt.show()
+
+    def plot_2d_variable(self, t_dict_label=sd.POT, plot_obj_fl=False, show_fl=True):
         plasma_parameter = np.flip(self.tdata.t_dict[t_dict_label], 0)
         objects_raw = np.flip(self.tdata.objectsenum, 0)
         probe_obj_indices = self.parser.get_probe_obj_indices()
@@ -495,10 +528,20 @@ class Flopter(IVAnalyser):
         plt.imshow(objects, cmap='Greys', extent=[0, len(plasma_parameter[0]) / 2, 0, len(plasma_parameter) / 2])
 
         ax = plt.gca()
-        im = ax.imshow(plasma_parameter, extent=[0, len(plasma_parameter[0]) / 2, 0, len(plasma_parameter) / 2], interpolation=None)
+        im = ax.imshow(plasma_parameter, extent=[0, len(plasma_parameter[0]) / 2, 0, len(plasma_parameter) / 2],
+                       interpolation=None)
         plt.xlabel(r'y / $\lambda_D$', fontsize=15)
         plt.ylabel(r'z / $\lambda_D$', fontsize=15)
         # plt.title('Electrostatic potential for a flush mounted probe', fontsize=20)
         plt.quiver([200], [200], self.tdata.by, self.tdata.bz, scale=5)
         plt.colorbar(im, fraction=0.035, pad=0.04)
-        plt.show()
+        if show_fl:
+            plt.show()
+
+    def analyse_iv(self, show_fl=True):
+        iv_data = self.trim(trim_end=0.5)
+        fit_data = self.fit(iv_data)
+        self.plot_raw(plot_list=[c.CURRENT, c.ION_CURRENT, c.ELEC_CURRENT])
+        self.plot_iv(plot_vf=True, plot_tot=True, show_fl=True)
+        if show_fl:
+            plt.show()

@@ -65,5 +65,6 @@ CONV_DIST_FUNCTION = 'dist_function'
 
 # Standardised diagnostic names for Spice
 DIAG_PROBE_POT = 'ProbePot'
+DIAG_WALL_POT = 'WallPot'
 DIAG_DIST_FUNCTION_HIST = 'Hist'
 
