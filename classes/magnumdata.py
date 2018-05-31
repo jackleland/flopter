@@ -1,5 +1,7 @@
 import numpy as np
 import external.readfastadc as radc
+import constants as c
+
 
 class MagnumAdcConfig(object):
     def __init__(self, sample_rate, sample_time=None, num_samples=None, channels=None):
@@ -40,4 +42,7 @@ class MagnumAdcData(object):
         self.filename = file
         self.header, self.data = radc.process_adc_file(full_path, file)
         self.channels = list(self.data.keys())
+
+        # Create time array
+        self.time = np.linspace(0, (self.header[c.MAGADC_NUM] / self.header[c.MAGADC_FREQ]), self.header[c.MAGADC_NUM])
 

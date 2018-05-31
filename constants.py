@@ -17,8 +17,18 @@ ION_MASS = 'm_i'        # Ion mass label
 FLOW_VEL = 'v_0'        # Flow velocity label
 THERM_VEL = 'v_th'      # Thermal velocity label
 DIST_SCALER = 'A'       # Distribution function scaler
+AMPLITUDE = 'A'         # Periodic function amplitude
+PERIOD = 'P'            # Periodic function period
+OFFSET_Y = 'y_0'        # Periodic function y-offset
+OFFSET_X = 'x_0'        # Periodic function x-offset
 
-# Homogenisation constants
+# FitData Dictionary Labels
+RAW_X = 'raw_x'
+RAW_Y = 'raw_y'
+FIT_Y = 'fit_y'
+ERROR_STRING = 'd_{}'
+
+# SPICE Homogenisation constants
 SWEEP_LOWER = -9.95
 SWEEP_UPPER = 10.05
 PROBE_PARAMETER = 3
@@ -68,3 +78,14 @@ DIAG_PROBE_POT = 'ProbePot'
 DIAG_WALL_POT = 'WallPot'
 DIAG_DIST_FUNCTION_HIST = 'Hist'
 
+
+# Labels for magnum fast adc reader's header
+MAGADC_FREQ = 'freq'
+MAGADC_NUM = 'number'
+MAGADC_ACTIVE = 'active'
+MAGADC_DSIZE = 'dsize'
+MAGADC_TSIZE = 'tsize'
+MAGADC_HSIZE = 'hsize'
+MAGADC_CH_OFFSET = 'offset'
+MAGADC_CH_SENS = 'sensitivity'
+MAGADC_CH_NAME = 'name'

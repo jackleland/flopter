@@ -2,7 +2,9 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 from scipy.optimize import curve_fit
-from scipy.signal import savgol_filter
+import scipy.signal as sig
+from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
 
 from classes.ivdata import IVData
 from classes.fitdata import FitData2, IVFitData
@@ -78,7 +80,7 @@ class GenericFitter(ABC):
 # --- IV Fitters --- #
 
 class IVFitter(GenericFitter, ABC):
-    _DEFAULT_V_F = -1
+    _DEFAULT_V_F = -1.0
 
     def __init__(self, floating_potential=None):
         super().__init__()
@@ -91,14 +93,29 @@ class IVFitter(GenericFitter, ABC):
         fit_data = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds)
         return IVFitData.from_fit_data(fit_data)
 
-    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None):
+    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None, trim_fl=False):
         assert isinstance(iv_data, IVData)
+        if trim_fl:
+            iv_data.trim()
         potential = iv_data[c.POTENTIAL]
         current = iv_data[c.CURRENT]
         return self.fit(potential, current, initial_vals, bounds)
 
     def set_floating_pot(self, floating_pot):
         self.v_f = floating_pot
+
+    def autoset_floating_pot(self, iv_data):
+        self.v_f = self.find_floating_pot(iv_data)
+
+    @classmethod
+    def find_floating_pot(cls, iv_data):
+        try:
+            iv_interp = interp1d(iv_data[c.CURRENT], iv_data[c.POTENTIAL])
+            v_f = iv_interp([0.0])
+        except ValueError:
+            print('V_f could not be found effectively, returning default value')
+            v_f = [cls._DEFAULT_V_F]
+        return v_f
 
 
 class FullIVFitter(IVFitter):
@@ -259,7 +276,7 @@ class GaussianFitter(GenericFitter):
         # estimate values for the initial guess based on the mid point between the points of greatest +ve and -ve
         # curvature
         grad_fv = np.gradient(hist)
-        sm_grad_fv = savgol_filter(grad_fv, 21, 2)
+        sm_grad_fv = sig.savgol_filter(grad_fv, 21, 2)
         min = np.argmin(sm_grad_fv)
         max = np.argmax(sm_grad_fv)
 
@@ -397,3 +414,107 @@ class ScalableGaussianFitter(GaussianFitter):
 
     def get_scaler_index(self):
         return self._param_labels[c.DIST_SCALER]
+
+
+class TriangleWaveFitter(GenericFitter):
+    def __init__(self, frequency=None):
+        super().__init__()
+        self._param_labels = {
+            c.PERIOD: 0,
+            c.AMPLITUDE: 1,
+            c.OFFSET_Y: 2,
+            c.OFFSET_X: 3
+        }
+        self.freq = frequency
+        # These values taken from values used for majority of magnum experimental run
+        self.default_values = [0.025, 53.1, 4.34, 0.0]
+        self.default_bounds = [
+            [     0,    0, -np.inf,      0],
+            [np.inf, 1000,  np.inf, np.inf]
+        ]
+        self.name = 'Triangle Wave'
+
+    def fit(self, x_data, y_data, freq=None, initial_vals=None, bounds=None):
+        """
+            Override of the fit method with included provision for automatic finding of the amplitude and period of the
+            triangular wave if one is not specified.
+            :param x_data:          x-data for fit
+            :param y_data:          y-data for fit
+            :param freq:            specify a known frequency of the wave, will be automatically found if not
+            :param initial_vals:    [optional] initial values to be fed to the fitting algorithm. If left None,
+                                    amplitude and period will be populated automatically using get_initial_guess().
+            :param bounds:          [optional] The bounds for the fitting algorithm. If none are specified then the
+                                    default parameters are used.
+            :return fitdata:        fitdata from fit.
+        """
+
+        if not self.freq:
+            self.freq = self.get_frequency(x_data, y_data)
+
+        period = 1/(2*self.freq)
+        if not initial_vals:
+            initial_vals = [period, *self.get_initial_guess(y_data, x_data)]
+
+        if not bounds:
+            bounds = self.default_bounds
+            bounds[0][0] = period * 0.9
+            bounds[1][0] = period * 1.1
+
+        # length = len(x_data)
+        # first_fit = super().fit(x_data[:int(0.01*length)], y_data[:int(0.01*length)],
+        #                         initial_vals=initial_vals, bounds=bounds)
+        # first_fit.print_fit_params()
+        # second_fit = super().fit(x_data[:int(0.05*length)], y_data[:int(0.05*length)],
+        #                          initial_vals=first_fit.fit_params.get_values(), bounds=bounds)
+        # second_fit.print_fit_params()
+        # third_fit = super().fit(x_data[:int(0.2 * length)], y_data[:int(0.2 * length)],
+        #                         initial_vals=first_fit.fit_params.get_values(), bounds=bounds)
+        # third_fit.print_fit_params()
+        # fit_y_data = self.fit_function(x_data, *third_fit.fit_params.get_values())
+        # return FitData2(x_data, y_data, fit_y_data, third_fit.fit_params.get_values(), third_fit.fit_params.get_errors(),
+        #                 self)
+        return super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds)
+
+    @staticmethod
+    def get_initial_guess(voltage, time):
+        # Get a guess for the period and amplitude by smoothing and getting the locations of peaks and troughs with
+        # argrelmax/min. Doesn't need to be exact as it's only a starting point for the fitting function.
+        smoothed_voltage = sig.savgol_filter(voltage, 21, 2)
+        top = sig.argrelmax(smoothed_voltage, order=20)
+        bottom = sig.argrelmin(smoothed_voltage, order=20)
+        peaks = time[np.sort(np.concatenate([top, bottom], 1))[0]]
+
+        ampl_guess = (np.mean(voltage[top]) - np.mean(voltage[bottom])) / 2
+        period_guess = 2 * np.mean([peaks[i + 1] - peaks[i] for i in range(len(peaks) - 1)])
+        y_off_guess = ampl_guess + np.mean(voltage[bottom])
+        x_off_guess = np.remainder(peaks[0] - time[0], period_guess / 4)
+        print(ampl_guess, period_guess, y_off_guess, x_off_guess)
+        return ampl_guess, y_off_guess, x_off_guess
+
+    @staticmethod
+    def get_frequency(time, voltage, accepted_freqs=None):
+        # Take FFT to find frequency of triangle wave
+        sp = np.fft.fft(voltage)
+        freq = np.fft.fftfreq(len(voltage), time[1] - time[0])
+
+        f = np.abs(freq[np.argmax(np.abs(sp)[1:])])
+        if accepted_freqs is not None and isinstance(accepted_freqs, np.ndarray):
+            return accepted_freqs[np.abs(accepted_freqs - f).argmin()]
+        else:
+            return f
+
+    def fit_function(self, v, *parameters):
+        a = parameters[self._param_labels[c.AMPLITUDE]]
+        p = 1 / self.freq
+        y_0 = parameters[self._param_labels[c.OFFSET_Y]]
+        x_0 = parameters[self._param_labels[c.OFFSET_X]]
+        return (((4 * a) / p) * (np.abs(np.mod(v + (x_0 * p), p) - (p / 2)) - (p / 4))) + y_0
+
+    def get_amplitude_index(self):
+        return self._param_labels[c.AMPLITUDE]
+
+    def get_y_offset_index(self):
+        return self._param_labels[c.OFFSET_Y]
+
+    def get_x_offset_index(self):
+        return self._param_labels[c.OFFSET_X]

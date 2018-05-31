@@ -83,6 +83,20 @@ class FitData2(object):
     def get_residual(self):
         return self.fit_y - self.raw_y
 
+    def to_dict(self):
+        dictionary = {
+            'raw_x': self.raw_x,
+            'raw_y': self.raw_y,
+            'fit_y': self.fit_y
+        }
+        param_labels = self.fitter.get_param_labels()
+        param_values = self.fit_params.get_values()
+        param_errors = self.fit_params.get_errors()
+        for i in range(len(param_values)):
+            dictionary[param_labels[i]] = param_values[i]
+            dictionary['d_{}'.format(param_labels[i])] = param_errors[i]
+        return dictionary
+
 
 class IVFitData(FitData2):
     def __init__(self, raw_voltage, raw_current, fit_current, fit_params, fit_stdevs, fitter):
@@ -97,8 +111,8 @@ class IVFitData(FitData2):
     def get_sheath_exp(self, errors_fl=True):
         return self.get_param(SHEATH_EXP, errors_fl)
 
-    def get_floating_pot(self, errors_fl=True):
-        return self.get_param(FLOAT_POT, errors_fl)
+    def get_floating_pot(self):
+        return self.fitter.v_f
 
     @classmethod
     def from_fit_data(cls, fit_data_instance):
