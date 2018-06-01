@@ -11,6 +11,7 @@ import pandas as pd
 import scipy.signal as sig
 import constants as c
 import normalisation as nrm
+import lputils as lp
 
 
 class Magopter(fl.IVAnalyser):
@@ -189,16 +190,7 @@ class Magopter(fl.IVAnalyser):
         super().create_from_file(filename)
 
 
-def calc_probe_collection_A(a, b, L, g, d_perp, theta_perp, theta_p, theta_f):
-    d = ((d_perp - (g * np.tan(theta_perp)))
-         / (np.sin(theta_p) + (np.tan(theta_perp) * np.cos(theta_p))))
-    print("d = {}".format(d))
-    L_exp = (L / np.cos(theta_p)) - d
-    return 0.5 * (a + b - (d / np.tan(theta_f))) * L_exp * np.sin(theta_perp + theta_p)
 
-
-def calc_probe_collection_A_alt(a, b, L, theta_perp, theta_p):
-    return (L / np.cos(theta_p)) * (a + b) * 0.5 * np.sin(theta_p + theta_perp)
 
 
 if __name__ == '__main__':
@@ -296,10 +288,6 @@ if __name__ == '__main__':
     plt.axhline(y=T_e, linestyle='dashed', linewidth=1, color='r', label='TS')
     plt.legend()
 
-    A_coll_s = calc_probe_collection_A(a_small, b_small, L_small, g_small, d_perp, theta_perp, theta_p, theta_f_small)
-    A_coll_l = calc_probe_collection_A(a_large, b_large, L_large, g_large, d_perp, theta_perp, theta_p, theta_f_large)
-    A_coll_r = calc_probe_collection_A(a_reg, b_reg, L_reg, g_reg, d_perp, theta_perp, theta_p, theta_f_reg)
-
     print('Small area: {}, Large area: {}, Regular area: {}'.format(A_coll_s, A_coll_l, A_coll_r))
 
     # A_coll_s = calc_probe_collection_A_alt(a_small, b_small, L_small, theta_perp, theta_p)
@@ -307,9 +295,9 @@ if __name__ == '__main__':
     # A_coll_l = (26.25 * 1e-6) * np.sin(theta_perp + theta_p)
     # print('Small area: {}, Large area: {}'.format(A_coll_s, A_coll_l))
 
-    c_s = np.sqrt((nrm._ELEM_CHARGE * (T_e + gamma_i * T_e)) / nrm._PROTON_MASS)
-    n_e_0 = fit_df_0[c.ION_SAT] / (nrm._ELEM_CHARGE * c_s * A_coll_s)
-    n_e_1 = fit_df_1[c.ION_SAT] / (nrm._ELEM_CHARGE * c_s * A_coll_l)
+    c_s = np.sqrt((nrm.ELEM_CHARGE * (T_e + gamma_i * T_e)) / nrm.PROTON_MASS)
+    n_e_0 = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_s)
+    n_e_1 = fit_df_1[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_l)
 
     J_sat_0 = fit_df_0[c.ION_SAT] / A_coll_s
     J_sat_1 = fit_df_1[c.ION_SAT] / A_coll_l

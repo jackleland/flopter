@@ -6,14 +6,14 @@ import constants as c
 from classes.ivdata import IVData
 
 # Physical constants
-_BOLTZMANN = 1.38064852e-23  # m^2 kg s^-2 K^-1
-_EPSILON_0 = 8.85418782e-12  # m^-3 kg^-1 s^4 A^2
-_ELEM_CHARGE = 1.60217662e-19 # C
-_PROTON_MASS = 1.6726219e-27 # kg
-_ION_MASS = 2.01410178 * _PROTON_MASS # kg
-_ELECTRON_MASS = 9.10938356e-31 # kg
-_P_E_MASS_RATIO = _PROTON_MASS / _ELECTRON_MASS
-_I_E_MASS_RATIO = _ION_MASS / _ELECTRON_MASS
+BOLTZMANN = 1.38064852e-23  # m^2 kg s^-2 K^-1
+EPSILON_0 = 8.85418782e-12  # m^-3 kg^-1 s^4 A^2
+ELEM_CHARGE = 1.60217662e-19 # C
+PROTON_MASS = 1.6726219e-27 # kg
+ION_MASS = 2.01410178 * PROTON_MASS # kg
+ELECTRON_MASS = 9.10938356e-31 # kg
+P_E_MASS_RATIO = PROTON_MASS / ELECTRON_MASS
+I_E_MASS_RATIO = ION_MASS / ELECTRON_MASS
 
 
 class Converter(ABC):
@@ -163,10 +163,10 @@ class Denormaliser(Converter):
         self.mu = float(parser.get(c.INF_SEC_PLASMA, c.INF_MU))
         self.tau = float(parser.get(c.INF_SEC_PLASMA, c.INF_TAU))
 
-        self.debye_length = np.sqrt((_EPSILON_0 * self.temperature)
-                                    / (_ELEM_CHARGE * self.simulation_params[c.ELEC_DENS]))
-        self.omega_i = ((_ELEM_CHARGE * self.simulation_params[c.INF_MAGNETIC_FIELD])
-                        / (self.mu * _ELECTRON_MASS))
+        self.debye_length = np.sqrt((EPSILON_0 * self.temperature)
+                                    / (ELEM_CHARGE * self.simulation_params[c.ELEC_DENS]))
+        self.omega_i = ((ELEM_CHARGE * self.simulation_params[c.INF_MAGNETIC_FIELD])
+                        / (self.mu * ELECTRON_MASS))
         self.K = ((self.simulation_params[c.ELEC_DENS] * self.debye_length**self.dimensions)
                   / float(parser.get(c.INF_SEC_GEOMETRY, c.INF_PART_PER_CELL)[:-1]))
 
@@ -187,7 +187,7 @@ class Denormaliser(Converter):
         return potential * self.temperature
 
     def _convert_current(self, current):
-        return ((_ELEM_CHARGE * self.K * self.omega_i) / self.dt) * current
+        return ((ELEM_CHARGE * self.K * self.omega_i) / self.dt) * current
 
     def _convert_length(self, length):
         return self.debye_length * length
@@ -205,7 +205,7 @@ class Denormaliser(Converter):
         return self.mu * mass
 
     def _convert_charge(self, charge):
-        return _ELEM_CHARGE * charge
+        return ELEM_CHARGE * charge
 
     def _convert_temperature(self, temperature):
         return self.temperature * temperature
@@ -223,7 +223,7 @@ class Denormaliser(Converter):
         return IVData(potential, current, time, i_current=current_i, e_current=current_e)
 
     def _convert_distribution_function(self, dist_function):
-        conversion_factor = np.sqrt(self.temperature / _ION_MASS) / self.ksi * np.sqrt(200 / self.mu)
+        conversion_factor = np.sqrt(self.temperature / ION_MASS) / self.ksi * np.sqrt(200 / self.mu)
         return conversion_factor * dist_function
 
     def get_mu(self):

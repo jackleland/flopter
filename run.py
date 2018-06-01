@@ -103,8 +103,8 @@ def run_histogram_extr(flopter=None, z_high=370.0, z_low=70.0, fig=None, show=Fa
 
     print('Finished compiling...')
     v_scale = 1000
-    mass = {1: n._ELECTRON_MASS * flopter.denormaliser.mu,
-            2: n._ELECTRON_MASS}
+    mass = {1: n.ELECTRON_MASS * flopter.denormaliser.mu,
+            2: n.ELECTRON_MASS}
     if normalise_v:
         u_par = -flopter.denormaliser(u_par, c.CONV_VELOCITY) / v_scale
 
@@ -114,8 +114,8 @@ def run_histogram_extr(flopter=None, z_high=370.0, z_low=70.0, fig=None, show=Fa
     fitdata = get_histogram_fit(flopter, hist, hist_bins, fitter=fitter, v_scale=v_scale)
 
     if t_flag:
-        T_e = (fitdata.fit_params[0].value * mass[species]) / (2 * n._ELEM_CHARGE)
-        T_e_err = (fitdata.fit_params[0].error * mass[species]) / (2 * n._ELEM_CHARGE)
+        T_e = (fitdata.fit_params[0].value * mass[species]) / (2 * n.ELEM_CHARGE)
+        T_e_err = (fitdata.fit_params[0].error * mass[species]) / (2 * n.ELEM_CHARGE)
         print('T_e = {} +/- {}'.format(T_e, T_e_err))
     else:
         fitdata.fit_params[0].value *= v_scale ** 2
@@ -159,7 +159,7 @@ def get_histogram_fit(flopter, hist, hist_bins, fitter=None, v_scale=1, plot_fl=
         plt.show()
 
     v_0_guess = hist_bins[int((max + min) / 2)]
-    # print(((hist_bins[min] - hist_bins[max]) * mass[species] * v_scale ** 2 * 0.5) / (2 * n._ELEM_CHARGE))
+    # print(((hist_bins[min] - hist_bins[max]) * mass[species] * v_scale ** 2 * 0.5) / (2 * n.ELEM_CHARGE))
     t_e_guess = flopter.denormaliser.temperature / (v_scale**2)
     guess = [t_e_guess, v_0_guess]
 

@@ -27,8 +27,8 @@ alphas = np.arange(0.5, 11, 0.5)
 plot_fl = False
 
 # Constants
-m_i = nrm._PROTON_MASS
-m_e = nrm._ELECTRON_MASS
+m_i = nrm.PROTON_MASS
+m_e = nrm.ELECTRON_MASS
 deg_freedom = 3
 gamma_i = (deg_freedom + 2) / 2
 c_1 = 0.9
@@ -58,14 +58,14 @@ for v_max in [100]:
         A_coll = (d * np.sin(np.abs(theta_perp) + np.abs(theta_p)) *
                   ((L / np.cos(theta_p)) - ((d_perp - (g * np.tan(theta_perp)))
                                             / (np.sin(theta_p) + (np.tan(theta_perp) * np.cos(theta_p))))))
-        lambda_D = np.sqrt((nrm._EPSILON_0 * T_e) / (nrm._ELEM_CHARGE * n_e))
-        c_s = np.sqrt((nrm._ELEM_CHARGE * (T_e + gamma_i * T_i)) / m_i)
+        lambda_D = np.sqrt((nrm.EPSILON_0 * T_e) / (nrm.ELEM_CHARGE * n_e))
+        c_s = np.sqrt((nrm.ELEM_CHARGE * (T_e + gamma_i * T_i)) / m_i)
         a = ((c_1 + (c_2 / np.tan(np.radians(alpha)))) / np.sqrt(np.sin(np.radians(alpha)))) * (lambda_D / (L + g))
-        I_0 = n_e * nrm._ELEM_CHARGE * c_s * A_coll
+        I_0 = n_e * nrm.ELEM_CHARGE * c_s * A_coll
         J_0 = I_0 / A_coll
         q_par = 8 * T_e * J_0
         print('Heat flux: {}'.format(q_par))
-        # I_0 = n_e * nrm._ELEM_CHARGE * c_s * np.sin(np.radians(alpha)) * A_probe
+        # I_0 = n_e * nrm.ELEM_CHARGE * c_s * np.sin(np.radians(alpha)) * A_probe
         isats_def.append(I_0)
 
         I = I_0 * (1 + (a * np.float_power(np.abs(V), .75)) - np.exp(-V))

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from classes.ivdata import IVData
 from classes.fitdata import FitData2, IVFitData
 import constants as c
-from normalisation import _BOLTZMANN, _ELECTRON_MASS, _ELEM_CHARGE, _PROTON_MASS, _P_E_MASS_RATIO
+from normalisation import BOLTZMANN, ELECTRON_MASS, ELEM_CHARGE, PROTON_MASS, P_E_MASS_RATIO
 from warnings import warn
 
 # Curve-fit default values and bounds
@@ -218,7 +218,7 @@ class IonCurrentSEFitter(IVFitter):
 # --- Maxwellian Fitters --- #
 
 class MaxwellianVelFitter(GenericFitter):
-    def __init__(self, si_units=False, mu=_P_E_MASS_RATIO):
+    def __init__(self, si_units=False, mu=P_E_MASS_RATIO):
         super().__init__()
         self._param_labels = {
             c.ELEC_TEMP: 0,
@@ -230,11 +230,11 @@ class MaxwellianVelFitter(GenericFitter):
             (np.inf, np.inf)
         )
         if si_units:
-            self.temp_conversion = _BOLTZMANN
+            self.temp_conversion = BOLTZMANN
         else:
-            self.temp_conversion = _ELEM_CHARGE
+            self.temp_conversion = ELEM_CHARGE
 
-        self.mass = mu * _ELECTRON_MASS
+        self.mass = mu * ELECTRON_MASS
         self.name = '3D Maxwellian Distribution Fit'
 
     def fit_function(self, v, *parameters):
@@ -250,7 +250,7 @@ class MaxwellianVelFitter(GenericFitter):
 
 
 class GaussianFitter(GenericFitter):
-    def __init__(self, si_units=False, mu=_P_E_MASS_RATIO, v_scale=1):
+    def __init__(self, si_units=False, mu=P_E_MASS_RATIO, v_scale=1):
         super().__init__()
         self._param_labels = {
             c.ELEC_TEMP: 0,
@@ -263,12 +263,12 @@ class GaussianFitter(GenericFitter):
         )
         self.si_units = si_units
         if si_units:
-            self.temp_conversion = _BOLTZMANN
+            self.temp_conversion = BOLTZMANN
         else:
-            self.temp_conversion = _ELEM_CHARGE
+            self.temp_conversion = ELEM_CHARGE
 
         self.v_scale = v_scale
-        self.mass = mu * _ELECTRON_MASS
+        self.mass = mu * ELECTRON_MASS
         self.name = 'Gaussian Dist Fit'
 
     @staticmethod
@@ -323,7 +323,7 @@ class GaussianFitter(GenericFitter):
         return np.squeeze(np.sqrt(a / np.pi) * np.exp(-a * np.power(v - v_0, 2)))
 
     def set_mass_scaler(self, scaling_val):
-        self.mass = _ELECTRON_MASS * scaling_val
+        self.mass = ELECTRON_MASS * scaling_val
 
     def get_temp_index(self):
         return self._param_labels[c.ELEC_TEMP]
@@ -367,14 +367,14 @@ class GaussianVelIonEvFitter(GaussianFitter):
          - V_0 in m/s
          - Ion mass used
     """
-    def __init__(self, mu=_P_E_MASS_RATIO, v_scale=1):
+    def __init__(self, mu=P_E_MASS_RATIO, v_scale=1):
         super().__init__(mu=mu, v_scale=v_scale, si_units=False)
         self.name = 'Gauss. Ion V-Dist (eV)'
 
     def fit_function(self, v, *parameters):
         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
         v_0 = parameters[self._param_labels[c.FLOW_VEL]]
-        a = self.mass / (2 * _ELEM_CHARGE * T_e)
+        a = self.mass / (2 * ELEM_CHARGE * T_e)
         return np.sqrt(a / np.pi) * np.exp(-(a) * np.power(v - v_0, 2))
 
 
@@ -391,7 +391,7 @@ class GaussianVelElecEvFitter(GaussianFitter):
 
 
 class ScalableGaussianFitter(GaussianFitter):
-    def __init__(self, mu=_P_E_MASS_RATIO, si_units=False, v_scale=1):
+    def __init__(self, mu=P_E_MASS_RATIO, si_units=False, v_scale=1):
         super().__init__(mu=mu, v_scale=v_scale, si_units=si_units)
         self._param_labels = {
             c.ELEC_TEMP: 0,
