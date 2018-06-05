@@ -21,6 +21,7 @@ AMPLITUDE = 'A'         # Periodic function amplitude
 PERIOD = 'P'            # Periodic function period
 OFFSET_Y = 'y_0'        # Periodic function y-offset
 OFFSET_X = 'x_0'        # Periodic function x-offset
+ST_DEV = 'sigma'
 
 # FitData Dictionary Labels
 RAW_X = 'raw_x'

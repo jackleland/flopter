@@ -249,6 +249,56 @@ class MaxwellianVelFitter(GenericFitter):
         return self._param_labels[c.FLOW_VEL]
 
 
+class GenericGaussianFitter(GenericFitter):
+    def __init__(self, fwhm_fl=False):
+        super().__init__()
+        self._param_labels = {
+            c.AMPLITUDE: 0,
+            c.ST_DEV: 1,
+            c.OFFSET_X: 2
+        }
+        self.default_values = (1.0, 1.0, 0.0)
+        self.default_bounds = (
+            (0.0, -np.inf, -np.inf),
+            (np.inf, np.inf, np.inf)
+        )
+        self.fwhm_fl = fwhm_fl
+        self.name = 'Gaussian Function Fit'
+
+    def fit_function(self, v, parameters):
+        amplitude = parameters[self._param_labels[c.AMPLITUDE]]
+        if self.fwhm_fl:
+            sigma = parameters[self._param_labels[c.ST_DEV]] / 2.35482
+        else:
+            sigma = parameters[self._param_labels[c.ST_DEV]]
+        mu = parameters[self._param_labels[c.OFFSET_X]]
+        return amplitude * np.exp(-0.5 * np.power((v - mu) / sigma, 2))
+
+
+class NormalisedGaussianFitter(GenericFitter):
+    def __init__(self, fwhm_fl=False):
+        super().__init__()
+        self._param_labels = {
+            c.ST_DEV: 0,
+            c.OFFSET_X: 1
+        }
+        self.default_values = (1.0, 0.0)
+        self.default_bounds = (
+            (0, -np.inf),
+            (np.inf, np.inf)
+        )
+        self.fwhm_fl = fwhm_fl
+        self.name = 'Gaussian Function Fit'
+
+    def fit_function(self, v, parameters):
+        sigma = parameters[self._param_labels[c.ST_DEV]]
+        if self.fwhm_fl:
+            sigma = sigma / 2.35482
+        amplitude = 1 / (np.sqrt(2 * np.pi) * sigma)
+        mu = parameters[self._param_labels[c.OFFSET_X]]
+        return amplitude * np.exp(-0.5 * np.power((v - mu) / sigma, 2))
+
+
 class GaussianFitter(GenericFitter):
     def __init__(self, si_units=False, mu=P_E_MASS_RATIO, v_scale=1):
         super().__init__()
