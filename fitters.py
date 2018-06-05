@@ -4,7 +4,6 @@ import numpy as np
 from scipy.optimize import curve_fit
 import scipy.signal as sig
 from scipy.interpolate import interp1d
-import matplotlib.pyplot as plt
 
 from classes.ivdata import IVData
 from classes.fitdata import FitData2, IVFitData
@@ -250,6 +249,14 @@ class MaxwellianVelFitter(GenericFitter):
 
 
 class GenericGaussianFitter(GenericFitter):
+    """
+    More generic gaussian function fitter. Variables are the amplitude (A), width (s - optionally able to be defined as
+    the fwhm) and mean (x_0). Function is of the form:
+
+                  ( 1 ( x - x_0 )^2 )
+    f(x) = A * exp( - (---------)   )
+                  ( 2 (    s    )   )
+    """
     def __init__(self, fwhm_fl=False):
         super().__init__()
         self._param_labels = {
@@ -276,6 +283,10 @@ class GenericGaussianFitter(GenericFitter):
 
 
 class NormalisedGaussianFitter(GenericFitter):
+    """
+    Normalised gaussian function fitter class. Implements a generic gaussian function with normalised area, i.e. the
+    amplitude is controlled solely by the standard deviation.
+    """
     def __init__(self, fwhm_fl=False):
         super().__init__()
         self._param_labels = {
