@@ -41,13 +41,16 @@ def calc_probe_collection_A_alt(a, b, L, theta_perp, theta_p):
     return (L / np.cos(theta_p)) * (a + b) * 0.5 * np.sin(theta_p + theta_perp)
 
 
-def analytical_iv_curve(voltage, v_f, temp, dens, alpha, A_coll, c_1=0.9, c_2=0.6, gamma_i=2.5, mass=1, L=1, g=0.5):
+def analytical_iv_curve(voltage, v_f, temp, dens, alpha, A_coll, c_1=0.9, c_2=0.6, gamma_i=2.5, mass=1, L=1, g=0.5,
+                        print_fl=False):
     T_i = temp
     T_e = temp
     lambda_D = np.sqrt((nrm.EPSILON_0 * T_e) / (nrm.ELEM_CHARGE * dens))
     c_s = np.sqrt((nrm.ELEM_CHARGE * (T_e + gamma_i * T_i)) / (nrm.PROTON_MASS * mass))
     I_0 = dens * nrm.ELEM_CHARGE * c_s * A_coll
-    a = ((c_1 + (c_2 / np.tan(np.radians(alpha)))) / np.sqrt(np.sin(np.radians(alpha)))) * (lambda_D / (L + g))
+    a = ((c_1 + (c_2 / np.tan(alpha))) / np.sqrt(np.sin(alpha))) * (lambda_D / (L + g))
+    if print_fl:
+        print("a = {}, c_s = {}, lambda_d = {}, I_0 = {}".format(a, c_s, lambda_D, I_0))
     V = (v_f - voltage) / T_e
     I = I_0 * (1 + (a * np.float_power(np.abs(V), .75)) - np.exp(-V))
-    return voltage, I
+    return I
