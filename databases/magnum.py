@@ -39,6 +39,14 @@ DEFAULT_VARS = [
     BEAM_DUMP_DOWN,
     BEAM_DUMP_UP
 ]
+TS_VARS = [
+    TS_DENS_PROF,
+    TS_DENS_PROF_D,
+    TS_TEMP_PROF,
+    TS_TEMP_PROF_D,
+    TS_RAD_COORDS
+]
+
 SLC_STATES = {
     4: 'At Standby',
     5: 'Ramp to Pulse A',
@@ -122,6 +130,8 @@ class MagnumDB(object):
         variable_vals = {}
         for var in variables:
             data = self.get_data(var, time_range, numpify_fl=numpify_fl, ref_time=ref_time)
+            if len(data[0]) == 0:
+                continue
             variable_vals[var] = data
 
     def get_ts_data(self, time_range=None, numpify_fl=True, ref_time=None):

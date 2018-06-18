@@ -16,7 +16,7 @@ import lputils as lp
 import databases.magnum as mag
 import external.readfastadc as adc
 import external.magnumdbutils as ut
-
+import Ice
 
 class Magopter(fl.IVAnalyser):
     # Default values
@@ -39,7 +39,7 @@ class Magopter(fl.IVAnalyser):
         self.directory = directory
         self.file = filename
         self.ts_file = ts_filename
-        self.full_path = '{}{}{}{}'.format(pth.Path.home(), self._FOLDER_STRUCTURE, directory, filename)
+        self.full_path = ''.join([pth.Path.home(), self._FOLDER_STRUCTURE, directory, filename])
 
         self.m_data = md.MagnumAdcData(self.full_path, filename)
 
@@ -66,7 +66,6 @@ class Magopter(fl.IVAnalyser):
             self.offline = False
             self.magnum_db = mag.MagnumDB(time_stamp=self.timestamp)
             self.magnum_data = self.magnum_db.get_data_dict(ref_time=self.timestamp)
-
             if ts_filename:
                 ts_time_range = self.magnum_db.get_approx_time_range(filename=self.ts_file)
                 ts_data = self.magnum_db.get_ts_data(time_range=ts_time_range)
@@ -75,8 +74,14 @@ class Magopter(fl.IVAnalyser):
                 self.ts_dens = ts_data[mag.TS_DENS_PROF]
                 self.ts_dens_d = ts_data[mag.TS_DENS_PROF_D]
                 self.ts_coords = ts_data[mag.TS_RAD_COORDS]
+            elif set(mag.TS_VARS).issubset(self.magnum_data):
+                self.ts_temp = self.magnum_data[mag.TS_TEMP_PROF]
+                self.ts_temp_d = self.magnum_data[mag.TS_TEMP_PROF_D]
+                self.ts_dens = self.magnum_data[mag.TS_DENS_PROF]
+                self.ts_dens_d = self.magnum_data[mag.TS_DENS_PROF_D]
+                self.ts_coords = self.magnum_data[mag.TS_RAD_COORDS]
 
-        except ConnectionError:
+        except Ice.ConnectionRefusedException__str__:
             print('Database could not be connected to, operating in offline mode.')
             self.offline = True
             self.magnum_db = None
