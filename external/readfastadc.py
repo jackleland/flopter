@@ -2,11 +2,18 @@
 import traceback
 import os, struct
 import numpy as np
+import re
 
 """
     File provided by Alex Poelman for the reading of binary data output from the Magnum fast ADC. Minor alterations 
     made by Jack Leland 07/05/18
 """
+FILE_TIMESTAMP_REGEX = 'TT_0(.*).adc'
+
+
+def get_magnumdb_timestamp(filename):
+    return int(re.search(FILE_TIMESTAMP_REGEX, filename).group(1))
+
 
 def read_header(f, print_fl=False):
     header = dict(zip(['freq', 'number', 'version', 'active'], 
