@@ -85,20 +85,21 @@ class IVFitter(GenericFitter, ABC):
         super().__init__()
         self.v_f = floating_potential
 
-    def fit(self, x_data, y_data, initial_vals=None, bounds=None):
+    def fit(self, x_data, y_data, initial_vals=None, bounds=None, print_fl=False):
         if not self.v_f:
-            print('No floating potential specified, using default value ({}).'.format(self._DEFAULT_V_F))
+            if print_fl:
+                print('No floating potential specified, using default value ({}).'.format(self._DEFAULT_V_F))
             self.v_f = self._DEFAULT_V_F
         fit_data = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds)
         return IVFitData.from_fit_data(fit_data)
 
-    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None, trim_fl=False):
+    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None, trim_fl=False, print_fl=False):
         assert isinstance(iv_data, IVData)
         if trim_fl:
             iv_data.trim()
         potential = iv_data[c.POTENTIAL]
         current = iv_data[c.CURRENT]
-        return self.fit(potential, current, initial_vals, bounds)
+        return self.fit(potential, current, initial_vals, bounds, print_fl=print_fl)
 
     def set_floating_pot(self, floating_pot):
         self.v_f = floating_pot
