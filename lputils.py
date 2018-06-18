@@ -1,8 +1,19 @@
 import numpy as np
 import normalisation as nrm
+from abc import ABC, abstractmethod
 
 
-class FlushMountedProbe(object):
+class LangmuirProbe(ABC):
+    @abstractmethod
+    def get_collection_area(self, alpha):
+        pass
+
+    @abstractmethod
+    def get_analytical_iv(self, voltage, v_f, alpha, temp, dens):
+        pass
+
+
+class AngledTipProbe(LangmuirProbe):
     def __init__(self, a, b, L, g, d_perp, theta_f, theta_p):
         self.a = a
         self.b = b
@@ -18,6 +29,23 @@ class FlushMountedProbe(object):
     def get_analytical_iv(self, voltage, v_f, alpha, temp, dens, mass=1, gamma_i=2.5, c_1=0.9, c_2=0.6):
         return analytical_iv_curve(voltage, v_f, temp, dens, alpha, self.get_collection_area(alpha), c_1=c_1, c_2=c_2,
                                    gamma_i=gamma_i, mass=mass, L=self.L, g=self.g)
+
+
+class FlushCylindricalProbe(LangmuirProbe):
+    def __init__(self, radius, g, d_perp):
+        self.radius = radius
+        self.d_perp = d_perp
+        self.g = g
+
+    def get_collection_area(self, alpha):
+        d = (self.d_perp / np.sin(alpha)) - self.g
+        theta_c = 2 * np.arccos((self.radius - d) / self.radius)
+        A_coll = np.sin(alpha) * ((np.pi * self.radius**2) - (self.radius**2 / 2)) * (theta_c - 2 * np.sin(theta_c))
+        return A_coll
+
+    def get_analytical_iv(self, voltage, v_f, alpha, temp, dens, mass=1, gamma_i=2.5, c_1=0.9, c_2=0.6):
+        analytical_iv_curve(voltage, v_f, temp, dens, alpha, self.get_collection_area(alpha), c_1=c_1, c_2=c_2,
+                            gamma_i=gamma_i, mass=mass, L=(2 * self.radius), g=self.g)
 
 
 def calc_probe_collection_area(a, b, L, g, d_perp, theta_perp, theta_p, theta_f, print_fl=True):
@@ -54,3 +82,10 @@ def analytical_iv_curve(voltage, v_f, temp, dens, alpha, A_coll, c_1=0.9, c_2=0.
     V = (v_f - voltage) / T_e
     I = I_0 * (1 + (a * np.float_power(np.abs(V), .75)) - np.exp(-V))
     return I
+
+
+def calc_sheath_expansion_coeff(temp, density, L, g, alpha, c_1=0.9, c_2=0.6):
+    lambda_D = np.sqrt((nrm.EPSILON_0 * temp) / (nrm.ELEM_CHARGE * density))
+    a = ((c_1 + (c_2 / np.tan(alpha))) / np.sqrt(np.sin(alpha))) * (lambda_D / (L + g))
+    return a
+
