@@ -3,15 +3,19 @@ import fitters as f
 import numpy as np
 import pathlib as pth
 import matplotlib.pyplot as plt
-import classes.magnumdata as md
+import classes.magnumadcdata as md
 import classes.ivdata as iv
 import glob
 import os
 import pandas as pd
 import scipy.signal as sig
+import scipy.interpolate as itp
 import constants as c
 import normalisation as nrm
 import lputils as lp
+import databases.magnum as mag
+import external.readfastadc as adc
+import external.magnumdbutils as ut
 
 
 class Magopter(fl.IVAnalyser):
@@ -29,14 +33,19 @@ class Magopter(fl.IVAnalyser):
     _ARCING_THRESHOLD = 15
     _ACCEPTED_FREQS = np.array([10.0, 20.0, 100.0, 1000.0])
 
-    def __init__(self, directory, filename):
+    def __init__(self, directory, filename, ts_filename=None):
         super().__init__()
         # Check for leading/trailing forward slashes?
         self.directory = directory
         self.file = filename
+        self.ts_file = ts_filename
         self.full_path = '{}{}{}{}'.format(pth.Path.home(), self._FOLDER_STRUCTURE, directory, filename)
 
         self.m_data = md.MagnumAdcData(self.full_path, filename)
+
+        self.adc_duration = max(self.m_data.time)
+        print(self.adc_duration)
+
         self.peaks = None
         self.iv_arr_coax_0 = None
         self.iv_arr_coax_1 = None
@@ -46,6 +55,32 @@ class Magopter(fl.IVAnalyser):
         self.fit_arrs = None
         self.trim_beg = 0.0
         self.trim_end = 1.0
+
+        self.timestamp = int(adc.get_magnumdb_timestamp(filename))
+        self.ts_temp = None
+        self.ts_temp_d = None
+        self.ts_dens = None
+        self.ts_dens_d = None
+        self.ts_coords = None
+        try:
+            self.offline = False
+            self.magnum_db = mag.MagnumDB(time_stamp=self.timestamp)
+            self.magnum_data = self.magnum_db.get_data_dict(ref_time=self.timestamp)
+
+            if ts_filename:
+                ts_time_range = self.magnum_db.get_approx_time_range(filename=self.ts_file)
+                ts_data = self.magnum_db.get_ts_data(time_range=ts_time_range)
+                self.ts_temp = ts_data[mag.TS_TEMP_PROF]
+                self.ts_temp_d = ts_data[mag.TS_TEMP_PROF_D]
+                self.ts_dens = ts_data[mag.TS_DENS_PROF]
+                self.ts_dens_d = ts_data[mag.TS_DENS_PROF_D]
+                self.ts_coords = ts_data[mag.TS_RAD_COORDS]
+
+        except ConnectionError:
+            print('Database could not be connected to, operating in offline mode.')
+            self.offline = True
+            self.magnum_db = None
+            self.magnum_data = None
 
     def prepare(self, down_sampling_rate=5):
         """
@@ -77,6 +112,7 @@ class Magopter(fl.IVAnalyser):
         end = 360000
 
         segmentation = np.linspace(start, end, 2, dtype=np.int64)
+        print(len(segmentation))
         self.iv_arr_coax_0 = []
         self.iv_arr_coax_1 = []
 
@@ -154,7 +190,7 @@ class Magopter(fl.IVAnalyser):
     def denormalise(self):
         pass
 
-    def fit(self, fitter=None, coaxes=(0, 1), initial_vals=None, bounds=None):
+    def fit(self, fitter=None, coaxes=(0, 1), initial_vals=None, bounds=None, print_fl=False):
         if not fitter:
             fitter = f.FullIVFitter()
         if all(iv_arr is None or len(iv_arr) == 0 for iv_arr in self.iv_arrs):
@@ -169,11 +205,13 @@ class Magopter(fl.IVAnalyser):
                 try:
                     fit_data = fitter.fit_iv_data(iv_data, initial_vals=initial_vals, bounds=bounds, trim_fl=trim_fl)
                 except RuntimeError:
-                    print('Error encountered in fit, skipping timestep {}'.format(np.mean(iv_data.time)))
+                    if print_fl:
+                        print('Error encountered in fit, skipping timestep {}'.format(np.mean(iv_data.time)))
                     continue
                 if any(param.error >= (param.value * 0.5) for param in fit_data.fit_params):
-                    print('Fit parameters exceeded good fit threshold, skipping time step {}'
-                          .format(np.mean(iv_data.time)))
+                    if print_fl:
+                        print('Fit parameters exceeded good fit threshold, skipping time step {}'
+                              .format(np.mean(iv_data.time)))
                     continue
                 fit_arrs[i].append(fit_data)
                 fit_time[i].append(np.mean(iv_data.time))
@@ -190,20 +228,19 @@ class Magopter(fl.IVAnalyser):
         super().create_from_file(filename)
 
 
-
-
-
 if __name__ == '__main__':
-    # folder = '2018-05-01_Leland/'
-    # folder = '2018-05-02_Leland/'
-    # folder = '2018-05-03_Leland/'
-    folders = ['2018-05-01_Leland/', '2018-05-02_Leland/', '2018-05-03_Leland/']
+    folders = ['2018-05-01_Leland/', '2018-05-02_Leland/', '2018-05-03_Leland/',
+               '2018-06-05_Leland/', '2018-06-06_Leland/', '2018-06-07_Leland/']
     files = []
-    for folder in folders:
-        os.chdir(Magopter.get_data_path() + folder)
+    file_folders = []
+    for folder1 in folders:
+        os.chdir(Magopter.get_data_path() + folder1)
         files.extend(glob.glob('*.adc'))
+        file_folders.extend([folder1] * len(glob.glob('*.adc')))
 
+    # files = [f.replace(' ', '_') for f in files]
     files.sort()
+
     # file = '2018-05-01_12h_55m_47s_TT_06550564404491814477.adc'  # 8
     # file = '2018-05-03_11h_31m_41s_TT_06551284859908422561.adc'  # 82
 
@@ -213,12 +250,20 @@ if __name__ == '__main__':
         97: "Angular Sweep with different probes"
     }
     file_index = 82
-    file = files[file_index]
-    print(file)
+    # file = files[file_index]
+    file = files[-2]
+    ts_file = files[-1]
+    folder = file_folders[-2]
+    print(folder, file)
+    print(ut.human_time_str(adc.get_magnumdb_timestamp(ts_file)))
+    print(ts_file)
 
     magopter = Magopter(folder, file)
+    # print(file, magopter.magnum_db.get_time_range(filename=file))
+    # plt.figure()
+    # plt.errorbar(magopter.ts_coords, magopter.ts_temp, yerr=magopter.ts_temp_d, label='Temperature')
 
-    print(magopter.m_data.channels)
+    # exit()
     # length = len(magopter.t_file)
     # for i in range(1, 20):
     #     split = int(length / i)
@@ -231,7 +276,8 @@ if __name__ == '__main__':
     # plt.show()
     dsr = 10
     magopter.prepare(down_sampling_rate=dsr)
-    magopter.trim(trim_end=0.82)
+    # magopter.trim(trim_end=0.82)
+    magopter.trim(trim_end=0.83)
     # exit()
     fit_df_0, fit_df_1 = magopter.fit()
 
@@ -242,9 +288,12 @@ if __name__ == '__main__':
     # for peak in peaks:
     #     plt.axvline(x=magopter.m_data.time[peak], linestyle='dashed', linewidth=1, color='r')
 
+    iv_data = fit_df_0.iloc[[125]]
     plt.figure()
     for iv_curve in magopter.iv_arr_coax_0:
         plt.plot(iv_curve.time, iv_curve.current)
+    plt.axvline(x=iv_data.index)
+
 
     # Flush probe measurements
     L_small = 3e-3  # m
@@ -265,31 +314,70 @@ if __name__ == '__main__':
     g_reg = 1e-3        # m
     theta_f_reg = np.radians(75)
 
-    T_e = 1.78      # eV
-    n_e = 5.1e19    # m^-3
-    fwhm = 14.3     # mm
+    L_cyl = 4e-3    # m
+    g_cyl = 5e-4    # m
+
+    # T_e = 1.78      # eV
+    # n_e = 5.1e19    # m^-3
+    # fwhm = 14.3     # mm
     # T_e = 0.67      # eV
     # n_e = 2.3e19    # m^-3
     # fwhm = 16       # mm
+    # T_e = 1.68
+    # n_e = 1.93e19
+    # fwhm = 16.8
+    # T_e = 0.75
+    # n_e = 1.3e20
+    # fwhm = 16.8
+    # T_e = 0.76
+    # n_e = 1.0e20
+    # fwhm = 16.8
+    T_e = 1.61
+    n_e = 1.41e20
+    fwhm = 12.4
     deg_freedom = 3
     gamma_i = (deg_freedom + 2) / 2
     d_perp = 3e-4  # m
     theta_p = np.radians(10)
     theta_perp = np.radians(10)
 
+    probe_s = lp.AngledTipProbe(a_small, b_small, L_small, g_small, d_perp, theta_f_small, theta_p)
+    probe_l = lp.AngledTipProbe(a_large, b_large, L_large, g_large, d_perp, theta_f_large, theta_p)
+    probe_r = lp.AngledTipProbe(a_reg, b_reg, L_reg, g_reg, d_perp, theta_f_reg, theta_p)
+    probe_c = lp.FlushCylindricalProbe(L_cyl/2, g_cyl, d_perp)
+
+    A_coll_s = lp.calc_probe_collection_area(a_small, b_small, L_small, g_small, d_perp, theta_perp, theta_p,
+                                             theta_f_small, print_fl=False)
+    A_coll_l = lp.calc_probe_collection_area(a_large, b_large, L_large, g_large, d_perp, theta_perp, theta_p,
+                                             theta_f_large, print_fl=False)
+    A_coll_r = lp.calc_probe_collection_area(a_reg, b_reg, L_reg, g_reg, d_perp, theta_perp, theta_p, theta_f_reg,
+                                             print_fl=False)
+    A_coll_c = probe_c.get_collection_area(theta_perp)
+
+    print('Small area: {}, Large area: {}, Regular area: {}, Cylindrical area: {}'.format(A_coll_s, A_coll_l, A_coll_r,
+                                                                                          A_coll_c))
+
+    # Plotting analytical IV over the top of the raw IVs
+
+    print(fit_df_0)
+
     plt.figure()
-    plt.subplot(221)
-    plt.title('Electron Temperature Measurements')
-    plt.xlabel('Time (s)')
-    plt.ylabel(r'$T_e$ (eV)')
-    plt.errorbar(fit_df_0.index, c.ELEC_TEMP, yerr=c.ERROR_STRING.format(c.ELEC_TEMP), data=fit_df_0, label='Half area')
-    plt.errorbar(fit_df_1.index, c.ELEC_TEMP, yerr=c.ERROR_STRING.format(c.ELEC_TEMP), data=fit_df_1,
-                 label='Double area')
-    plt.axhline(y=T_e, linestyle='dashed', linewidth=1, color='r', label='TS')
+    # for iv_curve in magopter.iv_arr_coax_0:
+    #     plt.plot(iv_curve.voltage, iv_curve.current)
+
+    plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0], 'x', label='Raw IV')
+    plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.FIT_Y].tolist()[0], label='Fit IV')
+    iv_interp = itp.interp1d(iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0])
+    iv_v_f = -10
+    I_s = lp.analytical_iv_curve(iv_data[c.RAW_X].tolist()[0], iv_v_f, T_e, n_e, theta_perp, A_coll_s, L=L_small, g=g_small)
+    I_c = lp.analytical_iv_curve(iv_data[c.RAW_X].tolist()[0], iv_v_f, T_e, n_e, theta_perp, A_coll_c, L=L_small, g=g_small)
+
+    plt.plot(iv_data[c.RAW_X].tolist()[0], I_s, label='Analytical', linestyle='dashed', linewidth=1, color='r')
+    # plt.plot(iv_data[c.RAW_X].tolist()[0], I_c, label='Analytical (c)', linestyle='dashed', linewidth=1, color='g')
     plt.legend()
-
-    print('Small area: {}, Large area: {}, Regular area: {}'.format(A_coll_s, A_coll_l, A_coll_r))
-
+    plt.title('Comparison of analytical to measured IV curves for the small area probe')
+    plt.xlabel('Voltage (V)')
+    plt.ylabel('Current (A)')
     # A_coll_s = calc_probe_collection_A_alt(a_small, b_small, L_small, theta_perp, theta_p)
     # A_coll_l = calc_probe_collection_A_alt(a_large, b_large, L_large, theta_perp, theta_p)
     # A_coll_l = (26.25 * 1e-6) * np.sin(theta_perp + theta_p)
@@ -297,50 +385,76 @@ if __name__ == '__main__':
 
     c_s = np.sqrt((nrm.ELEM_CHARGE * (T_e + gamma_i * T_e)) / nrm.PROTON_MASS)
     n_e_0 = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_s)
-    n_e_1 = fit_df_1[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_l)
+    n_e_1 = fit_df_1[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_c)
+    I_sat_0 = c_s * n_e * nrm.ELEM_CHARGE * A_coll_s
+    I_sat_1 = c_s * n_e * nrm.ELEM_CHARGE * A_coll_c
 
     J_sat_0 = fit_df_0[c.ION_SAT] / A_coll_s
-    J_sat_1 = fit_df_1[c.ION_SAT] / A_coll_l
+    J_sat_1 = fit_df_1[c.ION_SAT] / A_coll_c
+
+    plt.figure()
+    plt.subplot(221)
+    plt.title('Electron Temperature Measurements')
+    plt.xlabel('Time (s)')
+    plt.ylabel(r'$T_e$ (eV)')
+    plt.errorbar(fit_df_0.index, c.ELEC_TEMP, yerr=c.ERROR_STRING.format(c.ELEC_TEMP), data=fit_df_0, fmt='x',
+                 label='Half area')
+    plt.errorbar(fit_df_1.index, c.ELEC_TEMP, yerr=c.ERROR_STRING.format(c.ELEC_TEMP), data=fit_df_1, fmt='x',
+                 label='Cylinder area')
+    plt.axhline(y=T_e, linestyle='dashed', linewidth=1, color='r', label='TS')
+    plt.legend()
 
     plt.subplot(222)
     plt.title('Ion Saturation Current Measurements')
     plt.xlabel('Time (s)')
     plt.ylabel(r'$I^+_{sat}$ (eV)')
-    plt.errorbar(fit_df_0.index, c.ION_SAT, yerr=c.ERROR_STRING.format(c.ION_SAT), data=fit_df_0, label='Half area')
-    plt.errorbar(fit_df_1.index, c.ION_SAT, yerr=c.ERROR_STRING.format(c.ION_SAT), data=fit_df_1, label='Double area')
-    for arc in magopter.arcs:
-        plt.axvline(x=arc, linestyle='dashed', linewidth=1, color='r')
+    plt.errorbar(fit_df_0.index, c.ION_SAT, yerr=c.ERROR_STRING.format(c.ION_SAT), data=fit_df_0, label='Half area',
+                 fmt='x')
+    plt.errorbar(fit_df_1.index, c.ION_SAT, yerr=c.ERROR_STRING.format(c.ION_SAT), data=fit_df_1, label='Cylinder area',
+                 fmt='x')
+    # for arc in magopter.arcs:
+    #     plt.axvline(x=arc, linestyle='dashed', linewidth=1, color='r')
+    plt.axhline(y=I_sat_0, linestyle='dashed', linewidth=1, color='r', label='Expected I_sat (s)')
+
+
     plt.legend()
+
+    # plt.figure()
+    # plt.subplot(223)
+    # plt.title('Current Density Measurements')
+    # plt.xlabel('Time (s)')
+    # plt.ylabel(r'$J_{sat}$ (Am$^{-2}$)')
+    # plt.plot(fit_df_0.index, J_sat_0, label='Half area')
+    # plt.plot(fit_df_1.index, J_sat_1, label='Cylinder area')
+    # for arc in magopter.arcs:
+    #     plt.axvline(x=arc, linestyle='dashed', linewidth=1, color='r')
+    # plt.legend()
 
     # plt.figure()
     plt.subplot(223)
-    plt.title('Current Density Measurements')
-    plt.xlabel('Time (s)')
-    plt.ylabel(r'$J_{sat}$ (Am$^{-2}$)')
-    plt.plot(fit_df_0.index, J_sat_0, label='Half area')
-    plt.plot(fit_df_1.index, J_sat_1, label='Double area')
-    for arc in magopter.arcs:
-        plt.axvline(x=arc, linestyle='dashed', linewidth=1, color='r')
-    plt.legend()
-
-    # plt.figure()
-    plt.subplot(224)
     plt.title('Electron Density Measurements')
     plt.xlabel('Time (s)')
     plt.ylabel(r'$n_e$ (m$^{-3}$)')
-    plt.plot(fit_df_0.index, n_e_0, label='Half Area')
-    plt.plot(fit_df_1.index, n_e_1, label='Double Area')
+    plt.plot(fit_df_0.index, n_e_0, 'x', label='Half Area')
+    plt.plot(fit_df_1.index, n_e_1, 'x', label='Cylinder Area')
     plt.axhline(y=n_e, linestyle='dashed', linewidth=1, color='r', label='TS')
     plt.legend()
 
-    plt.figure()
+    a_s = lp.calc_sheath_expansion_coeff(T_e, n_e, L_small, g_small, theta_perp)
+    a_c = lp.calc_sheath_expansion_coeff(T_e, n_e, L_cyl, g_cyl, theta_perp)
+    print(a_s, a_c)
+
+    plt.subplot(224)
     plt.title('Sheath Expansion Coefficient Measurements')
     plt.xlabel('Time (s)')
     plt.ylabel(r'$a$')
-    plt.errorbar(fit_df_0.index, c.SHEATH_EXP, yerr=c.ERROR_STRING.format(c.SHEATH_EXP), data=fit_df_0,
+    plt.errorbar(fit_df_0.index, c.SHEATH_EXP, yerr=c.ERROR_STRING.format(c.SHEATH_EXP), data=fit_df_0, fmt='x',
                  label='Half Area')
-    plt.errorbar(fit_df_1.index, c.SHEATH_EXP, yerr=c.ERROR_STRING.format(c.SHEATH_EXP), data=fit_df_1,
-                 label='Double Area')
+    plt.errorbar(fit_df_1.index, c.SHEATH_EXP, yerr=c.ERROR_STRING.format(c.SHEATH_EXP), data=fit_df_1, fmt='x',
+                 label='Cylinder Area')
+    plt.axhline(y=a_s, linestyle='dashed', linewidth=1, color='r', label='Expected - small')
+    plt.axhline(y=a_c, linestyle='dashed', linewidth=1, color='b', label='Expected - cyl')
+
     plt.legend()
 
     # plt.figure()
