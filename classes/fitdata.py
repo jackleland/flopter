@@ -1,4 +1,5 @@
 from constants import ELEC_TEMP, ION_SAT, SHEATH_EXP, FLOAT_POT
+import matplotlib.pyplot as plt
 
 
 class FitParam(object):
@@ -47,6 +48,15 @@ class FitData2(object):
         self.fit_params = FitParamList(fit_values, fit_errors)
         self.fitter = fitter
 
+    def plot(self):
+        plt.figure()
+        plt.plot(*self.get_raw_plottables(), 'x')
+        plt.plot(*self.get_fit_plottables(), label=self.get_param_str())
+        plt.xlabel('x')
+        plt.ylabel(self.fitter.name)
+        plt.legend()
+        plt.show()
+
     def get_raw_plottables(self):
         return self.raw_x, self.raw_y
 
@@ -77,7 +87,7 @@ class FitData2(object):
         print("")
 
     def get_param_str(self):
-        return ''.join(['{}:{},'.format(label, self.fit_params.get_values()[i])
+        return ''.join(['{}:{:4f}+/-{:4f},'.format(label, self.fit_params.get_values()[i], self.fit_params.get_errors()[i])
                         for i, label in enumerate(self.fitter.get_param_labels())])
 
     def get_residual(self):
