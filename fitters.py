@@ -478,6 +478,26 @@ class ScalableGaussianFitter(GaussianFitter):
         return self._param_labels[c.DIST_SCALER]
 
 
+class StraightLineFitter(GenericFitter):
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.GRADIENT: 0,
+            c.OFFSET_Y: 1
+        }
+        self.default_values = [1.0, 0.0]
+        self.default_bounds = [
+            [-np.inf, -np.inf],
+            [ np.inf,  np.inf]
+        ]
+        self.name = 'Straight Line'
+
+    def fit_function(self, v, *parameters):
+        m = parameters[self._param_labels[c.GRADIENT]]
+        y_0 = parameters[self._param_labels[c.OFFSET_Y]]
+        return (m * v) + y_0
+
+
 class TriangleWaveFitter(GenericFitter):
     def __init__(self, frequency=None):
         super().__init__()
