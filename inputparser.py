@@ -330,6 +330,7 @@ class InputParser(ConfigParser):
     def get_probe_geometry(self):
         # TODO: (25/10/2017) Write function to retrieve probe geometry from parser. Probably requires the definition
         # TODO: of a probe-geometry class first.
+        # TODO: (22/06/2018) Definition of probe geometery completed, this can now be implemented.
         pass
 
     @staticmethod
