@@ -11,6 +11,8 @@ DATA = 1
 TARGET_POS = 'TargetLinearCurPos'
 TARGET_ROT = 'TargetRotationCurPos'
 TARGET_TILT = 'TargetTiltingCurPos'
+TARGET_VOLTAGE = 'TargetVoltage'
+TARGET_VOLTAGE_PS = 'TargetVoltagePs'
 PLASMA_STATE = 'PlasmaPlcState'
 SOURCE_PUMP_SPEED = 'Rp1SoChSpeed'
 HEATING_PUMP_SPEED = 'Rp3HeChSpeed'
@@ -22,11 +24,14 @@ TS_TEMP_PROF_D = 'TsProfTe_d'
 TS_RAD_COORDS = 'TsRadCoords'
 BEAM_DUMP_DOWN = 'BeamDumpDown'
 BEAM_DUMP_UP = 'BeamDumpUp'
+TRIGGER_START = 'MasterTrigStartFt'
 
 DEFAULT_VARS = [
     TARGET_POS,
     TARGET_ROT,
     TARGET_TILT,
+    TARGET_VOLTAGE,
+    TARGET_VOLTAGE_PS,
     PLASMA_STATE,
     TS_DENS_PROF,
     TS_DENS_PROF_D,
@@ -37,7 +42,8 @@ DEFAULT_VARS = [
     HEATING_PUMP_SPEED,
     TARGET_PUMP_SPEED,
     BEAM_DUMP_DOWN,
-    BEAM_DUMP_UP
+    BEAM_DUMP_UP,
+    TRIGGER_START
 ]
 TS_VARS = [
     TS_DENS_PROF,
@@ -133,10 +139,22 @@ class MagnumDB(object):
             if len(data[0]) == 0:
                 continue
             variable_vals[var] = data
+        return variable_vals
 
     def get_ts_data(self, time_range=None, numpify_fl=True, ref_time=None):
         return self.get_data_dict(time_range=time_range, numpify_fl=numpify_fl, ref_time=ref_time,
                                   variables=[TS_TEMP_PROF, TS_TEMP_PROF_D, TS_DENS_PROF, TS_DENS_PROF_D, TS_RAD_COORDS])
+
+    @staticmethod
+    def get_offset_times(data, offset):
+        """
+        Generate new time array for a magnum_db with a different offset, and convert into seconds.
+        :param data:    MagnumDB data from the get_data method
+        :param offset:  Offset timestamp to reposition data to. Must be a MagnumDB timestamp, i.e. a int64 value
+        :return:        Offset MagnumDB data array
+        """
+        new_times = [client.timetoposix(time - offset) for time in data[0]]
+        return [new_times, data[ut.DATA]]
 
     def get_shot_duration(self, start_time):
         # if start_time in self.all_plasma_states[TIMES]:
