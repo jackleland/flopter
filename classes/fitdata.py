@@ -87,7 +87,7 @@ class FitData2(object):
         print("")
 
     def get_param_str(self):
-        return ''.join(['{}:{:4f}+/-{:4f},'.format(label, self.fit_params.get_values()[i], self.fit_params.get_errors()[i])
+        return ''.join(['{}:{:.3f} '.format(label, self.fit_params.get_values()[i], self.fit_params.get_errors()[i])
                         for i, label in enumerate(self.fitter.get_param_labels())])
 
     def get_residual(self):
