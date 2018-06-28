@@ -145,6 +145,26 @@ class MagnumDB(object):
         return self.get_data_dict(time_range=time_range, numpify_fl=numpify_fl, ref_time=ref_time,
                                   variables=[TS_TEMP_PROF, TS_TEMP_PROF_D, TS_DENS_PROF, TS_DENS_PROF_D, TS_RAD_COORDS])
 
+    def pad_continuous_variable(self, data):
+        t, d = data
+        differ = np.diff(t)
+        interval = np.min(differ)
+        new_time = np.arange(t[0], t[-1] + interval, interval)
+        new_data = np.zeros(np.shape(new_time))
+
+        j = 0
+        for i in range(len(new_time)):
+            if self.is_roughly_equal(t[j], new_time[i]):
+                new_data[i] = d[j]
+                j += 1
+            else:
+                new_data[i] = d[j - 1]
+        return new_time, new_data
+
+    @staticmethod
+    def is_roughly_equal(a, b, tolerance=.99):
+        return (a * tolerance) <= b <= (a * (1 + (1 - tolerance)))
+
     @staticmethod
     def get_offset_times(data, offset):
         """
