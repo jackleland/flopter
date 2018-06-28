@@ -10,7 +10,8 @@ import scipy.signal as sig
 import databases.magnum as mag
 import external.readfastadc as adc
 from codac.datastore import client
-import Ice.LocalException_ice as IceEx
+import Ice
+import lputils as lp
 import normalisation as nrm
 
 
@@ -65,7 +66,6 @@ class Magopter(fl.IVAnalyser):
             beam_down = self.magnum_db.get_data(mag.BEAM_DUMP_DOWN)
             self.beam_down_timestamp = [beam_down[mag.TIMES][i] for i in range(len(beam_down[mag.TIMES]))
                                         if beam_down[mag.DATA][i]][0]
-            print(beam_down)
             print('Beam Down Timestamp: ', self.beam_down_timestamp, client.timetoposix(self.beam_down_timestamp))
             print('Regular Timestamp: ', self.timestamp, client.timetoposix(self.timestamp))
             self.magnum_data = self.magnum_db.get_data_dict(ref_time=self.timestamp)
@@ -86,7 +86,7 @@ class Magopter(fl.IVAnalyser):
                 self.ts_dens_d = self.magnum_data[mag.TS_DENS_PROF_D]
                 self.ts_coords = self.magnum_data[mag.TS_RAD_COORDS]
 
-        except IceEx.ConnectFailedException as e:
+        except Ice.LocalException as e:
             print(str(e))
             print('Database could not be connected to, operating in offline mode.')
             self.offline = True
@@ -125,72 +125,71 @@ class Magopter(fl.IVAnalyser):
         start = 0
         end = len(self.m_data.time)
 
-        segmentation = np.linspace(start, end, 2, dtype=np.int64)
-
         self.iv_arr_coax_0 = []
         self.iv_arr_coax_1 = []
 
-        for j in range(len(segmentation) - 1):
-            seg_start = segmentation[j]
-            seg_end = segmentation[j+1]
+        # Find peaks of voltage triangle wave
+        raw_time = self.m_data.time
+        raw_voltage = self.m_data.data[self._VOLTAGE_CHANNEL]
+        raw_current_0 = self.m_data.data[self._PROBE_CHANNEL_3]
+        raw_current_1 = self.m_data.data[self._PROBE_CHANNEL_4]
 
-            # Fit and find peaks of voltage triangle wave
-            raw_time = self.m_data.time[seg_start:seg_end]
-            raw_voltage = self.m_data.data[self._VOLTAGE_CHANNEL][seg_start:seg_end]
-            raw_current_0 = self.m_data.data[self._PROBE_CHANNEL_3][seg_start:seg_end]
-            raw_current_1 = self.m_data.data[self._PROBE_CHANNEL_4][seg_start:seg_end]
+        # Use fourier decomposition from get_frequency method in triangle fitter to get frequency
+        triangle = f.TriangleWaveFitter()
+        frequency = triangle.get_frequency(raw_time, raw_voltage, accepted_freqs=self._ACCEPTED_FREQS)
 
-            triangle = f.TriangleWaveFitter()
-            frequency = triangle.get_frequency(raw_time, raw_voltage, accepted_freqs=self._ACCEPTED_FREQS)
-            triangle_fit = triangle.fit(raw_time, raw_voltage, freq=frequency)
-            triangle_fit.print_fit_params()
+        # Smooth the voltage to get a first read of the peaks on the triangle wave
+        smoothed_voltage = sig.savgol_filter(raw_voltage, 21, 2)
+        top = sig.argrelmax(smoothed_voltage, order=100)[0]
+        bottom = sig.argrelmin(smoothed_voltage, order=100)[0]
+        _peaks = raw_time[np.concatenate([top, bottom])]
+        _peaks.sort()
 
-            # smoothed_voltage = sig.savgol_filter(raw_voltage, 21, 2)
-            top = sig.argrelmax(raw_voltage, order=20)[0]
-            bottom = sig.argrelmin(raw_voltage, order=20)[0]
-            # top = sig.argrelmax(triangle_fit.fit_y, order=20)[0]
-            # bottom = sig.argrelmin(triangle_fit.fit_y, order=20)[0]
+        # Get distances betweenn the peaks and filter based on the found frequency
+        _peak_distances = np.diff(_peaks)
+        threshold = (1 / (2 * frequency)) - 0.001
+        _peaks_ind = np.where(_peak_distances > threshold)[0]
 
-            print(raw_time[np.min([bottom[0], top[0]])], raw_time[-1], 1/(2 * frequency))
-            self.peaks = np.arange(raw_time[top[0]], raw_time[-1], 1/(2 * frequency))
-            # self.peaks = raw_time[np.sort(np.concatenate([top, bottom], 0))]
+        # Starting from the first filtered peak, arrange a period-spaced array
+        peaks_refined = np.arange(_peaks[_peaks_ind[0]], raw_time[-1], 1 / (2 * frequency))
+        self.peaks = peaks_refined
 
-            if plot_fl:
-                plt.figure()
-                plt.plot(raw_time, raw_voltage)
-                plt.plot(raw_time, triangle_fit.fit_y)
-                for peak in self.peaks:
-                    plt.axvline(x=peak, linestyle='dashed', linewidth=1, color='r')
+        if plot_fl:
+            plt.figure()
+            plt.plot(raw_time, raw_voltage)
+            # plt.plot(raw_time, triangle_fit.fit_y)
+            for peak in self.peaks:
+                plt.axvline(x=peak, linestyle='dashed', linewidth=1, color='r')
 
-            straight_line = f.StraightLineFitter()
-            for i in range(len(self.peaks) - 1):
-                sweep_start = np.abs(raw_time - self.peaks[i]).argmin()
-                sweep_stop = np.abs(raw_time - self.peaks[i+1]).argmin()
-                # sweep_stop = self.peaks[i + 1]
+        straight_line = f.StraightLineFitter()
+        for i in range(len(self.peaks) - 1):
+            sweep_start = np.abs(raw_time - self.peaks[i]).argmin()
+            sweep_stop = np.abs(raw_time - self.peaks[i+1]).argmin()
+            # sweep_stop = self.peaks[i + 1]
 
-                sweep_voltage = raw_voltage[sweep_start:sweep_stop]
-                # sweep_fit = triangle_fit.fit_y[sweep_start:sweep_stop]
-                sweep_time = raw_time[sweep_start:sweep_stop]
-                sweep_fit = straight_line.fit(sweep_time, sweep_voltage)
-                if i == 0 and plot_fl:
-                    sweep_fit.plot()
-                self.max_voltage.append((np.max(np.abs(sweep_voltage - sweep_fit.fit_y))))
+            sweep_voltage = raw_voltage[sweep_start:sweep_stop]
+            # sweep_fit = triangle_fit.fit_y[sweep_start:sweep_stop]
+            sweep_time = raw_time[sweep_start:sweep_stop]
+            sweep_fit = straight_line.fit(sweep_time, sweep_voltage)
+            if i == 0 and plot_fl:
+                sweep_fit.plot()
+            self.max_voltage.append((np.max(np.abs(sweep_voltage - sweep_fit.fit_y))))
 
-                if np.max(np.abs(sweep_voltage - sweep_fit.fit_y)) > self._ARCING_THRESHOLD:
-                    self.arcs.append(np.mean(sweep_time))
-                    continue
+            if np.max(np.abs(sweep_voltage - sweep_fit.fit_y)) > self._ARCING_THRESHOLD:
+                self.arcs.append(np.mean(sweep_time))
+                continue
 
-                sweep_current_0 = raw_current_0[sweep_start:sweep_stop]
-                sweep_current_1 = raw_current_1[sweep_start:sweep_stop]
-                if sweep_voltage[0] > sweep_voltage[-1]:
-                    sweep_voltage = np.array(list(reversed(sweep_voltage)))
-                    sweep_time = np.array(list(reversed(sweep_time)))
-                    sweep_current_0 = np.array(list(reversed(sweep_current_0)))
-                    sweep_current_1 = np.array(list(reversed(sweep_current_1)))
-                self.iv_arr_coax_0.append(iv.IVData(np.array(sweep_voltage) - np.array(sweep_current_0),
-                                                    sweep_current_0, sweep_time))
-                self.iv_arr_coax_1.append(iv.IVData(np.array(sweep_voltage) - np.array(sweep_current_1),
-                                                    sweep_current_1, sweep_time))
+            sweep_current_0 = raw_current_0[sweep_start:sweep_stop]
+            sweep_current_1 = raw_current_1[sweep_start:sweep_stop]
+            if sweep_voltage[0] > sweep_voltage[-1]:
+                sweep_voltage = np.array(list(reversed(sweep_voltage)))
+                sweep_time = np.array(list(reversed(sweep_time)))
+                sweep_current_0 = np.array(list(reversed(sweep_current_0)))
+                sweep_current_1 = np.array(list(reversed(sweep_current_1)))
+            self.iv_arr_coax_0.append(iv.IVData(np.array(sweep_voltage) - np.array(sweep_current_0),
+                                                sweep_current_0, sweep_time))
+            self.iv_arr_coax_1.append(iv.IVData(np.array(sweep_voltage) - np.array(sweep_current_1),
+                                                sweep_current_1, sweep_time))
 
         self.iv_arrs = [
             self.iv_arr_coax_0,
@@ -272,3 +271,42 @@ class Magopter(fl.IVAnalyser):
     @classmethod
     def create_from_file(cls, filename):
         super().create_from_file(filename)
+
+
+class MagnumProbes(object):
+    def __init__(self):
+        L_small = 3e-3  # m
+        a_small = 2e-3  # m
+        b_small = 3e-3  # m
+        g_small = 2e-3  # m
+        theta_f_small = np.radians(72)
+
+        L_large = 5e-3  # m
+        a_large = 4.5e-3  # m
+        b_large = 6e-3  # m
+        g_large = 1e-3  # m
+        theta_f_large = np.radians(73.3)
+
+        L_reg = 5e-3  # m
+        a_reg = 2e-3  # m
+        b_reg = 3.34e-3  # m
+        g_reg = 1e-3  # m
+        theta_f_reg = np.radians(75)
+
+        L_cyl = 4e-3  # m
+        g_cyl = 5e-4  # m
+
+        d_perp = 3e-4  # m
+        theta_p = np.radians(10)
+
+        self.probe_s = lp.AngledTipProbe(a_small, b_small, L_small, g_small, d_perp, theta_f_small, theta_p)
+        self.probe_l = lp.AngledTipProbe(a_large, b_large, L_large, g_large, d_perp, theta_f_large, theta_p)
+        self.probe_r = lp.AngledTipProbe(a_reg, b_reg, L_reg, g_reg, d_perp, theta_f_reg, theta_p)
+        self.probe_c = lp.FlushCylindricalProbe(L_cyl / 2, g_cyl, d_perp)
+        self.probes = {
+            's': self.probe_s,
+            'r': self.probe_r,
+            'l': self.probe_l,
+            'c': self.probe_c,
+        }
+        self.position = ['s', 'r', 'l', 'c']
