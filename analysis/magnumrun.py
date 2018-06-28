@@ -2,7 +2,7 @@ import lputils as lp
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from magopter import Magopter
+from magopter import Magopter, MagnumProbes
 import glob
 import external.magnumdbutils as ut
 import external.readfastadc as adc
@@ -247,7 +247,7 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     A_coll_1 = probe_coax_1.get_collection_area(theta_perp)
 
     if magopter.ts_temp is not None:
-        T_e = np.mean([np.max(temp) for temp in magopter.ts_temp[mag.DATA]]) / nrm.ELEM_CHARGE
+        T_e = np.mean([np.max(temp) / nrm.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]])
         n_e = np.mean([np.max(dens) for dens in magopter.ts_dens[mag.DATA]])
         print('T = {}, n = {}'.format(T_e, n_e))
     else:
@@ -260,7 +260,7 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     target_pos_t = np.array(magopter.magnum_data[mag.TARGET_POS][0])
     target_pos_x = magopter.magnum_data[mag.TARGET_POS][1]
 
-    target_voltage_t = np.array(magopter.magnum_data[mag.TARGET_VOLTAGE][0]) + t_0
+    target_voltage_t = np.array(magopter.magnum_data[mag.TARGET_VOLTAGE][0])
     target_voltage_x = np.array(magopter.magnum_data[mag.TARGET_VOLTAGE][1])
 
     deg_freedom = 3
@@ -300,18 +300,18 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
 
     for ax in [ax1, ax2]:
         ax3 = ax.twinx()
-        for i in range(np.shape(magopter.magnum_data[mag.BEAM_DUMP_DOWN])[1]):
-            if magopter.magnum_data[mag.BEAM_DUMP_DOWN][1][i]:
-                plt.axvline(x=magopter.magnum_data[mag.BEAM_DUMP_DOWN][0][i], color='r', linestyle='--', linewidth=1)
+        # for i in range(np.shape(magopter.magnum_data[mag.BEAM_DUMP_DOWN])[1]):
+        #     if magopter.magnum_data[mag.BEAM_DUMP_DOWN][1][i]:
+        #         plt.axvline(x=magopter.magnum_data[mag.BEAM_DUMP_DOWN][0][i], color='r', linestyle='--', linewidth=1)
             # if magopter.magnum_data[mag.BEAM_DUMP_UP][1][i]:
             #     plt.axvline(x=magopter.magnum_data[mag.BEAM_DUMP_UP][0][i], color='b', linestyle='--', linewidth=1)
 
-        for j in range(np.shape(magopter.magnum_data[mag.PLASMA_STATE])[1]):
-            plt.axvline(x=magopter.magnum_data[mag.PLASMA_STATE][0][j], color='g', linestyle='--', linewidth=1)
+        # for j in range(np.shape(magopter.magnum_data[mag.PLASMA_STATE])[1]):
+        #     plt.axvline(x=magopter.magnum_data[mag.PLASMA_STATE][0][j], color='g', linestyle='--', linewidth=1)
 
-        for k in range(np.shape(magopter.magnum_data[mag.TRIGGER_START])[1]):
-            plt.axvline(x=magopter.magnum_data[mag.TRIGGER_START][0][k], color='b', linestyle='--', linewidth=1)
-            print(magopter.magnum_data[mag.TRIGGER_START][0][k])
+        # for k in range(np.shape(magopter.magnum_data[mag.TRIGGER_START])[1]):
+        #     plt.axvline(x=magopter.magnum_data[mag.TRIGGER_START][0][k], color='b', linestyle='--', linewidth=1)
+        #     print(magopter.magnum_data[mag.TRIGGER_START][0][k])
 
         if magopter.ts_temp is not None:
             for k in range(len(magopter.ts_temp[0])):
@@ -339,15 +339,15 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     plt.plot(target_pos_t, target_pos_x, color='k', label='Target Position')
     # plt.plot(target_voltage_t,target_voltage_x, color='m', label='Target Voltage')
     for arc in magopter.arcs:
-        plt.axvline(x=arc, color='raa', linewidth=1, linestyle='-.')
+        plt.axvline(x=arc, color='r', linewidth=1, linestyle='-.')
     plt.axvline(x=iv_data.index, color='gray', linestyle='--')
 
     #########################################
     #           target_pos sweep            #
     #########################################
     plt.figure()
-    ax1 = plt.subplot(311)
-    plt.title('Ion Saturation Current Measurements')
+    ax1 = plt.subplot(211)
+    plt.title('Smoothed Max Current')
     plt.xlabel('Time (s)')
     plt.ylabel(r'$I^+_{sat}$ (eV)')
     plt.plot(max_currents[0], sig.savgol_filter(max_currents[1], 51, 2), 'xk', label='Max current')
@@ -355,16 +355,16 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
 
     # ax2 = ax1.twinx()
     # for t_0 in np.linspace(-3, 1, 11):
-    plt.plot(target_pos_t, target_pos_x + 1, label='t_0 = {:.1f}'.format(t_0))
+    plt.plot(target_pos_t, target_pos_x + 1, label='Target Position')
     plt.axvline(x=0, color='k', linewidth=1, linestyle='-.')
     plt.xlabel('Time (s)')
     plt.legend()
 
-    plt.subplot(312)
-    plt.plot(max_currents[0], np.gradient(sig.savgol_filter(max_currents[1], 51, 2)), 'xk', label='Max current')
-    plt.plot(target_pos_t, np.gradient(target_pos_x + 1), label='t_0 = {:.1f}'.format(t_0))
+    # plt.subplot(312)
+    # plt.plot(max_currents[0], np.gradient(sig.savgol_filter(max_currents[1], 51, 2)), 'xk', label='Max current')
+    # plt.plot(target_pos_t, np.gradient(target_pos_x + 1), label='t_0 = {:.1f}'.format(t_0))
 
-    plt.subplot(313)
+    plt.subplot(212)
     # matching_times = []
     # for t in (target_pos_t):
     #     matching_times.append(min(abs(t - fit_df_0.index)))
@@ -373,14 +373,37 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     hi = max(target_pos_t)
     # t_range = np.linspace(lo, hi, len(fit_df_0[c.ION_SAT]))
 
-    plt.plot(target_pos_func(max_currents[0]), max_currents[1], 'x', label='t_0 = {:.1f}'.format(0))
+    plt.plot(target_pos_func(max_currents[0]), max_currents[1], 'kx')
     plt.xlabel('Target position (m)')
     plt.ylabel('Ion saturation current (A)')
     plt.legend()
 
+    ##############################
+    #   density vs target pos.
+
+    plt.figure()
+    ax1 = plt.subplot(211)
+    plt.plot(fit_df_0.index, n_e_0, 'kx')
+    plt.ylabel(r'Density (m$^{-3}$)')
+    plt.axhline(y=n_e, color='gray', linestyle='--', linewidth=2)
+    ax2 = ax1.twinx()
+    ax2.plot(target_pos_t, target_pos_x, color='r')
+    ax2.tick_params('y', colors='r')
+    ax2.set_ylabel('Target position', color='r')
+    plt.xlabel('Time (s)')
+
+    plt.subplot(212)
+    # densities = np.array(max_currents[1]) / (nrm.ELEM_CHARGE * c_s * A_coll_0)
+    # plt.plot(target_pos_func(max_currents[0]), densities, 'kx')
+    plt.plot(target_pos_func(fit_df_0.index), n_e_0, 'kx', label='Measured')
+    plt.plot(2.93e-3, n_e, 'bx', label='TS Result')
+    plt.xlabel('Target position (m)')
+    plt.ylabel(r'Density (m$^{-3}$)')
+    plt.legend()
+
 
 def ts_ir_comparison(probe_0, probe_1, folder, file, ts_file):
-    dsr = 10
+    dsr = 5
 
     m_ir = Magopter(folder, file)
     m_ir.prepare(down_sampling_rate=dsr)
@@ -404,7 +427,6 @@ def ts_ir_comparison(probe_0, probe_1, folder, file, ts_file):
         n_e = 1.41e20
         fwhm = 12.4
 
-    plt.figure()
     plt.figure()
     ax1 = plt.subplot(211)
     plt.title('Small Probe Electron Temperature Measurements')
@@ -431,7 +453,7 @@ def ts_ir_comparison(probe_0, probe_1, folder, file, ts_file):
     plt.plot(fit_ts_df_0.index, n_e_ts, 'x', label='TS position')
     plt.axhline(y=n_e, linestyle='dashed', linewidth=1, color='gray', label='TS')
     plt.legend()
-    plt.setp(ax2.get_xticklabels(), visible=False)
+    # plt.setp(ax2.get_xticklabels(), visible=False)
 
 
 if __name__ == '__main__':
@@ -451,37 +473,10 @@ if __name__ == '__main__':
     folder = file_folders[-2]
     print(folder, file, ts_file)
 
-    L_small = 3e-3  # m
-    a_small = 2e-3  # m
-    b_small = 3e-3  # m
-    g_small = 2e-3  # m
-    theta_f_small = np.radians(72)
-
-    L_large = 5e-3  # m
-    a_large = 4.5e-3  # m
-    b_large = 6e-3  # m
-    g_large = 1e-3  # m
-    theta_f_large = np.radians(73.3)
-
-    L_reg = 5e-3  # m
-    a_reg = 2e-3  # m
-    b_reg = 3.34e-3  # m
-    g_reg = 1e-3  # m
-    theta_f_reg = np.radians(75)
-
-    L_cyl = 4e-3  # m
-    g_cyl = 5e-4  # m
-
-    d_perp = 3e-4  # m
-    theta_p = np.radians(10)
-
-    probe_s = lp.AngledTipProbe(a_small, b_small, L_small, g_small, d_perp, theta_f_small, theta_p)
-    probe_l = lp.AngledTipProbe(a_large, b_large, L_large, g_large, d_perp, theta_f_large, theta_p)
-    probe_r = lp.AngledTipProbe(a_reg, b_reg, L_reg, g_reg, d_perp, theta_f_reg, theta_p)
-    probe_c = lp.FlushCylindricalProbe(L_cyl / 2, g_cyl, d_perp)
+    mp = MagnumProbes()
 
     # main_magopter_analysis()
-    integrated_analysis(probe_s, probe_c, folder, file, ts_file=ts_file)
-    # ts_ir_comparison(probe_s, probe_c, folder, file, ts_file)
+    integrated_analysis(mp.probe_s, mp.probe_c, folder, file, ts_file=ts_file)
+    ts_ir_comparison(mp.probe_s, mp.probe_c, folder, file, ts_file)
 
     plt.show()
