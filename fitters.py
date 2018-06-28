@@ -36,7 +36,7 @@ class GenericFitter(ABC):
             print('No params, IVFitter class not properly implemented')
             return None
 
-        if not initial_vals:
+        if not initial_vals or np.NaN in initial_vals:
             initial_vals = self.default_values
         if initial_vals and len(initial_vals) != len(self._param_labels):
             warn('Intial parameter array ({}) must be same length as defined parameter list (see get_param_labels()).'
@@ -516,28 +516,33 @@ class TriangleWaveFitter(GenericFitter):
         ]
         self.name = 'Triangle Wave'
 
-    def fit(self, x_data, y_data, freq=None, initial_vals=None, bounds=None):
+    def fit(self, x_data, y_data, freq=None, initial_vals=None, bounds=None, calc_guess_fl=True):
         """
             Override of the fit method with included provision for automatic finding of the amplitude and period of the
             triangular wave if one is not specified.
             :param x_data:          x-data for fit
             :param y_data:          y-data for fit
             :param freq:            specify a known frequency of the wave, will be automatically found if not
-            :param initial_vals:    [optional] initial values to be fed to the fitting algorithm. If left None,
-                                    amplitude and period will be populated automatically using get_initial_guess().
+            :param initial_vals:    [optional] initial values to be fed to the fitting algorithm. If left None, by
+                                    default amplitude and period will be populated automatically using
+                                    get_initial_guess(). This behaviour can be turned off with the calc_guess_fl param.
             :param bounds:          [optional] The bounds for the fitting algorithm. If none are specified then the
                                     default parameters are used.
+            :param calc_guess_fl:   [optional] Boolean flag to turn on or off the calculation of an initial guess if one
+                                    is not given.
             :return fitdata:        fitdata from fit.
         """
+        if freq is not None:
+            self.freq = freq
 
         if not self.freq:
             self.freq = self.get_frequency(x_data, y_data)
 
         period = 1/(2*self.freq)
-        if not initial_vals:
+        if not initial_vals and calc_guess_fl:
             initial_vals = [period, *self.get_initial_guess(y_data, x_data)]
 
-        if not bounds:
+        if not bounds and calc_guess_fl:
             bounds = self.default_bounds
             bounds[0][0] = period * 0.9
             bounds[1][0] = period * 1.1
@@ -565,6 +570,7 @@ class TriangleWaveFitter(GenericFitter):
         top = sig.argrelmax(smoothed_voltage, order=20)
         bottom = sig.argrelmin(smoothed_voltage, order=20)
         peaks = time[np.sort(np.concatenate([top, bottom], 1))[0]]
+        print(peaks)
 
         ampl_guess = (np.mean(voltage[top]) - np.mean(voltage[bottom])) / 2
         period_guess = 2 * np.mean([peaks[i + 1] - peaks[i] for i in range(len(peaks) - 1)])
