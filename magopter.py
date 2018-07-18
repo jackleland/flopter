@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 import classes.magnumadcdata as md
 import classes.ivdata as iv
 import pandas as pd
+import xarray as xa
+import multiprocessing as mp
+import constants as c
 import scipy.signal as sig
 import databases.magnum as mag
 import external.readfastadc as adc
@@ -94,7 +97,7 @@ class Magopter(fl.IVAnalyser):
             self.magnum_db = None
             self.magnum_data = None
 
-    def prepare(self, down_sampling_rate=5, plot_fl=False):
+    def prepare(self, down_sampling_rate=5, plot_fl=False, filter_arcs_fl=False):
         """
         Preparation consists of downsampling (if necessary), choosing the region of interest and putting each sweep
         into a numpy array of iv_datas
@@ -175,7 +178,7 @@ class Magopter(fl.IVAnalyser):
                 sweep_fit.plot()
             self.max_voltage.append((np.max(np.abs(sweep_voltage - sweep_fit.fit_y))))
 
-            if np.max(np.abs(sweep_voltage - sweep_fit.fit_y)) > self._ARCING_THRESHOLD:
+            if filter_arcs_fl and np.max(np.abs(sweep_voltage - sweep_fit.fit_y)) > self._ARCING_THRESHOLD:
                 self.arcs.append(np.mean(sweep_time))
                 continue
 
@@ -212,15 +215,15 @@ class Magopter(fl.IVAnalyser):
             fitter = f.FullIVFitter()
         if all(iv_arr is None or len(iv_arr) == 0 for iv_arr in self.iv_arrs):
             raise ValueError('No iv_data found to fit in self.iv_arrs')
-
+        pool = mp.Pool()
         fit_arrs = [[], []]
         fit_time = [[], []]
         for i in coaxes:
             for iv_data in self.iv_arrs[i]:
-                fitter.autoset_floating_pot(iv_data)
-                trim_fl = (self.trim_beg is not None and self.trim_end is not None)
                 try:
-                    fit_data = fitter.fit_iv_data(iv_data, initial_vals=initial_vals, bounds=bounds, trim_fl=trim_fl)
+                    # fit_data = iv_data.multi_fit()
+                    result = pool.apply_async(iv_data.multi_fit)
+                    fit_data = result.get(timeout=10)
                 except RuntimeError:
                     if print_fl:
                         print('Error encountered in fit, skipping timestep {}'.format(np.mean(iv_data.time)))
@@ -228,10 +231,10 @@ class Magopter(fl.IVAnalyser):
                 if any(param.error >= (param.value * 0.5) for param in fit_data.fit_params):
                     if print_fl:
                         print('Fit parameters exceeded good fit threshold, skipping time step {}'
-                              .format(np.mean(iv_data.time)))
+                              .format(np.mean(iv_data[c.TIME])))
                     continue
                 fit_arrs[i].append(fit_data)
-                fit_time[i].append(np.mean(iv_data.time))
+                fit_time[i].append(np.mean(iv_data[c.TIME]))
         fit_dfs_0 = pd.DataFrame([fit_data.to_dict() for fit_data in fit_arrs[0]], index=fit_time[0])
         fit_dfs_1 = pd.DataFrame([fit_data.to_dict() for fit_data in fit_arrs[1]], index=fit_time[1])
         return fit_dfs_0, fit_dfs_1
