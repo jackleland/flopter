@@ -48,14 +48,16 @@ class FitData2(object):
         self.fit_params = FitParamList(fit_values, fit_errors)
         self.fitter = fitter
 
-    def plot(self):
-        plt.figure()
+    def plot(self, fig=None, show_fl=True):
+        if not fig:
+            plt.figure()
         plt.plot(*self.get_raw_plottables(), 'x')
         plt.plot(*self.get_fit_plottables(), label=self.get_param_str())
         plt.xlabel('x')
         plt.ylabel(self.fitter.name)
         plt.legend()
-        plt.show()
+        if show_fl:
+            plt.show()
 
     def get_raw_plottables(self):
         return self.raw_x, self.raw_y
@@ -75,6 +77,10 @@ class FitData2(object):
 
     def get_fitter(self):
         return self.fitter
+
+    def fit_function(self, x):
+        func = self.fitter.fit_function
+        return func(x, *self.fit_params.get_values())
 
     def print_fit_params(self):
         param_labels = self.fitter.get_param_labels()
@@ -123,6 +129,11 @@ class IVFitData(FitData2):
 
     def get_floating_pot(self):
         return self.fitter.v_f
+
+    def to_dict(self):
+        dictionary = super().to_dict()
+        dictionary[FLOAT_POT] = self.fitter.v_f
+        return dictionary
 
     @classmethod
     def from_fit_data(cls, fit_data_instance):

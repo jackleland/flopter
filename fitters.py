@@ -24,11 +24,24 @@ class GenericFitter(ABC):
         self._param_labels = {}
         self.default_values = None
         self.default_bounds = (-np.inf, np.inf)
+        self.fixed_values = None
         self.name = None
 
     @abstractmethod
     def fit_function(self, v, parameters):
         pass
+
+    def check_for_fixed_vals(self, parameters):
+        parameters = list(parameters)
+        if isinstance(self.fixed_values, dict):
+            for i in range(len(parameters)):
+                if i in self.fixed_values:
+                    parameters[i] = self.fixed_values[i]
+        return parameters
+
+    def _curve_fit_func(self, v, *parameters):
+        parameters = self.check_for_fixed_vals(parameters)
+        return self.fit_function(v, *parameters)
 
     def fit(self, x_data, y_data, initial_vals=None, bounds=None):
         # Check params exist and check length of passed arrays
@@ -50,7 +63,7 @@ class GenericFitter(ABC):
                  '(see get_param_labels()).'.format(len(bounds)))
             bounds = CF_DEFAULT_VALUES
 
-        fit_vals, fit_cov = curve_fit(self.fit_function, x_data, y_data, p0=initial_vals, bounds=bounds)
+        fit_vals, fit_cov = curve_fit(self._curve_fit_func, x_data, y_data, p0=initial_vals, bounds=bounds)
         fit_y_data = self.fit_function(x_data, *fit_vals)
         fit_sterrs = np.sqrt(np.diag(fit_cov))
         return FitData2(x_data, y_data, fit_y_data, fit_vals, fit_sterrs, self)
@@ -112,8 +125,9 @@ class IVFitter(GenericFitter, ABC):
         try:
             iv_interp = interp1d(iv_data[c.CURRENT], iv_data[c.POTENTIAL])
             v_f = iv_interp([0.0])
-        except ValueError:
-            print('V_f could not be found effectively, returning default value')
+        except ValueError as e:
+            print('V_f could not be found effectively, returning default value.')
+            print(str(e))
             v_f = [cls._DEFAULT_V_F]
         return v_f
 
@@ -156,6 +170,38 @@ class FullIVFitter(IVFitter):
         return self._param_labels[c.SHEATH_EXP]
 
 
+class FullIVFixedISatFitter(IVFitter):
+    """
+    IV Fitter implementation utilising the full, 4 parameter IV Curve fitting method. V_f and I_sat are kept static.
+    """
+    def __init__(self, saturation_current, floating_potential=None):
+        super().__init__(floating_potential=floating_potential)
+        self._param_labels = {
+            c.SHEATH_EXP: 0,
+            c.ELEC_TEMP: 1
+        }
+        self.I_sat = saturation_current
+        self.default_values = (0.0204, 1)
+        self.default_bounds = (
+            (     0,       0),
+            (np.inf,  np.inf)
+        )
+        self.name = '4 param fixed I_sat'
+
+    def fit_function(self, v, *parameters):
+        I_0 = self.I_sat
+        a = parameters[self._param_labels[c.SHEATH_EXP]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        V = (self.v_f - v) / T_e
+        return I_0 * (1 - np.exp(-V) + (a * np.float_power(np.absolute(V), [0.75])))
+
+    def get_temp_index(self):
+        return self._param_labels[c.ELEC_TEMP]
+
+    def get_a_index(self):
+        return self._param_labels[c.SHEATH_EXP]
+
+
 class SimpleIVFitter(IVFitter):
     def __init__(self, floating_potential=None):
         super().__init__(floating_potential=floating_potential)
@@ -183,6 +229,38 @@ class SimpleIVFitter(IVFitter):
         return self._param_labels[c.ION_SAT]
 
 
+class StraightIVFitter(IVFitter):
+    def __init__(self, floating_potential=None):
+        super().__init__(floating_potential=floating_potential)
+        self._param_labels = {
+            c.ION_SAT: 0,
+            c.SHEATH_EXP: 1,
+            c.ELEC_TEMP: 2
+        }
+        self.default_values = (30.0, 0.02, 1)
+        self.default_bounds = (
+            (-np.inf, 0, 0),
+            (np.inf, np.inf, np.inf)
+        )
+        self.name = 'Straight IV Fit'
+
+    def fit_function(self, v, *parameters):
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        a = parameters[self._param_labels[c.SHEATH_EXP]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        V = (self.v_f - v) / T_e
+        return I_0 * (1 + (a * np.float_power(np.absolute(V), [0.75])))
+
+    def get_temp_index(self):
+        return self._param_labels[c.ELEC_TEMP]
+
+    def get_isat_index(self):
+        return self._param_labels[c.ION_SAT]
+
+    def get_a_index(self):
+        return self._param_labels[c.SHEATH_EXP]
+
+
 class IonCurrentSEFitter(IVFitter):
     def __init__(self):
         super().__init__(floating_potential=None)
@@ -197,11 +275,11 @@ class IonCurrentSEFitter(IVFitter):
         )
         self.name = 'Ion Current Sheath Expansion Fit'
 
-    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None):
+    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None, trim_fl=False, print_fl=False):
         assert isinstance(iv_data, IVData)
         potential = np.power(np.abs(iv_data[c.POTENTIAL]), 0.75)
         current = iv_data[c.ION_CURRENT]
-        return self.fit(potential, current, initial_vals, bounds)
+        return self.fit(potential, current, initial_vals, bounds, print_fl=print_fl)
 
     def fit_function(self, v, *parameters):
         I_0 = parameters[self._param_labels[c.ION_SAT]]
@@ -496,6 +574,30 @@ class StraightLineFitter(GenericFitter):
         m = parameters[self._param_labels[c.GRADIENT]]
         y_0 = parameters[self._param_labels[c.OFFSET_Y]]
         return (m * v) + y_0
+
+
+class ExponentialFitter(GenericFitter):
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.AMPLITUDE: 0,
+            c.EXP_SCALER: 1,
+            c.OFFSET_Y: 2,
+            c.OFFSET_X: 3
+        }
+        self.default_values = [1.0, 1.0, 0.0, 0.0]
+        self.default_bounds = [
+            [-np.inf, -np.inf, -np.inf, -np.inf],
+            [ np.inf,  np.inf,  np.inf,  np.inf]
+        ]
+        self.name = 'Exponential Line'
+
+    def fit_function(self, v, *parameters):
+        A = parameters[self._param_labels[c.AMPLITUDE]]
+        b = parameters[self._param_labels[c.EXP_SCALER]]
+        y_0 = parameters[self._param_labels[c.OFFSET_Y]]
+        x_0 = parameters[self._param_labels[c.OFFSET_X]]
+        return A * np.exp(b * (v + x_0)) + y_0
 
 
 class TriangleWaveFitter(GenericFitter):
