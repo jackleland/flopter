@@ -11,6 +11,7 @@ import normalisation as nrm
 import databases.magnum as mag
 from scipy.interpolate import interp1d
 import scipy.signal as sig
+import fitters as f
 
 
 def main_magopter_analysis():
@@ -325,15 +326,15 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     #########################################
     #            Whole IV plot              #
     #########################################
-    iv_data = fit_df_0.iloc[[125]]
+    iv_data = fit_df_0.iloc[[10]]
     fig, ax = plt.subplots()
     max_currents = [[], []]
     for iv_curve in magopter.iv_arr_coax_0:
-        plt.plot(iv_curve.time, -iv_curve.current)
+        plt.plot(iv_curve[c.TIME], -iv_curve[c.CURRENT])
         # plt.plot(iv_curve.time, iv_curve.voltage)
-        max_current = np.max(iv_curve.current)
-        max_currents[1].append(np.max(iv_curve.current))
-        max_currents[0].append(iv_curve.time[list(iv_curve.current).index(max_current)])
+        max_current = np.max(iv_curve[c.CURRENT])
+        max_currents[1].append(np.max(iv_curve[c.CURRENT]))
+        max_currents[0].append(iv_curve[c.TIME][list(iv_curve[c.CURRENT]).index(max_current)])
 
     ax1 = ax.twinx()
     plt.plot(target_pos_t, target_pos_x, color='k', label='Target Position')
@@ -341,6 +342,25 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     for arc in magopter.arcs:
         plt.axvline(x=arc, color='r', linewidth=1, linestyle='-.')
     plt.axvline(x=iv_data.index, color='gray', linestyle='--')
+
+    #########################################
+    #        Analytical IV Comparison       #
+    #########################################
+    plt.figure()
+
+    plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0], 'x', label='Raw IV')
+    plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.FIT_Y].tolist()[0], label='Fit IV')
+    v_f_fitted = iv_data[c.FLOAT_POT].values[0]
+    n_e_fitted = n_e_0.iloc[[10]].values[0]
+    I_s = probe_coax_0.get_analytical_iv(iv_data[c.RAW_X].tolist()[0], v_f_fitted, theta_perp, T_e, n_e)
+    I_s_shifted = probe_coax_0.get_analytical_iv(iv_data[c.RAW_X].tolist()[0], v_f_fitted, theta_perp, T_e, n_e_fitted)
+
+    plt.plot(iv_data[c.RAW_X].tolist()[0], I_s, label='Analytical 1', linestyle='dashed', linewidth=1, color='r')
+    plt.plot(iv_data[c.RAW_X].tolist()[0], I_s_shifted, label='Analytical 2', linestyle='dashed', linewidth=1, color='g')
+    plt.legend()
+    plt.title('Comparison of analytical to measured IV curves for the small area probe')
+    plt.xlabel('Voltage (V)')
+    plt.ylabel('Current (A)')
 
     #########################################
     #           target_pos sweep            #
@@ -415,6 +435,15 @@ def ts_ir_comparison(probe_0, probe_1, folder, file, ts_file):
     m_ts.trim(trim_end=0.83)
     fit_ts_df_0, fit_ts_df_1 = m_ts.fit()
 
+    tarpos_t_ir = np.array(m_ir.magnum_data[mag.TARGET_POS][0])
+    tarpos_x_ir = m_ir.magnum_data[mag.TARGET_POS][1]
+    tarpos_func_ir = interp1d(tarpos_t_ir, tarpos_x_ir)
+
+    tarpos_t_ts = np.array(m_ts.magnum_data[mag.TARGET_POS][0])
+    tarpos_x_ts = m_ts.magnum_data[mag.TARGET_POS][1]
+    tarpos_func_ts = interp1d(tarpos_t_ts, tarpos_x_ts)
+
+
     theta_perp = np.radians(10)
     A_coll_0 = probe_0.get_collection_area(theta_perp)
     A_coll_1 = probe_1.get_collection_area(theta_perp)
@@ -455,6 +484,27 @@ def ts_ir_comparison(probe_0, probe_1, folder, file, ts_file):
     plt.legend()
     # plt.setp(ax2.get_xticklabels(), visible=False)
 
+    fitter = f.ExponentialFitter()
+    fitdata_ir = fitter.fit(tarpos_func_ir(fit_ir_df_0.index), n_e_ir)
+    fitdata_ts = fitter.fit(tarpos_func_ts(fit_ts_df_0.index), n_e_ts)
+    plt.figure()
+    plt.plot(tarpos_func_ir(fit_ir_df_0.index), n_e_ir, 'kx', label='Infrared')
+    plt.plot(tarpos_func_ts(fit_ts_df_0.index), n_e_ts, 'mx', label='Thomson')
+    plt.plot(2.93e-3, n_e, 'bx', label='TS Result')
+    fitdata_ir.plot(show_fl=False)
+    fitdata_ts.plot(show_fl=False)
+    plt.xlabel('Target position (m)')
+    plt.ylabel(r'Density (m$^{-3}$)')
+    plt.legend()
+
+    plt.figure()
+    plt.semilogy(tarpos_func_ir(fit_ir_df_0.index), n_e_ir, 'kx', label='Infrared')
+    plt.semilogy(tarpos_func_ts(fit_ts_df_0.index), n_e_ts, 'mx', label='Thomson')
+    plt.plot(2.93e-3, n_e, 'bx', label='TS Result')
+    plt.xlabel('Target position (m)')
+    plt.ylabel(r'Density (m$^{-3}$)')
+    plt.legend()
+
 
 if __name__ == '__main__':
     folders = ['2018-05-01_Leland/', '2018-05-02_Leland/', '2018-05-03_Leland/',
@@ -476,7 +526,7 @@ if __name__ == '__main__':
     mp = MagnumProbes()
 
     # main_magopter_analysis()
-    integrated_analysis(mp.probe_s, mp.probe_c, folder, file, ts_file=ts_file)
+    # integrated_analysis(mp.probe_s, mp.probe_c, folder, file, ts_file=ts_file)
     ts_ir_comparison(mp.probe_s, mp.probe_c, folder, file, ts_file)
 
     plt.show()
