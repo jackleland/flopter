@@ -10,10 +10,10 @@ BOLTZMANN = 1.38064852e-23  # m^2 kg s^-2 K^-1
 EPSILON_0 = 8.85418782e-12  # m^-3 kg^-1 s^4 A^2
 ELEM_CHARGE = 1.60217662e-19 # C
 PROTON_MASS = 1.6726219e-27 # kg
-ION_MASS = 2.01410178 * PROTON_MASS # kg
+DEUTERIUM_MASS = 2.01410178 * PROTON_MASS # kg
 ELECTRON_MASS = 9.10938356e-31 # kg
 P_E_MASS_RATIO = PROTON_MASS / ELECTRON_MASS
-I_E_MASS_RATIO = ION_MASS / ELECTRON_MASS
+I_E_MASS_RATIO = DEUTERIUM_MASS / ELECTRON_MASS
 
 
 class Converter(ABC):
@@ -223,7 +223,7 @@ class Denormaliser(Converter):
         return IVData(potential, current, time, i_current=current_i, e_current=current_e)
 
     def _convert_distribution_function(self, dist_function):
-        conversion_factor = np.sqrt(self.temperature / ION_MASS) / self.ksi * np.sqrt(200 / self.mu)
+        conversion_factor = np.sqrt(self.temperature / DEUTERIUM_MASS) / self.ksi * np.sqrt(200 / self.mu)
         return conversion_factor * dist_function
 
     def get_mu(self):
