@@ -97,7 +97,7 @@ class Magopter(fl.IVAnalyser):
             self.magnum_db = None
             self.magnum_data = None
 
-    def prepare(self, down_sampling_rate=5, plot_fl=False, filter_arcs_fl=False):
+    def prepare(self, down_sampling_rate=5, plot_fl=False, filter_arcs_fl=False, roi_b_plasma=False):
         """
         Preparation consists of downsampling (if necessary), choosing the region of interest and putting each sweep
         into a numpy array of iv_datas
@@ -115,27 +115,21 @@ class Magopter(fl.IVAnalyser):
         self.m_data.data[self._VOLTAGE_CHANNEL] = self.m_data.data[self._VOLTAGE_CHANNEL] * 10
 
         # Find region of interest
-        # plt.figure()
-        # plt.plot(self.m_data.time, self.m_data.data[self._TAR_VOLTAGE_CHANNEL])
-        # plt.plot(self.m_data.time, self.m_data.data[self._PROBE_CHANNEL_3])
-        # plt.plot(self.m_data.time, self.m_data.data[self._VOLTAGE_CHANNEL])
-
-        start = 102000
-        end = 115500
-
-        # start = 10000
-        # end = 360000
-        start = 0
-        end = len(self.m_data.time)
+        if roi_b_plasma and not self.offline and np.shape(self.magnum_data[mag.PLASMA_STATE])[1] == 2:
+            start = np.abs(self.m_data.time - self.magnum_data[mag.PLASMA_STATE][0][0]).argmin()
+            end = np.abs(self.m_data.time - self.magnum_data[mag.PLASMA_STATE][0][1]).argmin()
+        else:
+            start = 0
+            end = len(self.m_data.time)
 
         self.iv_arr_coax_0 = []
         self.iv_arr_coax_1 = []
 
         # Find peaks of voltage triangle wave
-        raw_time = self.m_data.time
-        raw_voltage = self.m_data.data[self._VOLTAGE_CHANNEL]
-        raw_current_0 = self.m_data.data[self._PROBE_CHANNEL_3]
-        raw_current_1 = self.m_data.data[self._PROBE_CHANNEL_4]
+        raw_time = self.m_data.time[start:end]
+        raw_voltage = self.m_data.data[self._VOLTAGE_CHANNEL][start:end]
+        raw_current_0 = self.m_data.data[self._PROBE_CHANNEL_3][start:end]
+        raw_current_1 = self.m_data.data[self._PROBE_CHANNEL_4][start:end]
 
         # Use fourier decomposition from get_frequency method in triangle fitter to get frequency
         triangle = f.TriangleWaveFitter()
