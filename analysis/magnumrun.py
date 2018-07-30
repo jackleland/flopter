@@ -12,6 +12,7 @@ import databases.magnum as mag
 from scipy.interpolate import interp1d
 import scipy.signal as sig
 import fitters as f
+from tkinter.filedialog import askopenfilename
 
 
 def main_magopter_analysis():
@@ -239,7 +240,7 @@ def main_magopter_analysis():
 def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     magopter = Magopter(folder, file, ts_filename=ts_file)
     dsr = 10
-    magopter.prepare(down_sampling_rate=dsr)
+    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True)
     magopter.trim(trim_end=0.83)
     fit_df_0, fit_df_1 = magopter.fit()
 
@@ -248,30 +249,39 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     A_coll_1 = probe_coax_1.get_collection_area(theta_perp)
 
     if magopter.ts_temp is not None:
-        T_e = np.mean([np.max(temp) / nrm.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]])
-        n_e = np.mean([np.max(dens) for dens in magopter.ts_dens[mag.DATA]])
-        print('T = {}, n = {}'.format(T_e, n_e))
+        temps = [np.max(temp) / nrm.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]]
+        denss = [np.max(dens) for dens in magopter.ts_dens[mag.DATA]]
+        T_e = np.mean(temps)
+        d_T_e = np.std(temps) / np.sqrt(len(temps))
+        n_e = np.mean(denss)
+        d_n_e = np.std(denss) / np.sqrt(len(denss))
+        print('T = {}+-{}, n = {}+-{}'.format(T_e, d_T_e, n_e, d_n_e))
     else:
         T_e = 1.61
+        d_T_e = 0.01
         n_e = 1.41e20
+        d_n_e = 0.01e20
         fwhm = 12.4
 
     # t_0 = -0.35
     t_0 = 0
-    target_pos_t = np.array(magopter.magnum_data[mag.TARGET_POS][0])
-    target_pos_x = magopter.magnum_data[mag.TARGET_POS][1]
+    target_pos_t, target_pos_x = magopter.magnum_data[mag.TARGET_POS]
+    # target_pos_t, target_pos_x = magopter.magnum_db.pad_continuous_variable(magopter.magnum_data[mag.TARGET_POS])
+    target_pos_t = np.array(target_pos_t)
 
     target_voltage_t = np.array(magopter.magnum_data[mag.TARGET_VOLTAGE][0])
     target_voltage_x = np.array(magopter.magnum_data[mag.TARGET_VOLTAGE][1])
 
-    deg_freedom = 3
-    gamma_i = (deg_freedom + 2) / 2
-    c_s = np.sqrt((nrm.ELEM_CHARGE * (T_e + gamma_i * T_e)) / nrm.PROTON_MASS)
-    n_e_0 = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_0)
-    n_e_1 = fit_df_1[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_1)
+    deg_freedom = 2
+    # gamma_i = (deg_freedom + 2) / 2
+    gamma_i = 1
+    c_s_0 = np.sqrt((nrm.ELEM_CHARGE * (fit_df_0[c.ELEC_TEMP] + gamma_i * fit_df_0[c.ELEC_TEMP])) / nrm.PROTON_MASS)
+    c_s_1 = np.sqrt((nrm.ELEM_CHARGE * (fit_df_1[c.ELEC_TEMP] + gamma_i * fit_df_1[c.ELEC_TEMP])) / nrm.PROTON_MASS)
+    n_e_0 = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s_0 * A_coll_0)
+    n_e_1 = fit_df_1[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s_1 * A_coll_1)
 
-    I_sat_0 = c_s * n_e * nrm.ELEM_CHARGE * A_coll_0
-    I_sat_1 = c_s * n_e * nrm.ELEM_CHARGE * A_coll_1
+    I_sat_0 = c_s_0 * n_e * nrm.ELEM_CHARGE * A_coll_0
+    I_sat_1 = c_s_1 * n_e * nrm.ELEM_CHARGE * A_coll_1
 
     J_sat_0 = fit_df_0[c.ION_SAT] / A_coll_0
     J_sat_1 = fit_df_1[c.ION_SAT] / A_coll_1
@@ -286,6 +296,8 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     plt.errorbar(fit_df_1.index, c.ELEC_TEMP, yerr=c.ERROR_STRING.format(c.ELEC_TEMP), data=fit_df_1, fmt='x',
                  label='Cylinder area')
     plt.axhline(y=T_e, linestyle='dashed', linewidth=1, color='gray', label='TS')
+    plt.axhline(y=T_e + d_T_e, linestyle='dotted', linewidth=0.5, color='gray')
+    plt.axhline(y=T_e - d_T_e, linestyle='dotted', linewidth=0.5, color='gray')
     # plt.legend()
     plt.setp(ax1.get_xticklabels(), visible=False)
 
@@ -304,11 +316,11 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
         # for i in range(np.shape(magopter.magnum_data[mag.BEAM_DUMP_DOWN])[1]):
         #     if magopter.magnum_data[mag.BEAM_DUMP_DOWN][1][i]:
         #         plt.axvline(x=magopter.magnum_data[mag.BEAM_DUMP_DOWN][0][i], color='r', linestyle='--', linewidth=1)
-            # if magopter.magnum_data[mag.BEAM_DUMP_UP][1][i]:
-            #     plt.axvline(x=magopter.magnum_data[mag.BEAM_DUMP_UP][0][i], color='b', linestyle='--', linewidth=1)
+        #     if magopter.magnum_data[mag.BEAM_DUMP_UP][1][i]:
+        #         plt.axvline(x=magopter.magnum_data[mag.BEAM_DUMP_UP][0][i], color='b', linestyle='--', linewidth=1)
 
-        # for j in range(np.shape(magopter.magnum_data[mag.PLASMA_STATE])[1]):
-        #     plt.axvline(x=magopter.magnum_data[mag.PLASMA_STATE][0][j], color='g', linestyle='--', linewidth=1)
+        for j in range(np.shape(magopter.magnum_data[mag.PLASMA_STATE])[1]):
+            plt.axvline(x=magopter.magnum_data[mag.PLASMA_STATE][0][j], color='g', linestyle='--', linewidth=1)
 
         # for k in range(np.shape(magopter.magnum_data[mag.TRIGGER_START])[1]):
         #     plt.axvline(x=magopter.magnum_data[mag.TRIGGER_START][0][k], color='b', linestyle='--', linewidth=1)
@@ -316,7 +328,10 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
 
         if magopter.ts_temp is not None:
             for k in range(len(magopter.ts_temp[0])):
-                plt.axvline(x=magopter.ts_temp[0][k], color='m', linestyle='--', linewidth=1, label='TS')
+                if k == 0:
+                    plt.axvline(x=magopter.ts_temp[0][k], color='m', linestyle='--', linewidth=1, label='TS')
+                else:
+                    plt.axvline(x=magopter.ts_temp[0][k], color='m', linestyle='--', linewidth=1)
 
         plt.plot(target_pos_t, target_pos_x, color='k', label='Target Position')
         # plt.axvline(x=0, color='k', linewidth=1, linestyle='-.')
@@ -326,7 +341,6 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     #########################################
     #            Whole IV plot              #
     #########################################
-    iv_data = fit_df_0.iloc[[10]]
     fig, ax = plt.subplots()
     max_currents = [[], []]
     for iv_curve in magopter.iv_arr_coax_0:
@@ -341,6 +355,8 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     # plt.plot(target_voltage_t,target_voltage_x, color='m', label='Target Voltage')
     for arc in magopter.arcs:
         plt.axvline(x=arc, color='r', linewidth=1, linestyle='-.')
+
+    iv_data = fit_df_0.iloc[[10]]
     plt.axvline(x=iv_data.index, color='gray', linestyle='--')
 
     #########################################
@@ -371,7 +387,7 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     plt.xlabel('Time (s)')
     plt.ylabel(r'$I^+_{sat}$ (eV)')
     plt.plot(max_currents[0], sig.savgol_filter(max_currents[1], 51, 2), 'xk', label='Max current')
-    plt.axhline(y=I_sat_0, linestyle='dashed', linewidth=1, color='r', label='Expected I_sat (s)')
+    # plt.axhline(y=I_sat_0, linestyle='dashed', linewidth=1, color='r', label='Expected I_sat (s)')
 
     # ax2 = ax1.twinx()
     # for t_0 in np.linspace(-3, 1, 11):
@@ -443,7 +459,6 @@ def ts_ir_comparison(probe_0, probe_1, folder, file, ts_file):
     tarpos_x_ts = m_ts.magnum_data[mag.TARGET_POS][1]
     tarpos_func_ts = interp1d(tarpos_t_ts, tarpos_x_ts)
 
-
     theta_perp = np.radians(10)
     A_coll_0 = probe_0.get_collection_area(theta_perp)
     A_coll_1 = probe_1.get_collection_area(theta_perp)
@@ -506,6 +521,177 @@ def ts_ir_comparison(probe_0, probe_1, folder, file, ts_file):
     plt.legend()
 
 
+def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_timeline_fl=False):
+    magopter = Magopter(folder, file, ts_filename=ts_file)
+    dsr = 1
+    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, plot_fl=True, crit_freq=640)
+    # magopter.iv_arr_coax_0 = magopter.iv_arrs[0][20:23]
+    # magopter.iv_arr_coax_1 = magopter.iv_arrs[1][20:23]
+    fit_df_0, fit_df_1 = magopter.fit()
+
+    if magopter.ts_temp is not None:
+        temps = [np.max(temp) / nrm.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]]
+        denss = [np.max(dens) for dens in magopter.ts_dens[mag.DATA]]
+        T_e_ts = np.mean(temps)
+        d_T_e_ts = np.std(temps) / np.sqrt(len(temps))
+        n_e_ts = np.mean(denss)
+        d_n_e_ts = np.std(denss) / np.sqrt(len(denss))
+    else:
+        T_e_ts = 1.61
+        d_T_e_ts = 0.01
+        n_e_ts = 1.41e20
+        d_n_e_ts = 0.01e20
+
+    count = fit_df_0[c.ELEC_TEMP].count()
+    positions = [0.1, 0.5, 0.7]
+    iv_indices = [int(pos * count) for pos in positions]
+    iv_datas = [fit_df_0.iloc[[iv_index]] for iv_index in iv_indices]
+    print('count={}, 0={}, 1={}, 2={}'.format(count, *iv_indices))
+
+    alpha = 9.95
+    theta_perp = np.radians(alpha)
+    d_theta_perp = np.radians(0.1)
+    A_coll_0 = probe_0.get_collection_area(theta_perp)
+    d_A_coll = np.abs(probe_0.get_collection_area(theta_perp + d_theta_perp) - A_coll_0)
+
+    # deg_freedom = 2
+    # gamma_i = (deg_freedom + 2) / 2
+    gamma_i = 1
+    c_s = np.sqrt((nrm.ELEM_CHARGE * (fit_df_0[c.ELEC_TEMP] + gamma_i * fit_df_0[c.ELEC_TEMP])) / nrm.PROTON_MASS)
+    d_c_s = np.abs((c_s * fit_df_0[c.ERROR_STRING.format(c.ELEC_TEMP)]) / (2 * fit_df_0[c.ELEC_TEMP]))
+
+    n_e = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_0)
+    d_n_e = np.abs(n_e) * np.sqrt((d_c_s / c_s) ** 2 + (d_A_coll / A_coll_0) ** 2 + (
+                fit_df_0[c.ERROR_STRING.format(c.ION_SAT)] / fit_df_0[c.ION_SAT]) ** 2)
+
+    ##################################################
+    #            Time line of IVs in shot            #
+    ##################################################
+
+    if plot_timeline_fl:
+        plt.figure()
+        plt.errorbar(fit_df_0.index, n_e, yerr=d_n_e, fmt='x', color='silver', label=r'$\alpha$ = {}'.format(alpha))
+
+        plt.axhline(y=n_e_ts, linestyle='dashed', linewidth=1, color='m', label='TS')
+        plt.axhline(y=n_e_ts + d_n_e_ts, linestyle='dotted', linewidth=0.5, color='m')
+        plt.axhline(y=n_e_ts - d_n_e_ts, linestyle='dotted', linewidth=0.5, color='m')
+        for i, colour in enumerate(['r', 'b', 'g']):
+            plt.axvline(x=iv_datas[i].index, color=colour)
+        plt.ylabel(r'Density (m$^{-3}$)')
+        plt.xlabel('Time (s)')
+        plt.legend()
+
+    ##################################################
+    #         Examination of 3 different IVs         #
+    ##################################################
+
+    for i, iv_data in enumerate(iv_datas):
+        plt.figure()
+        plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0], 'x', label='Raw IV')
+        plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.FIT_Y].tolist()[0], label='Fit IV')
+        v_f_fitted = iv_data[c.FLOAT_POT].values[0]
+        T_e_fitted = iv_data[c.ELEC_TEMP].values[0]
+        a_fitted = iv_data[c.SHEATH_EXP].values[0]
+        c_s_fitted = np.sqrt((nrm.ELEM_CHARGE * (T_e_fitted + (gamma_i * T_e_fitted))) / nrm.PROTON_MASS)
+        n_e_fitted = iv_data[c.ION_SAT].values[0] / (nrm.ELEM_CHARGE * c_s_fitted * A_coll_0)
+
+        print('iv = {}:            v_f = {}, T_e = {}, n_e = {}, c_s = {}, A_coll = {}, a = {}'
+              .format(i, v_f_fitted, T_e_fitted, n_e_fitted, c_s_fitted, A_coll_0, a_fitted))
+        I_f = probe_0.get_analytical_iv(iv_data[c.RAW_X].tolist()[0], v_f_fitted, theta_perp, T_e_fitted, n_e_fitted,
+                                        print_fl=True)
+        I_ts = probe_0.get_analytical_iv(iv_data[c.RAW_X].tolist()[0], v_f_fitted, theta_perp, T_e_ts, n_e_ts,
+                                         print_fl=True)
+
+        plt.plot(iv_data[c.RAW_X].tolist()[0], I_f, label='Analytical - measured', linestyle='dashed', linewidth=1, color='r')
+        plt.plot(iv_data[c.RAW_X].tolist()[0], I_ts, label='Analytical - TS', linestyle='dashed', linewidth=1, color='m')
+        plt.legend()
+        plt.title('Comparison of analytical to measured IV curves for the small area probe')
+        plt.xlabel('Voltage (V)')
+        plt.ylabel('Current (A)')
+
+    ##################################################
+    #         Comparison of Parameter Scales         #
+    ##################################################
+
+    if plot_comparison_fl:
+        plt.figure()
+        for alpha in [2, 3, 4, 6, 8, 10]:
+            theta_perp = np.radians(alpha)
+            d_theta_perp = np.radians(0.1)
+            A_coll_0 = probe_0.get_collection_area(theta_perp)
+            d_A_coll = np.abs(probe_0.get_collection_area(theta_perp + d_theta_perp) - A_coll_0)
+
+            deg_freedom = 2
+            gamma_i = (deg_freedom + 2) / 2
+            # gamma_i = 1
+            c_s = np.sqrt((nrm.ELEM_CHARGE * (fit_df_0[c.ELEC_TEMP] + gamma_i * fit_df_0[c.ELEC_TEMP])) / nrm.PROTON_MASS)
+            d_c_s = np.abs((c_s * fit_df_0[c.ERROR_STRING.format(c.ELEC_TEMP)]) / (2 * fit_df_0[c.ELEC_TEMP]))
+
+            n_e = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_0)
+            d_n_e = np.abs(n_e) * np.sqrt((d_c_s / c_s)**2 + (d_A_coll / A_coll_0)**2 + (fit_df_0[c.ERROR_STRING.format(c.ION_SAT)] / fit_df_0[c.ION_SAT])**2)
+            plt.errorbar(fit_df_0.index, n_e, yerr=d_n_e, fmt='x', label=r'$\alpha$ = {}'.format(alpha))
+
+        plt.axhline(y=n_e_ts, linestyle='dashed', linewidth=1, color='red', label='TS')
+        plt.axhline(y=n_e_ts + d_n_e_ts, linestyle='dotted', linewidth=0.5, color='red')
+        plt.axhline(y=n_e_ts - d_n_e_ts, linestyle='dotted', linewidth=0.5, color='red')
+        plt.ylabel(r'Density (m$^{-3}$)')
+        plt.xlabel('Time (s)')
+        plt.legend()
+
+        plt.figure()
+        for I_sat_scale in [0.5, 1.0, 2.5]:
+            theta_perp = np.radians(9.95)
+            d_theta_perp = np.radians(0.1)
+            A_coll_0 = probe_0.get_collection_area(theta_perp)
+            d_A_coll = np.abs(probe_0.get_collection_area(theta_perp + d_theta_perp) - A_coll_0)
+
+            deg_freedom = 2
+            gamma_i = (deg_freedom + 2) / 2
+            # gamma_i = 1
+            c_s = np.sqrt((nrm.ELEM_CHARGE * (fit_df_0[c.ELEC_TEMP] + gamma_i * fit_df_0[c.ELEC_TEMP])) / nrm.PROTON_MASS)
+            d_c_s = np.abs((c_s * fit_df_0[c.ERROR_STRING.format(c.ELEC_TEMP)]) / (2 * fit_df_0[c.ELEC_TEMP]))
+
+            I_sat = fit_df_0[c.ION_SAT] * I_sat_scale
+            d_I_sat = fit_df_0[c.ERROR_STRING.format(c.ION_SAT)] * I_sat_scale
+
+            n_e = I_sat / (nrm.ELEM_CHARGE * c_s * A_coll_0)
+            d_n_e = np.abs(n_e) * np.sqrt((d_c_s / c_s)**2 + (d_A_coll / A_coll_0)**2 + (d_I_sat / I_sat)**2)
+
+            plt.errorbar(fit_df_0.index, n_e, yerr=d_n_e, fmt='x', label=r'$Scale$ = {}'.format(I_sat_scale))
+
+        plt.axhline(y=n_e_ts, linestyle='dashed', linewidth=1, color='red', label='TS')
+        plt.axhline(y=n_e_ts + d_n_e_ts, linestyle='dotted', linewidth=0.5, color='red')
+        plt.axhline(y=n_e_ts - d_n_e_ts, linestyle='dotted', linewidth=0.5, color='red')
+        plt.ylabel(r'Density (m$^{-3}$)')
+        plt.xlabel('Time (s)')
+        plt.legend()
+
+
+def multi_file_analysis(probe_0, folder, files):
+    params = np.zeros([4, len(files)])
+    for i, f in enumerate(files):
+        # Run analysis for shot.
+        dsr = 1
+        m = Magopter(folder, f)
+        m.prepare(down_sampling_rate=dsr)
+        m.trim(trim_end=0.83)
+        fit_df_0, fit_df_1 = m.fit()
+
+        T_e = fit_df_0[c.ELEC_TEMP].mean()
+        d_T_e = fit_df_0[c.ELEC_TEMP].std() / np.sqrt(fit_df_0[c.ELEC_TEMP].count())
+        I_sat = fit_df_0[c.ION_SAT].mean()
+        d_I_sat = fit_df_0[c.ION_SAT].std() / np.sqrt(fit_df_0[c.ION_SAT].count())
+        params[:, i] = [T_e, d_T_e, I_sat, d_I_sat]
+
+    fig, ax = plt.subplots()
+    plt.errorbar(params[0], yerr=params[1])
+    plt.ylabel('Temperature')
+
+    ax2 = ax.twinx()
+    plt.errorbar(params[2], yerr=params[3])
+    plt.ylabel('Density')
+
+
 if __name__ == '__main__':
     folders = ['2018-05-01_Leland/', '2018-05-02_Leland/', '2018-05-03_Leland/',
                '2018-06-05_Leland/', '2018-06-06_Leland/', '2018-06-07_Leland/']
@@ -517,16 +703,23 @@ if __name__ == '__main__':
         file_folders.extend([folder1] * len(glob.glob('*.adc')))
 
     files.sort()
+    for i, file in enumerate(files):
+        print('{}:    {}'.format(i, file))
 
-    file = files[-2]
-    ts_file = files[-1]
+    # file = files[286]
+    file = files[285]
+    ts_file = files[284]
     folder = file_folders[-2]
     print(folder, file, ts_file)
 
     mp = MagnumProbes()
 
+    # file = askopenfilename()
+
     # main_magopter_analysis()
-    # integrated_analysis(mp.probe_s, mp.probe_c, folder, file, ts_file=ts_file)
-    ts_ir_comparison(mp.probe_s, mp.probe_c, folder, file, ts_file)
+    # integrated_analysis(mp.probe_s, mp.probe_c, folder, file)
+    # ts_ir_comparison(mp.probe_s, mp.probe_c, folder, file, ts_file)
+    # multi_file_analysis(mp.probe_s, folder, files[285:297])
+    deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=True)
 
     plt.show()
