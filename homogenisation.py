@@ -1,13 +1,9 @@
 import os
 from abc import ABC, abstractmethod
-
 import numpy as np
-from scipy.io import loadmat
-
 from classes.ivdata import IVData
 from classes.spicedata import Spice2TData
 from inputparser import InputParser
-from constants import DIAG_PROBE_POT, INF_SEC_SHAPES, INF_SEC_GEOMETRY, INF_SEC_CONTROL, INF_SWEEP_PARAM
 import constants as c
 
 
