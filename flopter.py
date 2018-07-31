@@ -14,7 +14,7 @@ from classes.fitdata import IVFitData
 from classes.ivdata import IVData
 import classes.spicedata as sd
 import constants as c
-from homogeniser import Spice2Homogeniser
+from homogenisation import Spice2Homogeniser
 from inputparser import InputParser
 from normalisation import Denormaliser
 from fitters import IVFitter, FullIVFitter, GaussianFitter

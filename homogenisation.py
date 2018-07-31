@@ -12,6 +12,9 @@ import constants as c
 
 
 class Homogeniser(ABC):
+    # TODO: (31/07/18) This class is probably no longer necessary as this can be implemented within each individual
+    # TODO: IVAnalyser - might be better for streamlined implementation for this to still exist though, as a plug-and-
+    # TODO: play part of the analysis routine. At the very least data doesn't need to be stored in the homogeniser.
     """
     Abstract base class for the Homogeniser object.
 
@@ -88,6 +91,13 @@ class Spice2Homogeniser(Homogeniser):
         self.data = Spice2TData(self.data_filename)
 
     def homogenise(self):
+        """
+        Homogenise function for creaiton of IVData objects for use in SPICE simulation analysis. Uses specified
+        inputfile or inputparser to get relevant simulation timing data and then slices up the current and voltage
+        traces accordingly. Also uses InputParser methods to evaluate probe collection objects.
+        :param data:
+        :return:
+        """
         self._prehomogenise_checks()
 
         # Extract relevant arrays from the matlab file
@@ -99,7 +109,7 @@ class Spice2Homogeniser(Homogeniser):
         for index in probe_indices:
             probe_current_e += np.squeeze(self.data.objectscurrente)[index]
             probe_current_i += np.squeeze(self.data.objectscurrenti)[index]
-        probe_bias = np.squeeze(self.data.diagnostics[DIAG_PROBE_POT])
+        probe_bias = np.squeeze(self.data.diagnostics[c.DIAG_PROBE_POT])
         probe_current_tot = probe_current_i + probe_current_e
 
         # Prepend missing elements to make array cover the same timespan as the builtin diagnostics and then
@@ -124,12 +134,3 @@ class Spice2Homogeniser(Homogeniser):
                           e_current=probe_current_e, i_current=probe_current_i)
 
         return sweep_data, raw_data
-
-
-
-
-
-
-
-
-
