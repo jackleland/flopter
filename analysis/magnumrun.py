@@ -524,9 +524,9 @@ def ts_ir_comparison(probe_0, probe_1, folder, file, ts_file):
 def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_timeline_fl=False):
     magopter = Magopter(folder, file, ts_filename=ts_file)
     dsr = 1
-    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, plot_fl=True, crit_freq=640)
-    # magopter.iv_arr_coax_0 = magopter.iv_arrs[0][20:23]
-    # magopter.iv_arr_coax_1 = magopter.iv_arrs[1][20:23]
+    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, plot_fl=False, crit_freq=4000, crit_ampl=None)
+    magopter.iv_arrs[0] = magopter.iv_arrs[0][20:23]
+    magopter.iv_arrs[1] = magopter.iv_arrs[1][20:23]
     fit_df_0, fit_df_1 = magopter.fit()
 
     if magopter.ts_temp is not None:
@@ -539,8 +539,8 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
     else:
         T_e_ts = 1.61
         d_T_e_ts = 0.01
-        n_e_ts = 1.41e20
-        d_n_e_ts = 0.01e20
+        n_e_ts = 1.4e20
+        d_n_e_ts = 0.1e20
 
     count = fit_df_0[c.ELEC_TEMP].count()
     positions = [0.1, 0.5, 0.7]
@@ -581,6 +581,19 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
         plt.xlabel('Time (s)')
         plt.legend()
 
+        plt.figure()
+        plt.errorbar(fit_df_0.index, fit_df_0[c.ELEC_TEMP], yerr=fit_df_0[c.ERROR_STRING.format(c.ELEC_TEMP)], fmt='x',
+                     color='silver', label=r'$\alpha$ = {}'.format(alpha))
+
+        plt.axhline(y=T_e_ts, linestyle='dashed', linewidth=1, color='m', label='TS')
+        plt.axhline(y=T_e_ts + d_T_e_ts, linestyle='dotted', linewidth=0.5, color='m')
+        plt.axhline(y=T_e_ts - d_T_e_ts, linestyle='dotted', linewidth=0.5, color='m')
+        for i, colour in enumerate(['r', 'b', 'g']):
+            plt.axvline(x=iv_datas[i].index, color=colour)
+        plt.ylabel(r'Temperature (eV)')
+        plt.xlabel('Time (s)')
+        plt.legend()
+
     ##################################################
     #         Examination of 3 different IVs         #
     ##################################################
@@ -589,14 +602,35 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
         plt.figure()
         plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0], 'x', label='Raw IV')
         plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.FIT_Y].tolist()[0], label='Fit IV')
+
+        # Extract individual values from dataframe
         v_f_fitted = iv_data[c.FLOAT_POT].values[0]
+
         T_e_fitted = iv_data[c.ELEC_TEMP].values[0]
         a_fitted = iv_data[c.SHEATH_EXP].values[0]
-        c_s_fitted = np.sqrt((nrm.ELEM_CHARGE * (T_e_fitted + (gamma_i * T_e_fitted))) / nrm.PROTON_MASS)
-        n_e_fitted = iv_data[c.ION_SAT].values[0] / (nrm.ELEM_CHARGE * c_s_fitted * A_coll_0)
+        I_sat_fitted = iv_data[c.ION_SAT].values[0]
 
-        print('iv = {}:            v_f = {}, T_e = {}, n_e = {}, c_s = {}, A_coll = {}, a = {}'
-              .format(i, v_f_fitted, T_e_fitted, n_e_fitted, c_s_fitted, A_coll_0, a_fitted))
+        d_T_e_fitted = iv_data[c.ERROR_STRING.format(c.ELEC_TEMP)].values[0]
+        d_a_fitted = iv_data[c.ERROR_STRING.format(c.SHEATH_EXP)].values[0]
+        d_I_sat_fitted = iv_data[c.ERROR_STRING.format(c.ION_SAT)].values[0]
+
+        c_s_fitted = lp.sound_speed(T_e_fitted, gamma_i=1)
+        d_c_s_fitted = lp.d_sound_speed(c_s_fitted, T_e_fitted, d_T_e_fitted)
+        n_e_fitted = lp.electron_density(I_sat_fitted, c_s_fitted, A_coll_0)
+        d_n_e_fitted = lp.d_electron_density(n_e_fitted, c_s_fitted, d_c_s_fitted, A_coll_0, d_A_coll, I_sat_fitted,
+                                             d_I_sat_fitted)
+
+        print('iv = {}: \n'
+              '\t v_f = {:.3g} \n'
+              '\t T_e = {:.3g} +- {:.1g} \n'
+              '\t I_sat = {:.3g} +- {:.1g} \n'
+              '\t n_e = {:.3g} +- {:.1g} \n'
+              '\t a = {:.3g} +- {:.1g} \n'
+              '\t c_s = {:.3g} +- {:.1g} \n'
+              '\t A_coll = {:.3g} +- {:.1g} \n'
+              .format(i, v_f_fitted, T_e_fitted, d_T_e_fitted, I_sat_fitted, d_I_sat_fitted, n_e_fitted, d_n_e_fitted,
+                      a_fitted, d_a_fitted, c_s_fitted, d_c_s_fitted, A_coll_0, d_A_coll))
+
         I_f = probe_0.get_analytical_iv(iv_data[c.RAW_X].tolist()[0], v_f_fitted, theta_perp, T_e_fitted, n_e_fitted,
                                         print_fl=True)
         I_ts = probe_0.get_analytical_iv(iv_data[c.RAW_X].tolist()[0], v_f_fitted, theta_perp, T_e_ts, n_e_ts,
@@ -621,14 +655,16 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
             A_coll_0 = probe_0.get_collection_area(theta_perp)
             d_A_coll = np.abs(probe_0.get_collection_area(theta_perp + d_theta_perp) - A_coll_0)
 
-            deg_freedom = 2
-            gamma_i = (deg_freedom + 2) / 2
-            # gamma_i = 1
-            c_s = np.sqrt((nrm.ELEM_CHARGE * (fit_df_0[c.ELEC_TEMP] + gamma_i * fit_df_0[c.ELEC_TEMP])) / nrm.PROTON_MASS)
-            d_c_s = np.abs((c_s * fit_df_0[c.ERROR_STRING.format(c.ELEC_TEMP)]) / (2 * fit_df_0[c.ELEC_TEMP]))
+            # deg_freedom = 2
+            # gamma_i = (deg_freedom + 2) / 2
+            gamma_i = 1
+            c_s = lp.sound_speed(fit_df_0[c.ELEC_TEMP])
+            d_c_s = lp.d_sound_speed(c_s, fit_df_0[c.ELEC_TEMP], fit_df_0[c.ERROR_STRING.format(c.ELEC_TEMP)])
 
-            n_e = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_0)
-            d_n_e = np.abs(n_e) * np.sqrt((d_c_s / c_s)**2 + (d_A_coll / A_coll_0)**2 + (fit_df_0[c.ERROR_STRING.format(c.ION_SAT)] / fit_df_0[c.ION_SAT])**2)
+            # n_e = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_0)
+            n_e = lp.electron_density(fit_df_0[c.ION_SAT], c_s, A_coll_0)
+            d_n_e = lp.d_electron_density(n_e, c_s, d_c_s, A_coll_0, d_A_coll, fit_df_0[c.ION_SAT],
+                                          fit_df_0[c.ERROR_STRING.format(c.ION_SAT)])
             plt.errorbar(fit_df_0.index, n_e, yerr=d_n_e, fmt='x', label=r'$\alpha$ = {}'.format(alpha))
 
         plt.axhline(y=n_e_ts, linestyle='dashed', linewidth=1, color='red', label='TS')
@@ -668,28 +704,37 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
 
 
 def multi_file_analysis(probe_0, folder, files):
-    params = np.zeros([4, len(files)])
+    params = np.zeros([6, len(files)])
     for i, f in enumerate(files):
         # Run analysis for shot.
         dsr = 1
         m = Magopter(folder, f)
-        m.prepare(down_sampling_rate=dsr)
-        m.trim(trim_end=0.83)
+        m.prepare(down_sampling_rate=dsr, roi_b_plasma=True, crit_freq=4000, crit_ampl=1e-3)
         fit_df_0, fit_df_1 = m.fit()
+
+        for j, data_tag in enumerate([mag.TARGET_CHAMBER_PRESSURE, mag.TARGET_TILT]):
+            t, data = m.magnum_data[data_tag]
+            if isinstance(data, np.ndarray):
+                data = data.mean()
+            if data_tag is mag.TARGET_TILT:
+                data = data * (180/np.pi)
+            params[j, i] = data
 
         T_e = fit_df_0[c.ELEC_TEMP].mean()
         d_T_e = fit_df_0[c.ELEC_TEMP].std() / np.sqrt(fit_df_0[c.ELEC_TEMP].count())
         I_sat = fit_df_0[c.ION_SAT].mean()
         d_I_sat = fit_df_0[c.ION_SAT].std() / np.sqrt(fit_df_0[c.ION_SAT].count())
-        params[:, i] = [T_e, d_T_e, I_sat, d_I_sat]
+        params[2:, i] = [T_e, d_T_e, I_sat, d_I_sat]
 
     fig, ax = plt.subplots()
-    plt.errorbar(params[0], yerr=params[1])
+    plt.errorbar(params[0], params[2], yerr=params[3], label='Temperature')
     plt.ylabel('Temperature')
 
     ax2 = ax.twinx()
-    plt.errorbar(params[2], yerr=params[3])
-    plt.ylabel('Density')
+    plt.errorbar(params[0], params[4], yerr=params[5], label=r'I$_{sat}$')
+    plt.ylabel(r'I$_{sat}$')
+    plt.xlabel('Target Chamber Pressure')
+    plt.legend()
 
 
 if __name__ == '__main__':
@@ -720,6 +765,6 @@ if __name__ == '__main__':
     # integrated_analysis(mp.probe_s, mp.probe_c, folder, file)
     # ts_ir_comparison(mp.probe_s, mp.probe_c, folder, file, ts_file)
     # multi_file_analysis(mp.probe_s, folder, files[285:297])
-    deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=True)
+    deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=False)
 
     plt.show()
