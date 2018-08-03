@@ -1,9 +1,9 @@
 import flopter as fl
 import fitters as f
+import filtering as filt
 import numpy as np
 import pathlib as pth
 import matplotlib.pyplot as plt
-import matplotlib.colors as colors
 import classes.magnumadcdata as md
 import classes.ivdata as iv
 import pandas as pd
@@ -39,24 +39,32 @@ class Magopter(fl.IVAnalyser):
     _FIT_FILE_STRING = 'fit{}_{}.csv'
     _FIT_FILE_GLOBSTR = '*fit*.csv'
 
-    def __init__(self, directory, filename, ts_filename=None):
+    def __init__(self, directory, filename, ts_filename=None, coaxes=2, combine_sweeps_fl=True):
         super().__init__()
         # Check for leading/trailing forward slashes?
         self.directory = directory
         self.file = filename
         self.ts_file = ts_filename
         self.full_path = '{}{}{}{}'.format(pth.Path.home(), self._FOLDER_STRUCTURE, directory, filename)
+        self.coaxes = coaxes
+        self.combine_sweeps_fl = combine_sweeps_fl
 
         self.m_data = md.MagnumAdcData(self.full_path, filename)
 
         self.adc_duration = max(self.m_data.time)
 
+        self.raw_voltage = np.array([])
+        self.raw_time = np.array([])
+        self.raw_current = np.array([[]] * coaxes)
+        
+        self.voltage = np.array([])
+        self.time = np.array([])
+        self.current = np.array([[]] * coaxes)
+
         self.peaks = None
-        self.iv_arr_coax_0 = None
-        self.iv_arr_coax_1 = None
         self.max_voltage = []
         self.arcs = []
-        self.iv_arrs = []
+        self.iv_arrs = [[]] * coaxes
         self.fit_arrs = None
         self.trim_beg = 0.0
         self.trim_end = 1.0
@@ -128,165 +136,144 @@ class Magopter(fl.IVAnalyser):
             start = 0
             end = len(self.m_data.time)
 
-        raw_time = self.m_data.time[start:end]
-        raw_voltage = self.m_data.data[self._VOLTAGE_CHANNEL][start:end]
-        raw_current_0 = self.m_data.data[self._PROBE_CHANNEL_3][start:end]
-        raw_current_1 = self.m_data.data[self._PROBE_CHANNEL_4][start:end]
+        self.raw_time = self.m_data.time[start:end]
+        self.raw_voltage = self.m_data.data[self._VOLTAGE_CHANNEL][start:end]
+        self.raw_current[0] = self.m_data.data[self._PROBE_CHANNEL_3][start:end]
+        self.raw_current[1] = self.m_data.data[self._PROBE_CHANNEL_4][start:end]
 
         # Filter out high frequency noise (if present) with a butterworth filter set to a crit_freq defined by the user
         if crit_freq:
-            sp = np.fft.fft(raw_current_0)
-            freq = np.fft.fftfreq(len(raw_current_0), raw_time[1] - raw_time[0])
-            nyq = 1 / (2 * (raw_time[1] - raw_time[0]))
+            low_pass = filt.LowPassFilter(crit_freq)
+            nyq = 1 / (2 * (self.raw_time[1] - self.raw_time[0]))
             crit_freq_norm = crit_freq / nyq
-
-            b, a = sig.butter(6, crit_freq_norm, analog=False)
-            w, h = sig.freqz(b, a)
 
             if plot_fl:
                 plt.figure()
-                plt.plot((nyq * w) / np.pi, abs(h))
-                plt.title('Butterworth filter frequency response')
-                plt.xlabel('Frequency [radians / second]')
-                plt.ylabel('Amplitude [dB]')
-                plt.xlim(0, 1500)
-                plt.grid(which='both', axis='both')
-                plt.axvline(crit_freq, color='green')  # cutoff frequency
-
-                plt.figure()
-                # plt.subplot(211)
-                plt.plot(raw_time, raw_current_0, color='silver', label='Raw')
+                plt.plot(self.raw_time, self.raw_current[0], color='silver', label='Raw')
                 for cf in [0.5, 1, 2]:
                     bb, aa = sig.butter(6, cf * crit_freq_norm, analog=False)
-                    ff_current = sig.filtfilt(bb, aa, raw_current_0)
-                    plt.plot(raw_time, ff_current, label='crit_freq = {:.0f}'.format(cf * crit_freq_norm * nyq))
+                    ff_current = sig.filtfilt(bb, aa, self.raw_current[0])
+                    plt.plot(self.raw_time, ff_current, label='crit_freq = {:.0f}'.format(cf * crit_freq_norm * nyq))
                 plt.legend()
-                plt.xlim(11, 12.5)
-                plt.ylim(-0.65, 0.65)
+                plt.xlim(12, 12.5)
+                plt.ylim(-2.25, 1.35)
                 plt.xlabel('Time (s)')
                 plt.ylabel('Current (A)')
 
-                # Plot spectrogram of raw_current signal from probe 0
-                # plt.subplot(212)
+            # Apply filter to raw_current signals.
+            self.voltage = low_pass.apply(self.raw_time, self.raw_voltage)
+            if plot_fl:
+                fig = plt.figure()
+                low_pass.plot(self.raw_time, self.raw_voltage, apply_plot_fl=False, range=[[12.22, 12.25], [-100, 11]],
+                              fig=plt.subplot(211), show_fl=False)
+                low_pass.plot(self.raw_time, self.raw_current[0], apply_plot_fl=False, range=[[12.22, 12.25], [-2.25, 1.35]],
+                              fig=plt.subplot(212))
+            self.current[0] = low_pass.apply(self.raw_time, self.raw_current[0])
+            self.current[1] = low_pass.apply(self.raw_time, self.raw_current[1])
+
+            # raw_voltage = filt_voltage
+            # raw_current_0 = filt_current_0
+            # raw_current_1 = filt_current_1
+
+        if crit_ampl:
+            gate = filt.GatedFilter(crit_ampl)
+
+            if crit_freq:
+                gated_voltage = gate.apply(self.raw_time, self.voltage, plot_fl=plot_fl)
+                gated_current_0 = gate.apply(self.raw_time, self.current[0])
+                gated_current_1 = gate.apply(self.raw_time, self.current[1])
+            else:
+                gated_voltage = gate.apply(self.raw_time, self.raw_voltage, plot_fl=plot_fl)
+                gated_current_0 = gate.apply(self.raw_time, self.raw_current[0])
+                gated_current_1 = gate.apply(self.raw_time, self.raw_current[1])
+
+            self.voltage = gated_voltage.astype(np.float64)
+            self.current[0] = gated_current_0.astype(np.float64)
+            self.current[1] = gated_current_1.astype(np.float64)
+
+        if not crit_freq and not crit_ampl:
+            self.voltage = self.raw_voltage
+            self.current = self.raw_current
+
+            if plot_fl:
+                sp_I = np.fft.fft(self.raw_current[0])
+                sp_V = np.fft.fft(self.raw_voltage)
+                sp_I_norm = np.abs(sp_I) / np.max(np.abs(sp_I))
+                sp_V_norm = np.abs(sp_V) / np.max(np.abs(sp_V))
+                freq = np.fft.fftfreq(len(self.raw_current[0]), self.raw_time[1] - self.raw_time[0])
+                nyq = 1 / (2 * (self.raw_time[1] - self.raw_time[0]))
+
+                # plot the two fourier transforms overlaid
                 plt.figure()
-                sample_freq = 1 / (raw_time[1] - raw_time[0])
+                plt.semilogy(freq, np.abs(sp_I), '--', label='FFT Spectrum - I')
+                plt.semilogy(freq, np.abs(sp_V), '--', label='FFT Spectrum - V')
+                plt.ylabel('Amplitude')
+                plt.xlabel('Frequency (Hz)')
+                plt.grid(which='both', axis='both')
+                plt.xlim(0, 5000)
+                # plt.xlim(0, 50000)
+                plt.ylim(1e-1, 1e8)
+                # plt.ylim(1e-6, 1)
+                plt.legend()
+
+                # plot the two separately with peaks found.
+                peaks_I = sig.argrelmax(sp_I_norm, order=120)
+                peaks_V = sig.argrelmax(sp_V_norm, order=200)
+
+                plt.figure()
+                plt.subplot(211)
+                plt.semilogy(freq, sp_I_norm, 'x', label='FFT Spectrum - I')
+                # plt.semilogy(freq[peaks_I], sp_I_norm[peaks_I], 'x', label='FFT Peaks - I')
+                plt.ylabel('Amplitude')
+                plt.grid(which='both', axis='both')
+                plt.xlim(0, 5000)
+                # plt.xlim(0, 50000)
+                plt.ylim(1e-6, 1)
+                plt.legend()
+
+                plt.subplot(212)
+                plt.semilogy(freq, sp_V_norm, 'x', label='FFT Spectrum - V')
+                # plt.semilogy(freq[peaks_V], sp_V_norm[peaks_V], 'x', label='FFT Peaks - V')
+                plt.ylabel('Amplitude')
+                plt.xlabel('Frequency (Hz)')
+                plt.grid(which='both', axis='both')
+                plt.xlim(0, 5000)
+                # plt.xlim(0, 50000)
+                plt.ylim(1e-6, 1)
+                plt.legend()
+
+                # Plot spectrogram of voltage trace
+                plt.figure()
+                sample_freq = 1 / (self.raw_time[1] - self.raw_time[0])
                 print(sample_freq)
-                ff, tt, Sxx = sig.spectrogram(raw_current_0, sample_freq)
+                ff, tt, Sxx = sig.spectrogram(self.raw_voltage, sample_freq)
                 Sxx_log = np.log(Sxx)
                 plt.pcolormesh(tt, ff, Sxx_log)
                 cbar = plt.colorbar()
                 cbar.set_label('Log(Amplitude)')
                 plt.ylabel('Frequency [Hz]')
                 plt.xlabel('Time [sec]')
-                # plt.ylim(0, 1500)
 
-                # Plot a side-by-side comparison of the FFT spectrum before and after applying the filter, along with
-                # the filter shape and cut-off frequency.
+                filtered_voltage = filt.LowPassFilter(4000).apply(self.raw_time, self.raw_voltage, plot_fl=True)
                 plt.figure()
-                ax1 = plt.subplot(211)
-                plt.semilogy(freq, np.abs(sp) / np.max(np.abs(sp)), label='FFT Spectrum')
-                plt.ylim(1e-7, 1.1)
-                plt.xlim(0, 1500)
-                plt.xlabel('Frequency')
-                plt.ylabel('Amplitude')
-                plt.grid(which='both', axis='both')
-
-                ax2 = ax1.twinx()
-                plt.plot((nyq * w) / np.pi, abs(h), color='orange', label='Filter')
-                ax2.set_ylim(1e-7, 1.001)
-                plt.ylabel('Filter Amplitude')
-                plt.axvline(crit_freq, color='green', label='Cutoff Freq')  # cutoff frequency
-
-            # Apply filter to raw_current signals.
-            filt_current_0 = sig.filtfilt(b, a, raw_current_0)
-            filt_current_1 = sig.filtfilt(b, a, raw_current_1)
-
-            if plot_fl:
-                # Second half of side-by-side plot begun above.
-                sp_postfilter = np.fft.fft(raw_current_0)
-
-                ax1 = plt.subplot(212)
-                plt.semilogy(freq, np.abs(sp_postfilter) / np.max(np.abs(sp_postfilter)))
-                plt.ylim(1e-7, 1.1)
-                plt.xlim(0, 1500)
-                plt.xlabel('Frequency')
-                plt.ylabel('Amplitude')
-                plt.grid(which='both', axis='both')
-
-                ax2 = ax1.twinx()
-                ax2.set_ylim(1e-7, 1.001)
-                plt.plot((nyq * w) / np.pi, abs(h), color='orange')
-                plt.ylabel('Filter Amplitude')
-                plt.axvline(crit_freq, color='green')  # cutoff frequency
-
-            raw_current_0 = filt_current_0
-            raw_current_1 = filt_current_1
-
-        if crit_ampl:
-            sp = np.fft.fft(raw_current_0)
-            freq = np.fft.fftfreq(len(raw_current_0), raw_time[1] - raw_time[0])
-            amplitudes = np.abs(sp) / np.max(np.abs(sp))
-            sp_gated = sp.copy()
-            for i, amp in enumerate(amplitudes):
-                if amp < crit_ampl:
-                    sp_gated[i] = 0
-
-            if plot_fl:
-                # Plots of the gated spectrum, i.e. frequencies with an amplitude below a certain cutoff are rejected.
-                plt.figure()
-                plt.subplot(211)
-                plt.semilogy(freq, np.abs(sp) / np.max(np.abs(sp)), 'x', label='FFT Spectrum')
-                plt.axhline(y=crit_ampl, linewidth=1.0, linestyle='dotted', color='red')
-                plt.ylabel('Amplitude')
-                plt.grid(which='both', axis='both')
-                plt.xlim(0, 1500)
-                plt.ylim(1e-6, 1)
-                plt.legend()
-
-                plt.subplot(212)
-                plt.semilogy(freq, np.abs(sp_gated) / np.max(np.abs(sp_gated)), 'x', label='Gated Spectrum')
-                plt.axhline(y=crit_ampl, linewidth=1.0, linestyle='dotted', color='red')
-                plt.xlabel('Frequency (Hz)')
-                plt.ylabel('Amplitude')
-                plt.grid(which='both', axis='both')
-                plt.xlim(0, 1500)
-                plt.ylim(1e-6, 1)
-                plt.legend()
-
-                # Plot of inverse fft'd gated spectrum compared to the raw_signal
-                plt.figure()
-                gated_sig = np.fft.ifft(sp_gated)
-                plt.plot(raw_time, raw_current_0, label='Raw signal', color='silver')
-                if crit_freq:
-                    plt.plot(raw_time, filt_current_0, label='Filtered signal')
-                plt.plot(raw_time, gated_sig, label='Gated signal')
+                plt.plot(self.raw_time, self.raw_voltage, label='Raw Voltage')
+                plt.plot(self.raw_time, filtered_voltage, label='Filtered Voltage')
                 plt.xlabel('Time (s)')
-                plt.ylabel('Current (A)')
-                plt.legend()
+                plt.ylabel('Voltage (V)')
+                plt.xlim(8, 8.4)
 
                 plt.show()
-
-            sp_1 = np.fft.fft(raw_current_1)
-            amplitudes_1 = np.abs(sp_1) / np.max(np.abs(sp_1))
-            sp_gated_1 = sp_1.copy()
-            for i, amp in enumerate(amplitudes_1):
-                if amp < crit_ampl:
-                    sp_gated_1[i] = 0
-            gated_current_0 = np.fft.ifft(sp_gated)
-            gated_current_1 = np.fft.ifft(sp_gated_1)
-
-            raw_current_0 = gated_current_0.astype(np.float64)
-            raw_current_1 = gated_current_1.astype(np.float64)
+                exit()
 
         # Use fourier decomposition from get_frequency method in triangle fitter to get frequency
         triangle = f.TriangleWaveFitter()
-        frequency = triangle.get_frequency(raw_time, raw_voltage, accepted_freqs=self._ACCEPTED_FREQS)
+        frequency = triangle.get_frequency(self.raw_time, self.voltage, accepted_freqs=self._ACCEPTED_FREQS)
 
         # Smooth the voltage to get a first read of the peaks on the triangle wave
-        smoothed_voltage = sig.savgol_filter(raw_voltage, 21, 2)
+        smoothed_voltage = sig.savgol_filter(self.voltage, 21, 2)
         top = sig.argrelmax(smoothed_voltage, order=100)[0]
         bottom = sig.argrelmin(smoothed_voltage, order=100)[0]
-        _peaks = raw_time[np.concatenate([top, bottom])]
+        _peaks = self.raw_time[np.concatenate([top, bottom])]
         _peaks.sort()
 
         # Get distances between the peaks and filter based on the found frequency
@@ -295,53 +282,54 @@ class Magopter(fl.IVAnalyser):
         _peaks_ind = np.where(_peak_distances > threshold)[0]
 
         # Starting from the first filtered peak, arrange a period-spaced array
-        peaks_refined = np.arange(_peaks[_peaks_ind[0]], raw_time[-1], 1 / (2 * frequency))
+        peaks_refined = np.arange(_peaks[_peaks_ind[0]], self.raw_time[-1], 1 / (2 * frequency))
         self.peaks = peaks_refined
 
         if plot_fl:
             plt.figure()
-            plt.plot(raw_time, raw_voltage)
-            # plt.plot(raw_time, triangle_fit.fit_y)
+            plt.plot(self.raw_time, self.voltage)
+            plt.plot(self.raw_time, triangle.fit(self.raw_time, self.voltage).fit_y)
             for peak in self.peaks:
                 plt.axvline(x=peak, linestyle='dashed', linewidth=1, color='r')
 
-        self.iv_arr_coax_0 = []
-        self.iv_arr_coax_1 = []
+        if self.combine_sweeps_fl:
+            skip = 2
+            sweep_fitter = triangle
+        else:
+            skip = 1
+            sweep_fitter = f.StraightLineFitter()
 
-        straight_line = f.StraightLineFitter()
-        for i in range(len(self.peaks) - 2):
-            sweep_start = np.abs(raw_time - self.peaks[i]).argmin()
-            sweep_stop = np.abs(raw_time - self.peaks[i+2]).argmin()
-            # sweep_stop = self.peaks[i + 1]
+        for i in range(len(self.peaks) - skip):
+            sweep_start = np.abs(self.raw_time - self.peaks[i]).argmin()
+            sweep_stop = np.abs(self.raw_time - self.peaks[i + skip]).argmin()
 
-            sweep_voltage = raw_voltage[sweep_start:sweep_stop]
-            # sweep_fit = triangle_fit.fit_y[sweep_start:sweep_stop]
-            sweep_time = raw_time[sweep_start:sweep_stop]
-            sweep_fit = straight_line.fit(sweep_time, sweep_voltage)
-            if i == 0 and plot_fl:
-                sweep_fit.plot()
-            self.max_voltage.append((np.max(np.abs(sweep_voltage - sweep_fit.fit_y))))
+            sweep_voltage = self.voltage[sweep_start:sweep_stop]
+            sweep_time = self.raw_time[sweep_start:sweep_stop]
 
-            if filter_arcs_fl and np.max(np.abs(sweep_voltage - sweep_fit.fit_y)) > self._ARCING_THRESHOLD:
-                self.arcs.append(np.mean(sweep_time))
-                continue
+            if filter_arcs_fl:
+                sweep_fit = sweep_fitter.fit(sweep_time, sweep_voltage)
+                self.max_voltage.append((np.max(np.abs(sweep_voltage - sweep_fit.fit_y))))
+                if i == 0 and plot_fl:
+                    sweep_fit.plot()
+                if np.max(np.abs(sweep_voltage - sweep_fit.fit_y)) > self._ARCING_THRESHOLD:
+                    self.arcs.append(np.mean(sweep_time))
+                    continue
 
-            sweep_current_0 = raw_current_0[sweep_start:sweep_stop]
-            sweep_current_1 = raw_current_1[sweep_start:sweep_stop]
-            if sweep_voltage[0] > sweep_voltage[-1]:
+            sweep_current = np.array([[]] * self.coaxes)
+            for j in range(self.coaxes):
+                sweep_current[j] = self.current[j][sweep_start:sweep_stop]
+
+            # Reverse alternate sweeps if not operating in combined sweeps mode, so
+            if not self.combine_sweeps_fl and sweep_voltage[0] > sweep_voltage[-1]:
                 sweep_voltage = np.array(list(reversed(sweep_voltage)))
                 sweep_time = np.array(list(reversed(sweep_time)))
-                sweep_current_0 = np.array(list(reversed(sweep_current_0)))
-                sweep_current_1 = np.array(list(reversed(sweep_current_1)))
-            self.iv_arr_coax_0.append(iv.IVData(np.array(sweep_voltage) - np.array(sweep_current_0),
-                                                sweep_current_0, sweep_time))
-            self.iv_arr_coax_1.append(iv.IVData(np.array(sweep_voltage) - np.array(sweep_current_1),
-                                                sweep_current_1, sweep_time))
+                for j in range(self.coaxes):
+                    sweep_current[j] = np.array(list(reversed(sweep_current[j])))
 
-        self.iv_arrs = [
-            self.iv_arr_coax_0,
-            self.iv_arr_coax_1
-        ]
+            # Create IVData objects for each sweep (or sweep pair)
+            for j in range(self.coaxes):
+                self.iv_arrs[j].append(iv.IVData(np.array(sweep_voltage) - np.array(sweep_current[j]),
+                                                 sweep_current[j], sweep_time))
 
     def trim(self, trim_beg=0.0, trim_end=1.0):
         self.trim_beg = trim_beg
