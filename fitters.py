@@ -124,7 +124,7 @@ class IVFitter(GenericFitter, ABC):
     def find_floating_pot(cls, iv_data):
         try:
             iv_interp = interp1d(iv_data[c.CURRENT], iv_data[c.POTENTIAL])
-            v_f = iv_interp([0.0])
+            v_f = iv_interp([0.0]).mean()
         except ValueError as e:
             print('V_f could not be found effectively, returning default value.')
             print(str(e))
@@ -604,17 +604,16 @@ class TriangleWaveFitter(GenericFitter):
     def __init__(self, frequency=None):
         super().__init__()
         self._param_labels = {
-            c.PERIOD: 0,
-            c.AMPLITUDE: 1,
-            c.OFFSET_Y: 2,
-            c.OFFSET_X: 3
+            c.AMPLITUDE: 0,
+            c.OFFSET_Y: 1,
+            c.OFFSET_X: 2
         }
         self.freq = frequency
         # These values taken from values used for majority of magnum experimental run
-        self.default_values = [0.025, 53.1, 4.34, 0.0]
+        self.default_values = [53.1, 4.34, 0.0]
         self.default_bounds = [
-            [     0,    0, -np.inf,      0],
-            [np.inf, 1000,  np.inf, np.inf]
+            [   0, -np.inf,      0],
+            [1000,  np.inf, np.inf]
         ]
         self.name = 'Triangle Wave'
 
