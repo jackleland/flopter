@@ -1,4 +1,4 @@
-from constants import ELEC_TEMP, ION_SAT, SHEATH_EXP, FLOAT_POT
+import constants as c
 import matplotlib.pyplot as plt
 
 
@@ -41,19 +41,21 @@ class FitParamList(list):
 
 
 class FitData2(object):
-    def __init__(self, raw_x, raw_y, fit_y, fit_values, fit_errors, fitter):
+    def __init__(self, raw_x, raw_y, fit_y, fit_values, fit_errors, fitter, chi2=None, reduced_chi2=None):
         self.raw_x = raw_x
         self.raw_y = raw_y
         self.fit_y = fit_y
         self.fit_params = FitParamList(fit_values, fit_errors)
         self.fitter = fitter
+        self.chi2 = chi2
+        self.reduced_chi2 = reduced_chi2
 
     def plot(self, fig=None, show_fl=True):
         if not fig:
             plt.figure()
         plt.plot(*self.get_raw_plottables(), 'x')
         plt.plot(*self.get_fit_plottables(), label=self.get_param_str())
-        plt.xlabel('x')
+        plt.xlabel(c.RAW_X)
         plt.ylabel(self.fitter.name)
         plt.legend()
         if show_fl:
@@ -101,10 +103,15 @@ class FitData2(object):
 
     def to_dict(self):
         dictionary = {
-            'raw_x': self.raw_x,
-            'raw_y': self.raw_y,
-            'fit_y': self.fit_y
+            c.RAW_X: self.raw_x,
+            c.RAW_Y: self.raw_y,
+            c.FIT_Y: self.fit_y
         }
+        if self.chi2:
+            dictionary[c.CHI2] = self.chi2
+        if self.reduced_chi2:
+            dictionary[c.REDUCED_CHI2] = self.reduced_chi2
+
         param_labels = self.fitter.get_param_labels()
         param_values = self.fit_params.get_values()
         param_errors = self.fit_params.get_errors()
@@ -115,24 +122,26 @@ class FitData2(object):
 
 
 class IVFitData(FitData2):
-    def __init__(self, raw_voltage, raw_current, fit_current, fit_params, fit_stdevs, fitter):
-        super().__init__(raw_voltage, raw_current, fit_current, fit_params, fit_stdevs, fitter)
+    def __init__(self, raw_voltage, raw_current, fit_current, fit_params, fit_stdevs, fitter, chi2=None,
+                 reduced_chi2=None):
+        super().__init__(raw_voltage, raw_current, fit_current, fit_params, fit_stdevs, fitter, chi2=chi2,
+                         reduced_chi2=reduced_chi2)
 
     def get_temp(self, errors_fl=True):
-        return self.get_param(ELEC_TEMP, errors_fl)
+        return self.get_param(c.ELEC_TEMP, errors_fl)
 
     def get_isat(self, errors_fl=True):
-        return self.get_param(ION_SAT, errors_fl)
+        return self.get_param(c.ION_SAT, errors_fl)
 
     def get_sheath_exp(self, errors_fl=True):
-        return self.get_param(SHEATH_EXP, errors_fl)
+        return self.get_param(c.SHEATH_EXP, errors_fl)
 
     def get_floating_pot(self):
         return self.fitter.v_f
 
     def to_dict(self):
         dictionary = super().to_dict()
-        dictionary[FLOAT_POT] = self.fitter.v_f
+        dictionary[c.FLOAT_POT] = self.fitter.v_f
         return dictionary
 
     @classmethod

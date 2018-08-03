@@ -30,6 +30,8 @@ RAW_X = 'raw_x'
 RAW_Y = 'raw_y'
 FIT_Y = 'fit_y'
 ERROR_STRING = 'd_{}'
+CHI2 = 'chi2'
+REDUCED_CHI2 = 'reduced_chi2'
 
 # SPICE Homogenisation constants
 SWEEP_LOWER = -9.95

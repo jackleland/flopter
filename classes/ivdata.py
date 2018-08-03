@@ -1,4 +1,5 @@
-from constants import POTENTIAL, CURRENT, TIME, ELEC_CURRENT, ION_CURRENT
+from constants import POTENTIAL, CURRENT, TIME, ELEC_CURRENT, ION_CURRENT, ERROR_STRING
+import numpy as np
 
 
 class IVData(dict):
@@ -12,9 +13,11 @@ class IVData(dict):
     """
     _DEFAULT_TRIM_BEG = 0.0
     _DEFAULT_TRIM_END = 1.0
+    _DEFAULT_STRAIGHT_CUTOFF = -30
 
     def __init__(self, voltage, total_current, time, e_current=None, i_current=None,
-                 trim_beg=_DEFAULT_TRIM_BEG, trim_end=_DEFAULT_TRIM_END):
+                 trim_beg=_DEFAULT_TRIM_BEG, trim_end=_DEFAULT_TRIM_END, estimate_error_fl=True,
+                 sat_region=_DEFAULT_STRAIGHT_CUTOFF):
         super().__init__([
             (CURRENT, total_current),
             (POTENTIAL, voltage),
@@ -26,6 +29,16 @@ class IVData(dict):
             self[ION_CURRENT] = i_current
         self.trim_beg = trim_beg
         self.trim_end = trim_end
+
+        if estimate_error_fl:
+            str_sec = np.where(self[POTENTIAL] <= sat_region)
+            i_ss = self[CURRENT][str_sec]
+
+            self[ERROR_STRING.format(CURRENT)] = np.std(i_ss)
+
+        self.untrimmed_items = {}
+        for k, v in self.items():
+            self.untrimmed_items[k] = v
 
     def split(self):
         if ION_CURRENT in self.keys():
@@ -39,6 +52,7 @@ class IVData(dict):
                 print('WARNING: trim values unchanged from default, no trimming will take place')
                 return
             else:
+                print('Continuing with pre-set trim values.')
                 trim_beg = self.trim_beg
                 trim_end = self.trim_end
 
@@ -58,7 +72,7 @@ class IVData(dict):
         return IVData(self[POTENTIAL], self[CURRENT], self[TIME], e_current=e_current, i_current=i_current,
                       trim_beg=self.trim_beg, trim_end=self.trim_end)
 
-    def multi_fit(self, sat_region=-30):
+    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF):
         """
         Multi-stage fitting method using an initial straight line fit to the saturation region of the IV curve (decided
         by the sat_region kwarg). The fitted I_sat is then left fixed while T_e and a are found with a 2 parameter fit,

@@ -43,7 +43,7 @@ class GenericFitter(ABC):
         parameters = self.check_for_fixed_vals(parameters)
         return self.fit_function(v, *parameters)
 
-    def fit(self, x_data, y_data, initial_vals=None, bounds=None):
+    def fit(self, x_data, y_data, initial_vals=None, bounds=None, sigma=None):
         # Check params exist and check length of passed arrays
         if len(self._param_labels) == 0:
             print('No params, IVFitter class not properly implemented')
@@ -63,10 +63,17 @@ class GenericFitter(ABC):
                  '(see get_param_labels()).'.format(len(bounds)))
             bounds = CF_DEFAULT_VALUES
 
-        fit_vals, fit_cov = curve_fit(self._curve_fit_func, x_data, y_data, p0=initial_vals, bounds=bounds)
+        fit_vals, fit_cov = curve_fit(self._curve_fit_func, x_data, y_data, p0=initial_vals, bounds=bounds, sigma=sigma)
         fit_y_data = self.fit_function(x_data, *fit_vals)
         fit_sterrs = np.sqrt(np.diag(fit_cov))
-        return FitData2(x_data, y_data, fit_y_data, fit_vals, fit_sterrs, self)
+        if sigma is not None:
+            fit_chi2 = (((y_data - fit_y_data) / sigma)**2).sum()
+            fit_reduced_chi2 = fit_chi2 / (len(y_data) - len(fit_vals))
+        else:
+            fit_chi2 = None
+            fit_reduced_chi2 = None
+        return FitData2(x_data, y_data, fit_y_data, fit_vals, fit_sterrs, self, chi2=fit_chi2,
+                        reduced_chi2=fit_reduced_chi2)
 
     def get_param_labels(self):
         return list(self._param_labels.keys())
@@ -98,12 +105,12 @@ class IVFitter(GenericFitter, ABC):
         super().__init__()
         self.v_f = floating_potential
 
-    def fit(self, x_data, y_data, initial_vals=None, bounds=None, print_fl=False):
+    def fit(self, x_data, y_data, initial_vals=None, bounds=None, print_fl=False, sigma=None):
         if not self.v_f:
             if print_fl:
                 print('No floating potential specified, using default value ({}).'.format(self._DEFAULT_V_F))
             self.v_f = self._DEFAULT_V_F
-        fit_data = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds)
+        fit_data = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds, sigma=sigma)
         return IVFitData.from_fit_data(fit_data)
 
     def fit_iv_data(self, iv_data, initial_vals=None, bounds=None, trim_fl=False, print_fl=False):
@@ -423,7 +430,7 @@ class GaussianFitter(GenericFitter):
         v_0_guess = hist_bins[int((max + min) / 2)]
         return v_0_guess
 
-    def fit(self, x_data, y_data, initial_vals=None, bounds=None, temp=None):
+    def fit(self, x_data, y_data, initial_vals=None, bounds=None, temp=None, sigma=None):
         """
             Override of the fit method with included provision for automatic finding of the flow velocity if one is not
             specified. A separate temperature can be specified with the temp keyword.
@@ -447,7 +454,7 @@ class GaussianFitter(GenericFitter):
             else:
                 initial_vals = [self.default_values[temp_ind] / (self.v_scale ** 2), v_0]
 
-        fitdata = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds)
+        fitdata = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds, sigma=sigma)
 
         # Convert values back to pre-scaled magnitude
         fitdata.fit_params[temp_ind].value *= self.v_scale ** 2
@@ -617,7 +624,7 @@ class TriangleWaveFitter(GenericFitter):
         ]
         self.name = 'Triangle Wave'
 
-    def fit(self, x_data, y_data, freq=None, initial_vals=None, bounds=None, calc_guess_fl=True):
+    def fit(self, x_data, y_data, freq=None, initial_vals=None, bounds=None, sigma=None, calc_guess_fl=True):
         """
             Override of the fit method with included provision for automatic finding of the amplitude and period of the
             triangular wave if one is not specified.
@@ -661,7 +668,7 @@ class TriangleWaveFitter(GenericFitter):
         # fit_y_data = self.fit_function(x_data, *third_fit.fit_params.get_values())
         # return FitData2(x_data, y_data, fit_y_data, third_fit.fit_params.get_values(), third_fit.fit_params.get_errors(),
         #                 self)
-        return super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds)
+        return super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds, sigma=sigma)
 
     @staticmethod
     def get_initial_guess(voltage, time):
