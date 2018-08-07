@@ -4,6 +4,7 @@ import numpy as np
 from scipy.optimize import curve_fit
 import scipy.signal as sig
 from scipy.interpolate import interp1d
+import collections as coll
 
 from classes.ivdata import IVData
 from classes.fitdata import FitData2, IVFitData
@@ -19,6 +20,8 @@ CF_DEFAULT_BOUNDS = (-np.inf, np.inf)
 class GenericFitter(ABC):
     """
     Semi-abstract base class for a Fitter object, which describes a model for fitting an IV curve.
+
+    :param: fixed_values
     """
     def __init__(self):
         self._param_labels = {}
@@ -32,12 +35,12 @@ class GenericFitter(ABC):
         pass
 
     def check_for_fixed_vals(self, parameters):
-        parameters = list(parameters)
-        if isinstance(self.fixed_values, dict):
-            for i in range(len(parameters)):
-                if i in self.fixed_values:
-                    parameters[i] = self.fixed_values[i]
-        return parameters
+        iterator = iter(parameters)
+        if (isinstance(self.fixed_values, coll.Sequence)
+                and len([value for value in self.fixed_values if value is None]) == len(parameters)):
+            return [next(iterator) if value is None else value for value in self.fixed_values]
+        else:
+            return parameters
 
     def _curve_fit_func(self, v, *parameters):
         parameters = self.check_for_fixed_vals(parameters)
@@ -63,6 +66,15 @@ class GenericFitter(ABC):
                  '(see get_param_labels()).'.format(len(bounds)))
             bounds = CF_DEFAULT_VALUES
 
+        if isinstance(self.fixed_values, coll.Sequence) and len(initial_vals) == len(self.fixed_values):
+            pops = 0
+            for i, fixed_val in enumerate(self.fixed_values):
+                if fixed_val is None:
+                    initial_vals.pop(i - pops)
+                    bounds[0].pop(i - pops)
+                    bounds[1].pop(i - pops)
+                    pops += 1
+
         fit_vals, fit_cov = curve_fit(self._curve_fit_func, x_data, y_data, p0=initial_vals, bounds=bounds, sigma=sigma)
         fit_y_data = self.fit_function(x_data, *fit_vals)
         fit_sterrs = np.sqrt(np.diag(fit_cov))
@@ -72,7 +84,7 @@ class GenericFitter(ABC):
         else:
             fit_chi2 = None
             fit_reduced_chi2 = None
-        return FitData2(x_data, y_data, fit_y_data, fit_vals, fit_sterrs, self, chi2=fit_chi2,
+        return FitData2(x_data, y_data, fit_y_data, fit_vals, fit_sterrs, self, sigma=sigma, chi2=fit_chi2,
                         reduced_chi2=fit_reduced_chi2)
 
     def get_param_labels(self):
@@ -113,13 +125,13 @@ class IVFitter(GenericFitter, ABC):
         fit_data = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds, sigma=sigma)
         return IVFitData.from_fit_data(fit_data)
 
-    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None, trim_fl=False, print_fl=False):
+    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None, sigma=None, trim_fl=False, print_fl=False):
         assert isinstance(iv_data, IVData)
         if trim_fl:
             iv_data.trim()
         potential = iv_data[c.POTENTIAL]
         current = iv_data[c.CURRENT]
-        return self.fit(potential, current, initial_vals, bounds, print_fl=print_fl)
+        return self.fit(potential, current, initial_vals, bounds, sigma=sigma, print_fl=print_fl)
 
     def set_floating_pot(self, floating_pot):
         self.v_f = floating_pot
@@ -648,12 +660,12 @@ class TriangleWaveFitter(GenericFitter):
 
         period = 1/(2*self.freq)
         if not initial_vals and calc_guess_fl:
-            initial_vals = [period, *self.get_initial_guess(y_data, x_data)]
+            initial_vals = [*self.get_initial_guess(y_data, x_data)]
 
-        if not bounds and calc_guess_fl:
-            bounds = self.default_bounds
-            bounds[0][0] = period * 0.9
-            bounds[1][0] = period * 1.1
+        # if not bounds and calc_guess_fl:
+        #     bounds = self.default_bounds
+        #     bounds[0][0] = period * 0.9
+        #     bounds[1][0] = period * 1.1
 
         # length = len(x_data)
         # first_fit = super().fit(x_data[:int(0.01*length)], y_data[:int(0.01*length)],

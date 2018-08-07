@@ -63,13 +63,13 @@ def main_magopter_analysis():
     # plt.show()
     dsr = 10
     magopter.prepare(down_sampling_rate=dsr, plot_fl=True)
-    # magopter.trim(trim_end=0.82)
+    # magopter.simple_relative_trim(trim_end=0.82)
     magopter.trim(trim_end=0.83)
     fit_df_0, fit_df_1 = magopter.fit()
 
     iv_data = fit_df_0.iloc[[125]]
     plt.figure()
-    for iv_curve in magopter.iv_arr_coax_0:
+    for iv_curve in magopter.iv_arr_coax[0]:
         plt.plot(iv_curve.time, iv_curve.current)
     plt.axvline(x=iv_data.index)
 
@@ -343,7 +343,7 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     #########################################
     fig, ax = plt.subplots()
     max_currents = [[], []]
-    for iv_curve in magopter.iv_arr_coax_0:
+    for iv_curve in magopter.iv_arr_coax[0]:
         plt.plot(iv_curve[c.TIME], -iv_curve[c.CURRENT])
         # plt.plot(iv_curve.time, iv_curve.voltage)
         max_current = np.max(iv_curve[c.CURRENT])
@@ -525,8 +525,13 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
     magopter = Magopter(folder, file, ts_filename=ts_file)
     dsr = 1
     magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, plot_fl=False, crit_freq=4000, crit_ampl=None)
-    magopter.iv_arrs[0] = magopter.iv_arrs[0][20:23]
-    magopter.iv_arrs[1] = magopter.iv_arrs[1][20:23]
+    print('0: {}, 1: {}'.format(len(magopter.iv_arrs[0]), len(magopter.iv_arrs[1])))
+
+    if plot_timeline_fl:
+        magopter.quick_plot(coax=0)
+
+    magopter.iv_arrs[0] = magopter.iv_arrs[0][710:713]
+    magopter.iv_arrs[1] = []
     fit_df_0, fit_df_1 = magopter.fit()
 
     if magopter.ts_temp is not None:
@@ -562,7 +567,7 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
 
     n_e = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_0)
     d_n_e = np.abs(n_e) * np.sqrt((d_c_s / c_s) ** 2 + (d_A_coll / A_coll_0) ** 2 + (
-                fit_df_0[c.ERROR_STRING.format(c.ION_SAT)] / fit_df_0[c.ION_SAT]) ** 2)
+            fit_df_0[c.ERROR_STRING.format(c.ION_SAT)] / fit_df_0[c.ION_SAT]) ** 2)
 
     ##################################################
     #            Time line of IVs in shot            #
@@ -600,8 +605,9 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
 
     for i, iv_data in enumerate(iv_datas):
         plt.figure()
-        plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0], 'x', label='Raw IV')
-        plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.FIT_Y].tolist()[0], label='Fit IV')
+        plt.errorbar(iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0], yerr=iv_data[c.SIGMA].tolist()[0],
+                     fmt='-', label='Raw IV', ecolor='silver')
+        plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.FIT_Y].tolist()[0], color='orange', label='Fit IV')
 
         # Extract individual values from dataframe
         v_f_fitted = iv_data[c.FLOAT_POT].values[0]

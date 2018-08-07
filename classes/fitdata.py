@@ -41,12 +41,13 @@ class FitParamList(list):
 
 
 class FitData2(object):
-    def __init__(self, raw_x, raw_y, fit_y, fit_values, fit_errors, fitter, chi2=None, reduced_chi2=None):
+    def __init__(self, raw_x, raw_y, fit_y, fit_values, fit_errors, fitter, sigma=None, chi2=None, reduced_chi2=None):
         self.raw_x = raw_x
         self.raw_y = raw_y
         self.fit_y = fit_y
         self.fit_params = FitParamList(fit_values, fit_errors)
         self.fitter = fitter
+        self.sigma = sigma
         self.chi2 = chi2
         self.reduced_chi2 = reduced_chi2
 
@@ -107,6 +108,8 @@ class FitData2(object):
             c.RAW_Y: self.raw_y,
             c.FIT_Y: self.fit_y
         }
+        if self.sigma is not None:
+            dictionary[c.SIGMA] = self.sigma
         if self.chi2:
             dictionary[c.CHI2] = self.chi2
         if self.reduced_chi2:
@@ -122,9 +125,9 @@ class FitData2(object):
 
 
 class IVFitData(FitData2):
-    def __init__(self, raw_voltage, raw_current, fit_current, fit_params, fit_stdevs, fitter, chi2=None,
+    def __init__(self, raw_voltage, raw_current, fit_current, fit_params, fit_stdevs, fitter, sigma=None, chi2=None,
                  reduced_chi2=None):
-        super().__init__(raw_voltage, raw_current, fit_current, fit_params, fit_stdevs, fitter, chi2=chi2,
+        super().__init__(raw_voltage, raw_current, fit_current, fit_params, fit_stdevs, fitter, sigma=sigma, chi2=chi2,
                          reduced_chi2=reduced_chi2)
 
     def get_temp(self, errors_fl=True):
@@ -155,4 +158,9 @@ class IVFitData(FitData2):
             fit_data_instance.fit_params.get_errors(),
             fit_data_instance.fitter
         ]
-        return cls(*class_data)
+        optional_class_data = {
+            c.SIGMA: fit_data_instance.sigma,
+            c.CHI2: fit_data_instance.chi2,
+            c.REDUCED_CHI2: fit_data_instance.reduced_chi2
+        }
+        return cls(*class_data, **optional_class_data)

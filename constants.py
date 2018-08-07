@@ -21,7 +21,7 @@ AMPLITUDE = 'A'         # Periodic function amplitude
 PERIOD = 'P'            # Periodic function period
 OFFSET_Y = 'y_0'        # Periodic function y-offset
 OFFSET_X = 'x_0'        # Periodic function x-offset
-ST_DEV = 'sigma'
+ST_DEV = 'sigma'        # Standard deviation in a distribution function
 GRADIENT = 'm'          # Linear function gradient
 EXP_SCALER = 'b'        # Exponential function x-scaler
 
@@ -30,6 +30,7 @@ RAW_X = 'raw_x'
 RAW_Y = 'raw_y'
 FIT_Y = 'fit_y'
 ERROR_STRING = 'd_{}'
+SIGMA = 'sigma'
 CHI2 = 'chi2'
 REDUCED_CHI2 = 'reduced_chi2'
 

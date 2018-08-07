@@ -53,18 +53,18 @@ class Magopter(fl.IVAnalyser):
 
         self.adc_duration = max(self.m_data.time)
 
-        self.raw_voltage = np.array([])
-        self.raw_time = np.array([])
-        self.raw_current = np.array([[]] * coaxes)
+        self.raw_voltage = None
+        self.raw_time = None
+        self.raw_current = [[] for i in range(self.coaxes)]
         
-        self.voltage = np.array([])
-        self.time = np.array([])
-        self.current = np.array([[]] * coaxes)
+        self.voltage = None
+        self.time = None
+        self.current = [[] for i in range(self.coaxes)]
 
         self.peaks = None
         self.max_voltage = []
         self.arcs = []
-        self.iv_arrs = [[]] * coaxes
+        self.iv_arrs = [[] for i in range(self.coaxes)]
         self.fit_arrs = None
         self.trim_beg = 0.0
         self.trim_end = 1.0
@@ -170,6 +170,7 @@ class Magopter(fl.IVAnalyser):
                               fig=plt.subplot(212))
             self.current[0] = low_pass.apply(self.raw_time, self.raw_current[0])
             self.current[1] = low_pass.apply(self.raw_time, self.raw_current[1])
+            self.current = np.array(self.current)
 
             # raw_voltage = filt_voltage
             # raw_current_0 = filt_current_0
@@ -188,12 +189,11 @@ class Magopter(fl.IVAnalyser):
                 gated_current_1 = gate.apply(self.raw_time, self.raw_current[1])
 
             self.voltage = gated_voltage.astype(np.float64)
-            self.current[0] = gated_current_0.astype(np.float64)
-            self.current[1] = gated_current_1.astype(np.float64)
+            self.current = np.array([gated_current_0, gated_current_1], dtype=np.float64)
 
         if not crit_freq and not crit_ampl:
             self.voltage = self.raw_voltage
-            self.current = self.raw_current
+            self.current = np.array(self.raw_current)
 
             if plot_fl:
                 sp_I = np.fft.fft(self.raw_current[0])
@@ -299,6 +299,7 @@ class Magopter(fl.IVAnalyser):
             skip = 1
             sweep_fitter = f.StraightLineFitter()
 
+        print('peaks_len = {}'.format(len(self.peaks) - skip))
         for i in range(len(self.peaks) - skip):
             sweep_start = np.abs(self.raw_time - self.peaks[i]).argmin()
             sweep_stop = np.abs(self.raw_time - self.peaks[i + skip]).argmin()
@@ -315,9 +316,11 @@ class Magopter(fl.IVAnalyser):
                     self.arcs.append(np.mean(sweep_time))
                     continue
 
-            sweep_current = np.array([[]] * self.coaxes)
-            for j in range(self.coaxes):
-                sweep_current[j] = self.current[j][sweep_start:sweep_stop]
+            sweep_current = [current[sweep_start:sweep_stop] for current in self.current]
+            # sweep_current = self.current[:, sweep_start:sweep_stop]
+            # sweep_current = [[]] * self.coaxes
+            # for j in range(self.coaxes):
+            #     sweep_current[j] = self.current[j][sweep_start:sweep_stop]
 
             # Reverse alternate sweeps if not operating in combined sweeps mode, so
             if not self.combine_sweeps_fl and sweep_voltage[0] > sweep_voltage[-1]:
@@ -327,9 +330,11 @@ class Magopter(fl.IVAnalyser):
                     sweep_current[j] = np.array(list(reversed(sweep_current[j])))
 
             # Create IVData objects for each sweep (or sweep pair)
+            # for j in range(self.coaxes):
+            #     self.iv_arrs[j].append(iv.IVData(np.array(sweep_voltage) - np.array(sweep_current[j]),
+            #                                      sweep_current[j], sweep_time))
             for j in range(self.coaxes):
-                self.iv_arrs[j].append(iv.IVData(np.array(sweep_voltage) - np.array(sweep_current[j]),
-                                                 sweep_current[j], sweep_time))
+                self.iv_arrs[j].append(iv.IVData(sweep_voltage - sweep_current[j], sweep_current[j], sweep_time))
 
     def trim(self, trim_beg=0.0, trim_end=1.0):
         self.trim_beg = trim_beg
@@ -342,13 +347,13 @@ class Magopter(fl.IVAnalyser):
     def denormalise(self):
         pass
 
-    def fit(self, fitter=None, coaxes=(0, 1), initial_vals=None, bounds=None, load_fl=False, save_fl=False,
+    def fit(self, fitter=None, initial_vals=None, bounds=None, load_fl=False, save_fl=False,
             print_fl=False):
         if load_fl and save_fl:
             print('WARNING: Cannot save and load at the same time - loading will be prioritised if successful.')
 
         # Looks for csv files containing previously fitted data if asked for by the load_fl boolean flag.
-        fit_files = [self._FIT_FILE_STRING.format(i, self.timestamp) for i in coaxes]
+        fit_files = [self._FIT_FILE_STRING.format(i, self.timestamp) for i in range(self.coaxes)]
         if load_fl:
             start_dir = os.getcwd()
             os.chdir('{}{}{}'.format(pth.Path.home(), self._FOLDER_STRUCTURE, self.directory))
@@ -367,16 +372,16 @@ class Magopter(fl.IVAnalyser):
         if all(iv_arr is None or len(iv_arr) == 0 for iv_arr in self.iv_arrs):
             raise ValueError('No iv_data found to fit in self.iv_arrs')
         pool = mp.Pool()
-        fit_arrs = [[], []]
-        fit_time = [[], []]
-        for i in coaxes:
+        fit_arrs = [[] for dummy in range(self.coaxes)]
+        fit_time = [[] for dummy in range(self.coaxes)]
+        for i in range(self.coaxes):
             for iv_data in self.iv_arrs[i]:
                 try:
                     # Parallelised using multiprocessing.pool
                     # TODO: Not currently working according to system monitor.
-                    # fit_data = iv_data.multi_fit()
-                    result = pool.apply_async(iv_data.multi_fit)
-                    fit_data = result.get(timeout=10)
+                    fit_data = iv_data.multi_fit(plot_fl=False)
+                    # result = pool.apply_async(iv_data.multi_fit)
+                    # fit_data = result.get(timeout=10)
                 except RuntimeError:
                     if print_fl:
                         print('Error encountered in fit, skipping timestep {}'.format(np.mean(iv_data.time)))
@@ -388,9 +393,9 @@ class Magopter(fl.IVAnalyser):
                     continue
                 fit_arrs[i].append(fit_data)
                 fit_time[i].append(np.mean(iv_data[c.TIME]))
-        fit_dfs = [pd.DataFrame([fit_data.to_dict() for fit_data in fit_arrs[i]], index=fit_time[i]) for i in coaxes]
+        fit_dfs = [pd.DataFrame([fit_data.to_dict() for fit_data in fit_arrs[i]], index=fit_time[i]) for i in range(self.coaxes)]
         if save_fl:
-            for i in coaxes:
+            for i in range(self.coaxes):
                 fit_dfs[i].to_csv(path_or_buf='{}{}{}{}'.format(pth.Path.home(), self._FOLDER_STRUCTURE,
                                                                 self.directory, fit_files[i]))
         return fit_dfs
@@ -422,6 +427,24 @@ class Magopter(fl.IVAnalyser):
                 plt.show()
         else:
             print('No thomson data found, cannot plot.')
+
+    def quick_plot(self, index=None, coax=0, fig=None, show_fl=True):
+        # TODO: (06/08/2018) Make plottingmethod into a decorator.
+        if not fig:
+            fig = plt.figure()
+
+        if not index:
+            index = int(0.5 * len(self.iv_arrs[coax]))
+        extracted_range = slice(index, index + 3)
+
+        # Plot the first time and current value for each iv_data in iv_arrs[coax]
+        plt.plot(*zip(*[[iv_data[c.TIME][0], iv_data[c.CURRENT][0]] for iv_data in self.iv_arrs[coax]]))
+        for i, iv_data in enumerate(self.iv_arrs[coax][extracted_range]):
+            plt.axvline(x=iv_data[c.TIME][0], linestyle='dashed', color='g', label='iv_data - {}'.format(i))
+        plt.legend()
+
+        if show_fl:
+            plt.show()
 
     @classmethod
     def get_data_path(cls):

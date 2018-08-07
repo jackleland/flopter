@@ -1,5 +1,6 @@
-from constants import POTENTIAL, CURRENT, TIME, ELEC_CURRENT, ION_CURRENT, ERROR_STRING
+from constants import POTENTIAL, CURRENT, TIME, ELEC_CURRENT, ION_CURRENT, ERROR_STRING, SIGMA
 import numpy as np
+import collections as coll
 
 
 class IVData(dict):
@@ -17,7 +18,7 @@ class IVData(dict):
 
     def __init__(self, voltage, total_current, time, e_current=None, i_current=None,
                  trim_beg=_DEFAULT_TRIM_BEG, trim_end=_DEFAULT_TRIM_END, estimate_error_fl=True,
-                 sat_region=_DEFAULT_STRAIGHT_CUTOFF):
+                 sat_region=_DEFAULT_STRAIGHT_CUTOFF, sigma=None):
         super().__init__([
             (CURRENT, total_current),
             (POTENTIAL, voltage),
@@ -30,11 +31,13 @@ class IVData(dict):
         self.trim_beg = trim_beg
         self.trim_end = trim_end
 
-        if estimate_error_fl:
+        if isinstance(sigma, coll.Sized) and len(sigma) == len(voltage):
+            self[SIGMA] = sigma
+
+        if estimate_error_fl and SIGMA not in self:
             str_sec = np.where(self[POTENTIAL] <= sat_region)
             i_ss = self[CURRENT][str_sec]
-
-            self[ERROR_STRING.format(CURRENT)] = np.std(i_ss)
+            self[SIGMA] = np.std(i_ss) * np.ones_like(self[CURRENT])
 
         self.untrimmed_items = {}
         for k, v in self.items():
@@ -49,10 +52,10 @@ class IVData(dict):
     def trim(self, trim_beg=None, trim_end=None):
         if not trim_beg and not trim_end:
             if self.trim_beg == self._DEFAULT_TRIM_BEG and self.trim_end == self._DEFAULT_TRIM_END:
-                print('WARNING: trim values unchanged from default, no trimming will take place')
+                print('WARNING: simple_relative_trim values unchanged from default, no trimming will take place')
                 return
             else:
-                print('Continuing with pre-set trim values.')
+                print('Continuing with pre-set simple_relative_trim values.')
                 trim_beg = self.trim_beg
                 trim_end = self.trim_end
 
@@ -65,14 +68,21 @@ class IVData(dict):
     def copy(self):
         e_current = None
         i_current = None
+        sigma = None
+        error_fl = True
         if ELEC_CURRENT in self:
             e_current = self[ELEC_CURRENT]
         if ION_CURRENT in self:
             i_current = self[ION_CURRENT]
-        return IVData(self[POTENTIAL], self[CURRENT], self[TIME], e_current=e_current, i_current=i_current,
-                      trim_beg=self.trim_beg, trim_end=self.trim_end)
+        if SIGMA in self:
+            sigma = self[SIGMA]
+            error_fl = False
+        copied_iv_data = IVData(self[POTENTIAL], self[CURRENT], self[TIME], e_current=e_current, i_current=i_current,
+                                trim_beg=self.trim_beg, trim_end=self.trim_end, sigma=sigma, estimate_error_fl=error_fl)
+        copied_iv_data.untrimmed_items = self.untrimmed_items
+        return copied_iv_data
 
-    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF):
+    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, plot_fl=False):
         """
         Multi-stage fitting method using an initial straight line fit to the saturation region of the IV curve (decided
         by the sat_region kwarg). The fitted I_sat is then left fixed while T_e and a are found with a 2 parameter fit,
@@ -82,52 +92,78 @@ class IVData(dict):
         """
         import numpy as np
         import fitters as f
+        import matplotlib.pyplot as plt
 
         # find floating potential
         v_f = f.IVFitter.find_floating_pot(self)
         v_f_pos = np.abs(self[POTENTIAL] - v_f).argmin()
+        ion_sec = np.where(self[POTENTIAL] <= v_f)
+        # print('{:.3g}, position: {}, len: {}'.format(v_f, v_f_pos, len(self[POTENTIAL])))
 
         # find and fit straight section
         str_sec = np.where(self[POTENTIAL] <= sat_region)
         v_ss = self[POTENTIAL][str_sec]
         i_ss = self[CURRENT][str_sec]
+        sigma_ss = self[SIGMA][str_sec]
         siv_f = f.StraightIVFitter(floating_potential=v_f)
-        siv_f_data = siv_f.fit(v_ss, i_ss)
+        siv_f_data = siv_f.fit(v_ss, i_ss, sigma=sigma_ss)
 
         # Use I_sat value to fit a reduced parameter IV fit
         I_sat_guess = siv_f_data.get_isat().value
         fis_f = f.FullIVFixedISatFitter(I_sat_guess, floating_potential=v_f)
-        iv_data_trim = trim_pos(self, 0, v_f_pos)
-        first_fit_data = fis_f.fit_iv_data(iv_data_trim)
+        iv_data_trim = IVData.non_contiguous_trim(self, ion_sec)
+        first_fit_data = fis_f.fit_iv_data(iv_data_trim, sigma=iv_data_trim[SIGMA])
 
         # Do a full 4 parameter fit with initial guess params taken from previous fit
         params = [I_sat_guess, *first_fit_data.fit_params.get_values()]
         fitter = f.FullIVFitter(floating_potential=v_f)
-        ff_data = fitter.fit_iv_data(iv_data_trim, initial_vals=params)
+        ff_data = fitter.fit_iv_data(iv_data_trim, initial_vals=params, sigma=iv_data_trim[SIGMA])
+
+        if plot_fl:
+            fig = plt.figure()
+            plt.subplot(311)
+            siv_f_data.plot(fig=fig, show_fl=False)
+
+            plt.subplot(312)
+            first_fit_data.plot(fig=fig, show_fl=False)
+
+            plt.subplot(313)
+            ff_data.plot(fig=fig, show_fl=True)
 
         return ff_data
 
+    @staticmethod
+    def simple_relative_trim(iv_data, trim_beg=0.0, trim_end=1.0):
+        if not iv_data or not isinstance(iv_data, IVData):
+            raise ValueError('Invalid iv_data given.')
+        full_length = len(iv_data[CURRENT])
+        start = int(full_length * trim_beg)
+        stop = int(full_length * trim_end)
+        return IVData.simple_absolute_trim(iv_data, start, stop)
 
-def trim(iv_data, trim_beg=0.0, trim_end=1.0):
-    if not iv_data or not isinstance(iv_data, IVData):
-        raise ValueError('Invalid iv_data given.')
-    full_length = len(iv_data[CURRENT])
-    start = int(full_length * trim_beg)
-    stop = int(full_length * trim_end)
-    return trim_pos(iv_data, start, stop)
+    @staticmethod
+    def simple_absolute_trim(iv_data, start, stop):
+        """
+        Function for trimming an IVData object by array index.
+        :param iv_data: IVData object to simple_relative_trim
+        :param start:   Start trimming from this index - must be integer
+        :param stop:    Stop index - must be integer
+        :return: trimmed IVData object with arrays of length (stop - start)
+        """
+        if not iv_data or not isinstance(iv_data, IVData):
+            raise ValueError('Invalid iv_data given.')
+        new_iv_data = iv_data.copy()
+        for key, value in iv_data.items():
+            new_iv_data[key] = value[start:stop]
+        return new_iv_data
 
-
-def trim_pos(iv_data, start, stop):
-    """
-    Function for trimming an IVData object by array index.
-    :param iv_data: IVData object to trim
-    :param start:   Start trimming from this index - must be integer
-    :param stop:    Stop index - must be integer
-    :return: trimmed IVData object with arrays of length (stop - start)
-    """
-    if not iv_data or not isinstance(iv_data, IVData):
-        raise ValueError('Invalid iv_data given.')
-    new_iv_data = iv_data.copy()
-    for key, value in iv_data.items():
-        new_iv_data[key] = value[start:stop]
-    return new_iv_data
+    @staticmethod
+    def non_contiguous_trim(iv_data, selection):
+        assert isinstance(iv_data, IVData)
+        assert isinstance(selection, coll.Iterable)
+        new_iv_data = iv_data.copy()
+        for label, data in new_iv_data.items():
+            if not isinstance(data, np.ndarray):
+                data = np.array(data)
+            new_iv_data[label] = data[selection]
+        return new_iv_data
