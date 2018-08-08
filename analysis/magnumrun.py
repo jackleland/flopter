@@ -69,7 +69,7 @@ def main_magopter_analysis():
 
     iv_data = fit_df_0.iloc[[125]]
     plt.figure()
-    for iv_curve in magopter.iv_arr_coax[0]:
+    for iv_curve in magopter.iv_arrs[0]:
         plt.plot(iv_curve.time, iv_curve.current)
     plt.axvline(x=iv_data.index)
 
@@ -343,7 +343,7 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     #########################################
     fig, ax = plt.subplots()
     max_currents = [[], []]
-    for iv_curve in magopter.iv_arr_coax[0]:
+    for iv_curve in magopter.iv_arrs[0]:
         plt.plot(iv_curve[c.TIME], -iv_curve[c.CURRENT])
         # plt.plot(iv_curve.time, iv_curve.voltage)
         max_current = np.max(iv_curve[c.CURRENT])
@@ -527,10 +527,11 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
     magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, plot_fl=False, crit_freq=4000, crit_ampl=None)
     print('0: {}, 1: {}'.format(len(magopter.iv_arrs[0]), len(magopter.iv_arrs[1])))
 
+    index = int(0.5 * len(magopter.iv_arrs[0]))
     if plot_timeline_fl:
-        magopter.quick_plot(coax=0)
+        magopter.quick_plot(coax=0, index=index)
 
-    magopter.iv_arrs[0] = magopter.iv_arrs[0][710:713]
+    magopter.iv_arrs[0] = magopter.iv_arrs[0][index:index + 3]
     magopter.iv_arrs[1] = []
     fit_df_0, fit_df_1 = magopter.fit()
 
@@ -771,6 +772,6 @@ if __name__ == '__main__':
     # integrated_analysis(mp.probe_s, mp.probe_c, folder, file)
     # ts_ir_comparison(mp.probe_s, mp.probe_c, folder, file, ts_file)
     # multi_file_analysis(mp.probe_s, folder, files[285:297])
-    deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=False)
+    deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=True)
 
     plt.show()

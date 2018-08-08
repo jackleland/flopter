@@ -1,4 +1,4 @@
-from constants import POTENTIAL, CURRENT, TIME, ELEC_CURRENT, ION_CURRENT, ERROR_STRING, SIGMA
+import constants as c
 import numpy as np
 import collections as coll
 
@@ -20,34 +20,34 @@ class IVData(dict):
                  trim_beg=_DEFAULT_TRIM_BEG, trim_end=_DEFAULT_TRIM_END, estimate_error_fl=True,
                  sat_region=_DEFAULT_STRAIGHT_CUTOFF, sigma=None):
         super().__init__([
-            (CURRENT, total_current),
-            (POTENTIAL, voltage),
-            (TIME, time)
+            (c.CURRENT, total_current),
+            (c.POTENTIAL, voltage),
+            (c.TIME, time)
         ])
         if e_current is not None:
-            self[ELEC_CURRENT] = e_current
+            self[c.ELEC_CURRENT] = e_current
         if i_current is not None:
-            self[ION_CURRENT] = i_current
+            self[c.ION_CURRENT] = i_current
         self.trim_beg = trim_beg
         self.trim_end = trim_end
 
         if isinstance(sigma, coll.Sized) and len(sigma) == len(voltage):
-            self[SIGMA] = sigma
+            self[c.SIGMA] = sigma
 
-        if estimate_error_fl and SIGMA not in self:
-            str_sec = np.where(self[POTENTIAL] <= sat_region)
-            i_ss = self[CURRENT][str_sec]
-            self[SIGMA] = np.std(i_ss) * np.ones_like(self[CURRENT])
+        if estimate_error_fl and c.SIGMA not in self:
+            str_sec = np.where(self[c.POTENTIAL] <= sat_region)
+            i_ss = self[c.CURRENT][str_sec]
+            self[c.SIGMA] = np.std(i_ss) * np.ones_like(self[c.CURRENT])
 
         self.untrimmed_items = {}
         for k, v in self.items():
             self.untrimmed_items[k] = v
 
     def split(self):
-        if ION_CURRENT in self.keys():
-            return self[POTENTIAL], self[CURRENT], self[ION_CURRENT]
+        if c.ION_CURRENT in self.keys():
+            return self[c.POTENTIAL], self[c.CURRENT], self[c.ION_CURRENT]
         else:
-            return self[POTENTIAL], self[CURRENT]
+            return self[c.POTENTIAL], self[c.CURRENT]
 
     def trim(self, trim_beg=None, trim_end=None):
         if not trim_beg and not trim_end:
@@ -59,7 +59,7 @@ class IVData(dict):
                 trim_beg = self.trim_beg
                 trim_end = self.trim_end
 
-        full_length = len(self[CURRENT])
+        full_length = len(self[c.CURRENT])
         start = int(full_length * trim_beg)
         stop = int(full_length * trim_end)
         for key, value in self.items():
@@ -70,14 +70,14 @@ class IVData(dict):
         i_current = None
         sigma = None
         error_fl = True
-        if ELEC_CURRENT in self:
-            e_current = self[ELEC_CURRENT]
-        if ION_CURRENT in self:
-            i_current = self[ION_CURRENT]
-        if SIGMA in self:
-            sigma = self[SIGMA]
+        if c.ELEC_CURRENT in self:
+            e_current = self[c.ELEC_CURRENT]
+        if c.ION_CURRENT in self:
+            i_current = self[c.ION_CURRENT]
+        if c.SIGMA in self:
+            sigma = self[c.SIGMA]
             error_fl = False
-        copied_iv_data = IVData(self[POTENTIAL], self[CURRENT], self[TIME], e_current=e_current, i_current=i_current,
+        copied_iv_data = IVData(self[c.POTENTIAL], self[c.CURRENT], self[c.TIME], e_current=e_current, i_current=i_current,
                                 trim_beg=self.trim_beg, trim_end=self.trim_end, sigma=sigma, estimate_error_fl=error_fl)
         copied_iv_data.untrimmed_items = self.untrimmed_items
         return copied_iv_data
@@ -95,29 +95,31 @@ class IVData(dict):
         import matplotlib.pyplot as plt
 
         # find floating potential
-        v_f = f.IVFitter.find_floating_pot(self)
-        v_f_pos = np.abs(self[POTENTIAL] - v_f).argmin()
-        ion_sec = np.where(self[POTENTIAL] <= v_f)
+        v_f = f.IVFitter.find_floating_pot_iv_data(self)
+        v_f_pos = np.abs(self[c.POTENTIAL] - v_f).argmin()
+        ion_sec = np.where(self[c.POTENTIAL] <= v_f)
         # print('{:.3g}, position: {}, len: {}'.format(v_f, v_f_pos, len(self[POTENTIAL])))
 
         # find and fit straight section
-        str_sec = np.where(self[POTENTIAL] <= sat_region)
-        v_ss = self[POTENTIAL][str_sec]
-        i_ss = self[CURRENT][str_sec]
-        sigma_ss = self[SIGMA][str_sec]
-        siv_f = f.StraightIVFitter(floating_potential=v_f)
+        str_sec = np.where(self[c.POTENTIAL] <= sat_region)
+        v_ss = self[c.POTENTIAL][str_sec]
+        i_ss = self[c.CURRENT][str_sec]
+        sigma_ss = self[c.SIGMA][str_sec]
+        siv_f = f.StraightIVFitter()
         siv_f_data = siv_f.fit(v_ss, i_ss, sigma=sigma_ss)
 
         # Use I_sat value to fit a reduced parameter IV fit
         I_sat_guess = siv_f_data.get_isat().value
-        fis_f = f.FullIVFixedISatFitter(I_sat_guess, floating_potential=v_f)
+
+        fitter = f.FullIVFitter()
+        fitter.set_fixed_values({c.ION_SAT: I_sat_guess})
         iv_data_trim = IVData.non_contiguous_trim(self, ion_sec)
-        first_fit_data = fis_f.fit_iv_data(iv_data_trim, sigma=iv_data_trim[SIGMA])
+        first_fit_data = fitter.fit_iv_data(iv_data_trim, sigma=iv_data_trim[c.SIGMA])
 
         # Do a full 4 parameter fit with initial guess params taken from previous fit
         params = [I_sat_guess, *first_fit_data.fit_params.get_values()]
-        fitter = f.FullIVFitter(floating_potential=v_f)
-        ff_data = fitter.fit_iv_data(iv_data_trim, initial_vals=params, sigma=iv_data_trim[SIGMA])
+        fitter = f.FullIVFitter()
+        ff_data = fitter.fit_iv_data(iv_data_trim, initial_vals=params, sigma=iv_data_trim[c.SIGMA])
 
         if plot_fl:
             fig = plt.figure()

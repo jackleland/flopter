@@ -270,9 +270,6 @@ class Flopter(IVAnalyser):
         else:
             fitter = FullIVFitter()
 
-        if not fitter.v_f:
-            fitter.set_floating_pot(v_f)
-
         fit_data = fitter.fit_iv_data(iv_data, initial_vals=initial_vals, bounds=bounds)
         if print_fl:
             fit_data.print_fit_params()

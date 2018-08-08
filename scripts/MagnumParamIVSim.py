@@ -71,7 +71,7 @@ for v_max in [100]:
         I = I_0 * (1 + (a * np.float_power(np.abs(V), .75)) - np.exp(-V))
         currents[alpha] = I
 
-        fitter = f.FullIVFitter(floating_potential=v_f)
+        fitter = f.FullIVFitter()
         temps_t = []
         temps_err_t = []
         isats_t = []

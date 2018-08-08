@@ -3,7 +3,6 @@ import numpy as np
 import external.magnumdbutils as ut
 import external.readfastadc as adc
 import re
-import pandas as p
 
 TIMES = 0
 DATA = 1

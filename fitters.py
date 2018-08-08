@@ -35,9 +35,8 @@ class GenericFitter(ABC):
         pass
 
     def check_for_fixed_vals(self, parameters):
-        iterator = iter(parameters)
-        if (isinstance(self.fixed_values, coll.Sequence)
-                and len([value for value in self.fixed_values if value is None]) == len(parameters)):
+        if self.has_fixed_values() and len([value for value in self.fixed_values if value is None]) == len(parameters):
+            iterator = iter(parameters)
             return [next(iterator) if value is None else value for value in self.fixed_values]
         else:
             return parameters
@@ -53,20 +52,20 @@ class GenericFitter(ABC):
             return None
 
         if not initial_vals or np.NaN in initial_vals:
-            initial_vals = self.default_values
+            initial_vals = list(self.default_values)
         if initial_vals and len(initial_vals) != len(self._param_labels):
             warn('Intial parameter array ({}) must be same length as defined parameter list (see get_param_labels()).'
                  .format(len(initial_vals)))
             initial_vals = CF_DEFAULT_VALUES
 
         if not bounds:
-            bounds = self.default_bounds
+            bounds = [list(bound_tuple) for bound_tuple in self.default_bounds]
         if bounds and bounds != CF_DEFAULT_BOUNDS and len(bounds) == 2 * len(self._param_labels):
             warn('Parameter bounds array ({}) must be exactly double the length of defined parameter list '
                  '(see get_param_labels()).'.format(len(bounds)))
-            bounds = CF_DEFAULT_VALUES
+            bounds = list(CF_DEFAULT_BOUNDS)
 
-        if isinstance(self.fixed_values, coll.Sequence) and len(initial_vals) == len(self.fixed_values):
+        if self.has_fixed_values() and len(initial_vals) == len(self.fixed_values):
             pops = 0
             for i, fixed_val in enumerate(self.fixed_values):
                 if fixed_val is None:
@@ -74,6 +73,7 @@ class GenericFitter(ABC):
                     bounds[0].pop(i - pops)
                     bounds[1].pop(i - pops)
                     pops += 1
+            assert len(initial_vals) == len([value for value in self.fixed_values if value is None])
 
         fit_vals, fit_cov = curve_fit(self._curve_fit_func, x_data, y_data, p0=initial_vals, bounds=bounds, sigma=sigma)
         fit_y_data = self.fit_function(x_data, *fit_vals)
@@ -107,42 +107,58 @@ class GenericFitter(ABC):
     def get_default_bounds(self):
         return self.default_bounds
 
+    def has_fixed_values(self):
+        return isinstance(self.fixed_values, coll.Sequence) and any(self.fixed_values)
+
+    def get_fixed_value_list(self, value_dict):
+        assert isinstance(value_dict, dict)
+
+        if len(value_dict) > len(self._param_labels):
+            raise ValueError('Inputted dictionary must be not be longer than the number of parameters in the model.')
+
+        if not set(value_dict.keys()).issubset(set(self._param_labels.keys())):
+            raise ValueError('Inputted dictionary contained elements which were not in the parameter list for the '
+                             'fitter. Allowed values are: {}'.format(list(self._param_labels.keys())))
+
+        return [value_dict[label] if label in value_dict else None for label in self._param_labels]
+
+    def set_fixed_values(self, value_dict):
+        self.fixed_values = self.get_fixed_value_list(value_dict)
+
+    def unset_fixed_values(self):
+        self.fixed_values = None
+
 
 # --- IV Fitters --- #
 
 class IVFitter(GenericFitter, ABC):
     _DEFAULT_V_F = -1.0
 
-    def __init__(self, floating_potential=None):
-        super().__init__()
-        self.v_f = floating_potential
-
     def fit(self, x_data, y_data, initial_vals=None, bounds=None, print_fl=False, sigma=None):
-        if not self.v_f:
-            if print_fl:
-                print('No floating potential specified, using default value ({}).'.format(self._DEFAULT_V_F))
-            self.v_f = self._DEFAULT_V_F
+        # If no guess has been made and the floating potential is not fixed, set a starting value for the floating
+        # potential.
+        if self.has_fixed_values() and self.fixed_values[self.get_vf_index()] is None and initial_vals is None:
+            initial_vals = list(self.default_values)
+            initial_vals[self.get_vf_index()] = self.find_floating_pot(x_data, y_data)
+
+        # Fit the data and return an IVFitData object.
         fit_data = super().fit(x_data, y_data, initial_vals=initial_vals, bounds=bounds, sigma=sigma)
         return IVFitData.from_fit_data(fit_data)
 
-    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None, sigma=None, trim_fl=False, print_fl=False):
+    def fit_iv_data(self, iv_data, initial_vals=None, bounds=None, sigma=None, print_fl=False):
         assert isinstance(iv_data, IVData)
-        if trim_fl:
-            iv_data.trim()
         potential = iv_data[c.POTENTIAL]
         current = iv_data[c.CURRENT]
         return self.fit(potential, current, initial_vals, bounds, sigma=sigma, print_fl=print_fl)
 
-    def set_floating_pot(self, floating_pot):
-        self.v_f = floating_pot
-
-    def autoset_floating_pot(self, iv_data):
-        self.v_f = self.find_floating_pot(iv_data)
+    @classmethod
+    def find_floating_pot_iv_data(cls, iv_data):
+        return cls.find_floating_pot(iv_data[c.POTENTIAL], iv_data[c.CURRENT])
 
     @classmethod
-    def find_floating_pot(cls, iv_data):
+    def find_floating_pot(cls, potential, current):
         try:
-            iv_interp = interp1d(iv_data[c.CURRENT], iv_data[c.POTENTIAL])
+            iv_interp = interp1d(current, potential)
             v_f = iv_interp([0.0]).mean()
         except ValueError as e:
             print('V_f could not be found effectively, returning default value.')
@@ -150,22 +166,32 @@ class IVFitter(GenericFitter, ABC):
             v_f = [cls._DEFAULT_V_F]
         return v_f
 
+    def get_temp_index(self):
+        return self._param_labels[c.ELEC_TEMP]
+
+    def get_isat_index(self):
+        return self._param_labels[c.ION_SAT]
+
+    def get_vf_index(self):
+        return self._param_labels[c.FLOAT_POT]
+
 
 class FullIVFitter(IVFitter):
     """
     IV Fitter implementation utilising the full, 4 parameter IV Curve fitting method.
     """
-    def __init__(self, floating_potential=None):
-        super().__init__(floating_potential=floating_potential)
+    def __init__(self):
+        super().__init__()
         self._param_labels = {
             c.ION_SAT: 0,
             c.SHEATH_EXP: 1,
-            c.ELEC_TEMP: 2
+            c.ELEC_TEMP: 2,
+            c.FLOAT_POT: 3
         }
-        self.default_values = (30.0, 0.0204, 1)
+        self.default_values = (30.0, 0.0204, 1, -1)
         self.default_bounds = (
-            (-np.inf,       0,       0),
-            ( np.inf,  np.inf,  np.inf)
+            (-np.inf,       0,       0, -np.inf),
+            ( np.inf,  np.inf,  np.inf,  np.inf)
         )
         self.name = '4 Parameter Fit'
 
@@ -173,93 +199,83 @@ class FullIVFitter(IVFitter):
         I_0 = parameters[self._param_labels[c.ION_SAT]]
         a = parameters[self._param_labels[c.SHEATH_EXP]]
         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
-        V = (self.v_f - v) / T_e
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        V = (v_f - v) / T_e
         return I_0 * (1 - np.exp(-V) + (a * np.float_power(np.absolute(V), [0.75])))
-
-    def get_param_index(self, label):
-        return self._param_labels[label]
-
-    def get_temp_index(self):
-        return self._param_labels[c.ELEC_TEMP]
-
-    def get_isat_index(self):
-        return self._param_labels[c.ION_SAT]
 
     def get_a_index(self):
         return self._param_labels[c.SHEATH_EXP]
 
 
-class FullIVFixedISatFitter(IVFitter):
-    """
-    IV Fitter implementation utilising the full, 4 parameter IV Curve fitting method. V_f and I_sat are kept static.
-    """
-    def __init__(self, saturation_current, floating_potential=None):
-        super().__init__(floating_potential=floating_potential)
-        self._param_labels = {
-            c.SHEATH_EXP: 0,
-            c.ELEC_TEMP: 1
-        }
-        self.I_sat = saturation_current
-        self.default_values = (0.0204, 1)
-        self.default_bounds = (
-            (     0,       0),
-            (np.inf,  np.inf)
-        )
-        self.name = '4 param fixed I_sat'
-
-    def fit_function(self, v, *parameters):
-        I_0 = self.I_sat
-        a = parameters[self._param_labels[c.SHEATH_EXP]]
-        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
-        V = (self.v_f - v) / T_e
-        return I_0 * (1 - np.exp(-V) + (a * np.float_power(np.absolute(V), [0.75])))
-
-    def get_temp_index(self):
-        return self._param_labels[c.ELEC_TEMP]
-
-    def get_a_index(self):
-        return self._param_labels[c.SHEATH_EXP]
+# class FullIVFixedISatFitter(IVFitter):
+#     """
+#     IV Fitter implementation utilising the full, 4 parameter IV Curve fitting method. V_f and I_sat are kept static.
+#     """
+#     def __init__(self, saturation_current):
+#         super().__init__()
+#         self._param_labels = {
+#             c.SHEATH_EXP: 0,
+#             c.ELEC_TEMP: 1,
+#             c.FLOAT_POT
+#         }
+#         self.I_sat = saturation_current
+#         self.default_values = (0.0204, 1)
+#         self.default_bounds = (
+#             (     0,       0),
+#             (np.inf,  np.inf)
+#         )
+#         self.name = '4 param fixed I_sat'
+#
+#     def fit_function(self, v, *parameters):
+#         I_0 = self.I_sat
+#         a = parameters[self._param_labels[c.SHEATH_EXP]]
+#         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+#         V = (self.v_f - v) / T_e
+#         return I_0 * (1 - np.exp(-V) + (a * np.float_power(np.absolute(V), [0.75])))
+#
+#     def get_temp_index(self):
+#         return self._param_labels[c.ELEC_TEMP]
+#
+#     def get_a_index(self):
+#         return self._param_labels[c.SHEATH_EXP]
 
 
 class SimpleIVFitter(IVFitter):
-    def __init__(self, floating_potential=None):
-        super().__init__(floating_potential=floating_potential)
+    def __init__(self):
+        super().__init__()
         self._param_labels = {
             c.ION_SAT: 0,
-            c.ELEC_TEMP: 1
+            c.ELEC_TEMP: 1,
+            c.FLOAT_POT: 2
         }
-        self.default_values = (30.0,  1)
+        self.default_values = (30.0,  1, -1)
         self.default_bounds = (
-            (-np.inf,       0),
-            ( np.inf,  np.inf)
+            (-np.inf,       0, -np.inf),
+            ( np.inf,  np.inf,  np.inf)
         )
         self.name = '3 Parameter Fit'
 
     def fit_function(self, v, *parameters):
         I_0 = parameters[self._param_labels[c.ION_SAT]]
         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
-        V = (self.v_f - v) / T_e
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        V = (v_f - v) / T_e
         return I_0 * (1 - np.exp(-V))
-
-    def get_temp_index(self):
-        return self._param_labels[c.ELEC_TEMP]
-
-    def get_isat_index(self):
-        return self._param_labels[c.ION_SAT]
 
 
 class StraightIVFitter(IVFitter):
-    def __init__(self, floating_potential=None):
-        super().__init__(floating_potential=floating_potential)
+    def __init__(self):
+        super().__init__()
         self._param_labels = {
             c.ION_SAT: 0,
             c.SHEATH_EXP: 1,
-            c.ELEC_TEMP: 2
+            c.ELEC_TEMP: 2,
+            c.FLOAT_POT: 3
         }
-        self.default_values = (30.0, 0.02, 1)
+        self.default_values = (30.0, 0.02, 1, -1)
         self.default_bounds = (
-            (-np.inf, 0, 0),
-            (np.inf, np.inf, np.inf)
+            (-np.inf,      0,      0, -np.inf),
+            ( np.inf, np.inf, np.inf,  np.inf)
         )
         self.name = 'Straight IV Fit'
 
@@ -267,14 +283,9 @@ class StraightIVFitter(IVFitter):
         I_0 = parameters[self._param_labels[c.ION_SAT]]
         a = parameters[self._param_labels[c.SHEATH_EXP]]
         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
-        V = (self.v_f - v) / T_e
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        V = (v_f - v) / T_e
         return I_0 * (1 + (a * np.float_power(np.absolute(V), [0.75])))
-
-    def get_temp_index(self):
-        return self._param_labels[c.ELEC_TEMP]
-
-    def get_isat_index(self):
-        return self._param_labels[c.ION_SAT]
 
     def get_a_index(self):
         return self._param_labels[c.SHEATH_EXP]
@@ -282,7 +293,7 @@ class StraightIVFitter(IVFitter):
 
 class IonCurrentSEFitter(IVFitter):
     def __init__(self):
-        super().__init__(floating_potential=None)
+        super().__init__()
         self._param_labels = {
             c.ION_SAT: 0,
             c.SHEATH_EXP: 1
