@@ -68,7 +68,7 @@ class GenericFitter(ABC):
         if self.has_fixed_values() and len(initial_vals) == len(self.fixed_values):
             pops = 0
             for i, fixed_val in enumerate(self.fixed_values):
-                if fixed_val is None:
+                if fixed_val is not None:
                     initial_vals.pop(i - pops)
                     bounds[0].pop(i - pops)
                     bounds[1].pop(i - pops)
@@ -76,11 +76,20 @@ class GenericFitter(ABC):
             assert len(initial_vals) == len([value for value in self.fixed_values if value is None])
 
         fit_vals, fit_cov = curve_fit(self._curve_fit_func, x_data, y_data, p0=initial_vals, bounds=bounds, sigma=sigma)
-        fit_y_data = self.fit_function(x_data, *fit_vals)
         fit_sterrs = np.sqrt(np.diag(fit_cov))
+
+        # Pad fit vals with any fixed values and created model y-data
+        if self.has_fixed_values():
+            iter_vals = iter(fit_vals)
+            iter_ster = iter(fit_sterrs)
+            fit_vals = [value if value is not None else next(iter_vals) for value in self.fixed_values]
+            fit_sterrs = [0.0 if value is not None else next(iter_ster) for value in self.fixed_values]
+        fit_y_data = self.fit_function(x_data, *fit_vals)
+
+        # Calculate chi^2 and reduced chi^2 if errors present in fitting
         if sigma is not None:
             fit_chi2 = (((y_data - fit_y_data) / sigma)**2).sum()
-            fit_reduced_chi2 = fit_chi2 / (len(y_data) - len(fit_vals))
+            fit_reduced_chi2 = fit_chi2 / (len(y_data) - len(initial_vals))
         else:
             fit_chi2 = None
             fit_reduced_chi2 = None
@@ -108,7 +117,9 @@ class GenericFitter(ABC):
         return self.default_bounds
 
     def has_fixed_values(self):
-        return isinstance(self.fixed_values, coll.Sequence) and any(self.fixed_values)
+        return (isinstance(self.fixed_values, coll.Sequence)
+                and any(self.fixed_values)
+                and len(self.fixed_values) == len(self._param_labels))
 
     def get_fixed_value_list(self, value_dict):
         assert isinstance(value_dict, dict)

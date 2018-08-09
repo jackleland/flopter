@@ -1,6 +1,7 @@
 import constants as c
 import numpy as np
 import collections as coll
+import pandas as pd
 
 
 class IVData(dict):
@@ -65,6 +66,10 @@ class IVData(dict):
         for key, value in self.items():
             self[key] = value[start:stop]
 
+    def save(self, filename, columns=(c.TIME, c.POTENTIAL, c.CURRENT, c.SIGMA)):
+        df = pd.DataFrame(data={column: self[column] for column in columns})
+        df.to_csv(filename)
+
     def copy(self):
         e_current = None
         i_current = None
@@ -90,7 +95,6 @@ class IVData(dict):
         :param sat_region:  Threshold voltage value to start fitting the saturation current to
         :return:            Full 4-param IV fit data
         """
-        import numpy as np
         import fitters as f
         import matplotlib.pyplot as plt
 
@@ -108,17 +112,16 @@ class IVData(dict):
         siv_f = f.StraightIVFitter()
         siv_f_data = siv_f.fit(v_ss, i_ss, sigma=sigma_ss)
 
-        # Use I_sat value to fit a reduced parameter IV fit
+        # Use I_sat value to fit a fixed_value 4-parameter IV fit
         I_sat_guess = siv_f_data.get_isat().value
-
         fitter = f.FullIVFitter()
         fitter.set_fixed_values({c.ION_SAT: I_sat_guess})
         iv_data_trim = IVData.non_contiguous_trim(self, ion_sec)
         first_fit_data = fitter.fit_iv_data(iv_data_trim, sigma=iv_data_trim[c.SIGMA])
 
         # Do a full 4 parameter fit with initial guess params taken from previous fit
-        params = [I_sat_guess, *first_fit_data.fit_params.get_values()]
-        fitter = f.FullIVFitter()
+        params = first_fit_data.fit_params.get_values()
+        fitter.unset_fixed_values()
         ff_data = fitter.fit_iv_data(iv_data_trim, initial_vals=params, sigma=iv_data_trim[c.SIGMA])
 
         if plot_fl:
@@ -138,7 +141,7 @@ class IVData(dict):
     def simple_relative_trim(iv_data, trim_beg=0.0, trim_end=1.0):
         if not iv_data or not isinstance(iv_data, IVData):
             raise ValueError('Invalid iv_data given.')
-        full_length = len(iv_data[CURRENT])
+        full_length = len(iv_data[c.CURRENT])
         start = int(full_length * trim_beg)
         stop = int(full_length * trim_end)
         return IVData.simple_absolute_trim(iv_data, start, stop)

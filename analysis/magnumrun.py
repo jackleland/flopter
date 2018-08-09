@@ -533,7 +533,7 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
 
     magopter.iv_arrs[0] = magopter.iv_arrs[0][index:index + 3]
     magopter.iv_arrs[1] = []
-    fit_df_0, fit_df_1 = magopter.fit()
+    fit_df_0, fit_df_1 = magopter.fit(print_fl=True)
 
     if magopter.ts_temp is not None:
         temps = [np.max(temp) / nrm.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]]
@@ -612,11 +612,11 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
 
         # Extract individual values from dataframe
         v_f_fitted = iv_data[c.FLOAT_POT].values[0]
-
         T_e_fitted = iv_data[c.ELEC_TEMP].values[0]
         a_fitted = iv_data[c.SHEATH_EXP].values[0]
         I_sat_fitted = iv_data[c.ION_SAT].values[0]
 
+        d_v_f_fitted = iv_data[c.ERROR_STRING.format(c.FLOAT_POT)].values[0]
         d_T_e_fitted = iv_data[c.ERROR_STRING.format(c.ELEC_TEMP)].values[0]
         d_a_fitted = iv_data[c.ERROR_STRING.format(c.SHEATH_EXP)].values[0]
         d_I_sat_fitted = iv_data[c.ERROR_STRING.format(c.ION_SAT)].values[0]
@@ -628,15 +628,15 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
                                              d_I_sat_fitted)
 
         print('iv = {}: \n'
-              '\t v_f = {:.3g} \n'
+              '\t v_f = {:.3g} +- {:.1g} \n'
               '\t T_e = {:.3g} +- {:.1g} \n'
               '\t I_sat = {:.3g} +- {:.1g} \n'
               '\t n_e = {:.3g} +- {:.1g} \n'
               '\t a = {:.3g} +- {:.1g} \n'
               '\t c_s = {:.3g} +- {:.1g} \n'
               '\t A_coll = {:.3g} +- {:.1g} \n'
-              .format(i, v_f_fitted, T_e_fitted, d_T_e_fitted, I_sat_fitted, d_I_sat_fitted, n_e_fitted, d_n_e_fitted,
-                      a_fitted, d_a_fitted, c_s_fitted, d_c_s_fitted, A_coll_0, d_A_coll))
+              .format(i, v_f_fitted, d_v_f_fitted, T_e_fitted, d_T_e_fitted, I_sat_fitted, d_I_sat_fitted, n_e_fitted,
+                      d_n_e_fitted, a_fitted, d_a_fitted, c_s_fitted, d_c_s_fitted, A_coll_0, d_A_coll))
 
         I_f = probe_0.get_analytical_iv(iv_data[c.RAW_X].tolist()[0], v_f_fitted, theta_perp, T_e_fitted, n_e_fitted,
                                         print_fl=True)
@@ -772,6 +772,6 @@ if __name__ == '__main__':
     # integrated_analysis(mp.probe_s, mp.probe_c, folder, file)
     # ts_ir_comparison(mp.probe_s, mp.probe_c, folder, file, ts_file)
     # multi_file_analysis(mp.probe_s, folder, files[285:297])
-    deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=True)
+    deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=False)
 
     plt.show()

@@ -142,11 +142,6 @@ class IVFitData(FitData2):
     def get_floating_pot(self):
         return self.fitter.v_f
 
-    def to_dict(self):
-        dictionary = super().to_dict()
-        dictionary[c.FLOAT_POT] = self.fitter.v_f
-        return dictionary
-
     @classmethod
     def from_fit_data(cls, fit_data_instance):
         """Create IVFitData object from already instantiated FitData2 object."""
