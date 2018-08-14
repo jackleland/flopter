@@ -167,14 +167,15 @@ class IVFitter(GenericFitter, ABC):
         return cls.find_floating_pot(iv_data[c.POTENTIAL], iv_data[c.CURRENT])
 
     @classmethod
-    def find_floating_pot(cls, potential, current):
+    def find_floating_pot(cls, potential, current, print_fl=False):
         try:
             iv_interp = interp1d(current, potential)
             v_f = iv_interp([0.0]).mean()
         except ValueError as e:
-            print('V_f could not be found effectively, returning default value.')
-            print(str(e))
-            v_f = [cls._DEFAULT_V_F]
+            if print_fl:
+                print('V_f could not be found effectively, returning default value.')
+                print('Error: {}'.format(str(e)))
+            v_f = cls._DEFAULT_V_F
         return v_f
 
     def get_temp_index(self):
