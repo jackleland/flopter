@@ -2,6 +2,7 @@ import scipy.signal as sig
 import numpy as np
 import matplotlib.pyplot as plt
 from abc import abstractmethod
+from classes.decorators import plotmethod
 
 
 class FilterWrapper(object):
@@ -13,11 +14,8 @@ class FilterWrapper(object):
     def apply(self, time, data, plot_fl=False):
         pass
 
-    def plot(self, time, data, apply_plot_fl=False, fig=None, range=None, show_fl=True):
-        import collections
-
-        # plt.style.use('dark_background')
-
+    @plotmethod
+    def plot(self, time, data, apply_plot_fl=False, fig=None, range=None, ax_labels=('Time', 'Signal Amplitude')):
         filtered_data = self.apply(time, data, plot_fl=apply_plot_fl)
 
         if range and isinstance(range, slice):
@@ -29,17 +27,8 @@ class FilterWrapper(object):
         plt.plot(time, data, label='Raw', color='silver')
         plt.plot(time, filtered_data, label='Filtered')
 
-        if range and isinstance(range, collections.Iterable) and len(range) == 2:
-            x_range, y_range = range
-            plt.xlim(*x_range)
-            plt.ylim(*y_range)
-
         plt.legend()
-        plt.xlabel('Time')
-        plt.ylabel('Signal Amplitude')
 
-        if show_fl:
-            plt.show()
 
 ###################################################################################
 #                                                                                 #
