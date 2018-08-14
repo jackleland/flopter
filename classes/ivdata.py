@@ -56,7 +56,7 @@ class IVData(dict):
                 print('WARNING: simple_relative_trim values unchanged from default, no trimming will take place')
                 return
             else:
-                print('Continuing with pre-set simple_relative_trim values.')
+                print('Continuing with pre-set trim values.')
                 trim_beg = self.trim_beg
                 trim_end = self.trim_end
 
@@ -87,41 +87,54 @@ class IVData(dict):
         copied_iv_data.untrimmed_items = self.untrimmed_items
         return copied_iv_data
 
-    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, plot_fl=False):
+    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, fix_vf_fl=False, plot_fl=False):
         """
         Multi-stage fitting method using an initial straight line fit to the saturation region of the IV curve (decided
         by the sat_region kwarg). The fitted I_sat is then left fixed while T_e and a are found with a 2 parameter fit,
         which gives the guess parameters for an unconstrained full IV fit.
-        :param sat_region:  Threshold voltage value to start fitting the saturation current to
-        :return:            Full 4-param IV fit data
+        :param sat_region:  Threshold voltage value below which the 'Straight section' is defined. The straight section
+                            is fitted to get an initial value of saturation current for subsequent fits.
+        :param plot_fl:     (Boolean) If true, plots the output of all 3 stages of fitting. Default is False.
+        :param fix_vf_fl:   (Boolean) If true, fixes the floating potential for all 3 stages of fitting. The value used
+                            is the interpolated value of Voltage where Current = 0. Default is False.
+        :return:            Full 4-param IVFit data
         """
         import fitters as f
         import matplotlib.pyplot as plt
 
-        # find floating potential
+        # find floating potential and max potential
         v_f = f.IVFitter.find_floating_pot_iv_data(self)
-        v_f_pos = np.abs(self[c.POTENTIAL] - v_f).argmin()
-        ion_sec = np.where(self[c.POTENTIAL] <= v_f)
-        # print('{:.3g}, position: {}, len: {}'.format(v_f, v_f_pos, len(self[POTENTIAL])))
+        v_min = np.min(self[c.POTENTIAL])
+        L = v_min - v_f
 
-        # find and fit straight section
-        str_sec = np.where(self[c.POTENTIAL] <= sat_region)
-        v_ss = self[c.POTENTIAL][str_sec]
-        i_ss = self[c.CURRENT][str_sec]
-        sigma_ss = self[c.SIGMA][str_sec]
+        # Define lower and upper bounds depending on set trim parameters.
+        lower_offset = v_f + (self.trim_beg * L)
+        upper_offset = v_f + (self.trim_end * L)
+        fit_sec = np.where((self[c.POTENTIAL] <= lower_offset) & (self[c.POTENTIAL] >= upper_offset))
+        iv_data_trim = IVData.non_contiguous_trim(self, fit_sec)
+
+        # Find and fit straight section
+        str_sec = np.where(iv_data_trim[c.POTENTIAL] <= sat_region)
+        iv_data_ss = IVData.non_contiguous_trim(iv_data_trim, str_sec)
         siv_f = f.StraightIVFitter()
-        siv_f_data = siv_f.fit(v_ss, i_ss, sigma=sigma_ss)
+        if fix_vf_fl:
+            siv_f.set_fixed_values({c.FLOAT_POT: v_f})
+        siv_f_data = siv_f.fit_iv_data(iv_data_ss, sigma=iv_data_ss[c.SIGMA])
 
         # Use I_sat value to fit a fixed_value 4-parameter IV fit
         I_sat_guess = siv_f_data.get_isat().value
         fitter = f.FullIVFitter()
-        fitter.set_fixed_values({c.ION_SAT: I_sat_guess})
-        iv_data_trim = IVData.non_contiguous_trim(self, ion_sec)
+        if fix_vf_fl:
+            fitter.set_fixed_values({c.FLOAT_POT: v_f, c.ION_SAT: I_sat_guess})
+        else:
+            fitter.set_fixed_values({c.ION_SAT: I_sat_guess})
         first_fit_data = fitter.fit_iv_data(iv_data_trim, sigma=iv_data_trim[c.SIGMA])
 
         # Do a full 4 parameter fit with initial guess params taken from previous fit
         params = first_fit_data.fit_params.get_values()
         fitter.unset_fixed_values()
+        if fix_vf_fl:
+            fitter.set_fixed_values({c.FLOAT_POT: v_f})
         ff_data = fitter.fit_iv_data(iv_data_trim, initial_vals=params, sigma=iv_data_trim[c.SIGMA])
 
         if plot_fl:
@@ -133,7 +146,9 @@ class IVData(dict):
             first_fit_data.plot(fig=fig, show_fl=False)
 
             plt.subplot(313)
-            ff_data.plot(fig=fig, show_fl=True)
+            ff_data.plot(fig=fig, show_fl=False)
+            plt.xlabel('Volt')
+            fig.suptitle('lower_offset = {}, upper_offset = {}'.format(self.trim_beg, self.trim_end))
 
         return ff_data
 
