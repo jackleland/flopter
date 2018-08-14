@@ -347,10 +347,9 @@ class Magopter(fl.IVAnalyser):
     def denormalise(self):
         pass
 
-    def fit(self, fitter=None, initial_vals=None, bounds=None, load_fl=False, save_fl=False,
-            print_fl=False):
+    def fit(self, fitter=None, initial_vals=None, bounds=None, load_fl=False, save_fl=False, print_fl=False):
         if load_fl and save_fl:
-            print('WARNING: Cannot save and load at the same time - loading will be prioritised if successful.')
+            print('WARNING: Unnecessary to save and load at the same time - loading will be prioritised if successful.')
 
         # Looks for csv files containing previously fitted data if asked for by the load_fl boolean flag.
         fit_files = [self._FIT_FILE_STRING.format(i, self.timestamp) for i in range(self.coaxes)]
@@ -379,7 +378,7 @@ class Magopter(fl.IVAnalyser):
                 try:
                     # Parallelised using multiprocessing.pool
                     # TODO: Not currently working according to system monitor.
-                    fit_data = iv_data.multi_fit(plot_fl=True)
+                    fit_data = iv_data.multi_fit(plot_fl=False)
                     # result = pool.apply_async(iv_data.multi_fit)
                     # fit_data = result.get(timeout=10)
                 except RuntimeError:
