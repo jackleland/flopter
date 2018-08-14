@@ -94,6 +94,8 @@ class FitData2(object):
         for i in range(len(param_labels)):
             print("{a} = {b} +/- {c}".format(a=param_labels[i], b=param_values[i], c=param_errors[i]))
         print("")
+        if self.reduced_chi2 is not None:
+            print('Reduced chi^2 = {:.3f} \n'.format(self.reduced_chi2))
 
     def get_param_str(self):
         return ''.join(['{}:{:.3f} '.format(label, self.fit_params.get_values()[i], self.fit_params.get_errors()[i])
