@@ -524,7 +524,7 @@ def ts_ir_comparison(probe_0, probe_1, folder, file, ts_file):
 def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_timeline_fl=False):
     magopter = Magopter(folder, file, ts_filename=ts_file)
     dsr = 1
-    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, plot_fl=False, crit_freq=4000, crit_ampl=None)
+    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, plot_fl=False, crit_freq=None, crit_ampl=None)
     print('0: {}, 1: {}'.format(len(magopter.iv_arrs[0]), len(magopter.iv_arrs[1])))
 
     index = int(0.5 * len(magopter.iv_arrs[0]))
@@ -533,6 +533,7 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
 
     magopter.iv_arrs[0] = magopter.iv_arrs[0][index:index + 3]
     magopter.iv_arrs[1] = []
+    magopter.trim(trim_beg=0.05, trim_end=0.7)
     fit_df_0, fit_df_1 = magopter.fit(print_fl=True)
 
     if magopter.ts_temp is not None:
@@ -556,7 +557,7 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
 
     alpha = 9.95
     theta_perp = np.radians(alpha)
-    d_theta_perp = np.radians(0.1)
+    d_theta_perp = np.radians(0.8)
     A_coll_0 = probe_0.get_collection_area(theta_perp)
     d_A_coll = np.abs(probe_0.get_collection_area(theta_perp + d_theta_perp) - A_coll_0)
 
@@ -605,11 +606,6 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
     ##################################################
 
     for i, iv_data in enumerate(iv_datas):
-        plt.figure()
-        plt.errorbar(iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0], yerr=iv_data[c.SIGMA].tolist()[0],
-                     fmt='-', label='Raw IV', ecolor='silver')
-        plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.FIT_Y].tolist()[0], color='orange', label='Fit IV')
-
         # Extract individual values from dataframe
         v_f_fitted = iv_data[c.FLOAT_POT].values[0]
         T_e_fitted = iv_data[c.ELEC_TEMP].values[0]
@@ -642,9 +638,12 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
                                         print_fl=True)
         I_ts = probe_0.get_analytical_iv(iv_data[c.RAW_X].tolist()[0], v_f_fitted, theta_perp, T_e_ts, n_e_ts,
                                          print_fl=True)
-
+        plt.figure()
+        plt.errorbar(iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0], yerr=iv_data[c.SIGMA].tolist()[0],
+                     fmt='x', label='Raw IV', ecolor='silver')
         plt.plot(iv_data[c.RAW_X].tolist()[0], I_f, label='Analytical - measured', linestyle='dashed', linewidth=1, color='r')
         plt.plot(iv_data[c.RAW_X].tolist()[0], I_ts, label='Analytical - TS', linestyle='dashed', linewidth=1, color='m')
+        plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.FIT_Y].tolist()[0], color='orange', label='Fit IV')
         plt.legend()
         plt.title('Comparison of analytical to measured IV curves for the small area probe')
         plt.xlabel('Voltage (V)')
@@ -710,6 +709,259 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
         plt.legend()
 
 
+def multifit_trim_filter_analysis(probe_0, folder, file):
+    fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
+    for i, freq in enumerate([None, 4000]):
+        magopter = Magopter(folder, file, ts_filename=ts_file)
+        magopter.prepare(down_sampling_rate=1, roi_b_plasma=True, crit_freq=freq, crit_ampl=None)
+
+        index = int(0.5 * len(magopter.iv_arrs[0]))
+        iv_data = magopter.iv_arrs[0][index]
+
+        fitdata = iv_data.multi_fit()
+        iv_data.trim_beg = 0.01
+        iv_data.trim_end = 0.30
+        fitdata_1 = iv_data.multi_fit()
+        fitdata_1.print_fit_params()
+        # fitdata_1_fvf = iv_data.multi_fit(plot_fl=False, fix_vf_fl=True)
+
+        untrimmed_x = iv_data[c.POTENTIAL]
+        untrimmed_y = iv_data[c.CURRENT]
+
+        custom_params = [1.08, 0.006, 4.30, -15.1]
+
+        # Plot the raw signal and the untrimmed fit
+        plt.sca(ax[i])
+        plt.title('Critical Frequency is {}'.format('{}Hz'.format(freq) if freq is not None else 'not set'))
+        plt.errorbar(untrimmed_x, untrimmed_y, fmt='.', yerr=iv_data[c.SIGMA], label='Raw', color='silver', zorder=-1)
+        plt.plot(untrimmed_x, fitdata.fit_function(untrimmed_x), label='Fit - No Trim', color='green', zorder=10)
+
+        # Plot the comparion between fixed vf and free vf
+        plt.plot(untrimmed_x, fitdata_1.fit_function(untrimmed_x), color='red', linewidth=1, label='Fit - {}:{}'
+                 .format(iv_data.trim_end, iv_data.trim_beg))
+        plt.axvline(x=np.max(fitdata_1.raw_x), label='Trim Min/Max', color='red', linestyle='dashed', linewidth=1)
+        plt.axvline(x=np.min(fitdata_1.raw_x), color='red', linestyle='dashed', linewidth=1)
+        # plt.plot(untrimmed_x, fitdata_1_fvf.fit_function(untrimmed_x), label=r'Fixed $V_f$ Fit - {}:{}'
+        #          .format(iv_data.trim_end, iv_data.trim_beg), color='red', linestyle='-.')
+
+        # # Plot the raw signal and the untrimmed fit
+        # plt.figure()
+        # plt.errorbar(untrimmed_x, untrimmed_y, fmt='.', yerr=iv_data[c.SIGMA], label='Raw', color='silver', zorder=-1)
+        # plt.plot(untrimmed_x, fitdata.fit_function(untrimmed_x), label='Fit - No Trim', color='green')
+
+        # Trim and plot again
+        iv_data.trim_beg = -0.05
+        iv_data.trim_end = 0.45
+        fitdata_2 = iv_data.multi_fit()
+        fitdata_2.print_fit_params()
+        # fitdata_2_fvf = iv_data.multi_fit(fix_vf_fl=True)
+
+        plt.plot(untrimmed_x, fitdata_2.fit_function(untrimmed_x), color='blue', linewidth=1, label='Fit - {}:{}'
+                 .format(iv_data.trim_end, iv_data.trim_beg))
+        plt.axvline(x=np.max(fitdata_2.raw_x), label='Trim Min/Max', color='blue', linestyle='dashed', linewidth=1)
+        plt.axvline(x=np.min(fitdata_2.raw_x), color='blue', linestyle='dashed', linewidth=1)
+        # plt.plot(untrimmed_x, fitdata_0160_fvf.fit_function(untrimmed_x), label=r'Fixed $V_f$ Fit - {}:{}'
+        #          .format(iv_data.trim_end, iv_data.trim_beg), color='blue', linestyle='-.')
+
+        # Trim and plot again
+        iv_data.trim_beg = 0.01
+        iv_data.trim_end = 0.45
+        fitdata_3 = iv_data.multi_fit()
+        fitdata_3.print_fit_params()
+        # fitdata_3_fvf = iv_data.multi_fit(fix_vf_fl=True)
+
+        plt.plot(untrimmed_x, fitdata_3.fit_function(untrimmed_x), color='orange', linewidth=1, label='Fit - {}:{}'
+                 .format(iv_data.trim_end, iv_data.trim_beg))
+        plt.axvline(x=np.max(fitdata_3.raw_x), label='Trim Min/Max', color='orange', linestyle='dashed', linewidth=1)
+        plt.axvline(x=np.min(fitdata_3.raw_x), color='orange', linestyle='dashed', linewidth=1)
+
+        # Plot the custom fit and an axis line through 0
+        # plt.plot(untrimmed_x, f.FullIVFitter().fit_function(untrimmed_x, *custom_params), label='Custom Fit {}'
+        #          .format(', '.join([str(i) for i in custom_params])))
+        plt.axhline(color='black', linewidth=1)
+        plt.ylim(-0.4, 1.6)
+        plt.xlabel('Voltage (V)')
+        plt.ylabel('Current (A)')
+        plt.legend()
+
+
+def multifit_trim_iv_analysis(probe_0, folder, file, trim_upper_fl=False, trim_lower_fl=True):
+    magopter = Magopter(folder, file, ts_filename=ts_file)
+    magopter.prepare(down_sampling_rate=1, roi_b_plasma=True, plot_fl=False, crit_freq=4000, crit_ampl=None)
+    print('0: {}, 1: {}'.format(len(magopter.iv_arrs[0]), len(magopter.iv_arrs[1])))
+
+    index = int(0.5 * len(magopter.iv_arrs[0]))
+    magopter.iv_arrs[0] = [magopter.iv_arrs[0][index]]
+    magopter.iv_arrs[1] = []
+
+    if magopter.ts_temp is not None:
+        temps = [np.max(temp) / nrm.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]]
+        denss = [np.max(dens) for dens in magopter.ts_dens[mag.DATA]]
+        T_e_ts = np.mean(temps)
+        d_T_e_ts = np.std(temps) / np.sqrt(len(temps))
+        n_e_ts = np.mean(denss)
+        d_n_e_ts = np.std(denss) / np.sqrt(len(denss))
+    else:
+        T_e_ts = 1.61
+        d_T_e_ts = 0.01
+        n_e_ts = 1.4e20
+        d_n_e_ts = 0.1e20
+
+    if not magopter.offline:
+        t, data = magopter.magnum_data[mag.TARGET_TILT]
+        theta_perp = data.mean()
+    else:
+        alpha = 9.95
+        theta_perp = np.radians(alpha)
+    d_theta_perp = np.radians(0.8)
+    A_coll_0 = probe_0.get_collection_area(theta_perp)
+    d_A_coll = np.abs(probe_0.get_collection_area(theta_perp + d_theta_perp) - A_coll_0)
+
+    if trim_lower_fl:
+        trim_lower = [0.0, 0.02, 0.04, 0.06, 0.08, 0.1, 0.12, 0.14, 0.16, 0.18]
+        # trim_upper = [1.0, 0.98, 0.96]
+        measured_vals = [[] for dummy in range(len(trim_lower))]
+        ivs = [[] for dummy in range(len(trim_lower))]
+
+        for i, tl in enumerate(trim_lower):
+            # for tu in trim_upper:
+            magopter.trim(trim_beg=tl, trim_end=0.9)
+            fit_df_0, fit_df_1 = magopter.fit()
+            iv_data = fit_df_0.iloc[[0]]
+
+            ivs[i] = [iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0]]
+
+            # Extract individual values from dataframe
+            v_f = iv_data[c.FLOAT_POT].values[0]
+            T_e = iv_data[c.ELEC_TEMP].values[0]
+            a = iv_data[c.SHEATH_EXP].values[0]
+            I_sat = iv_data[c.ION_SAT].values[0]
+            chi2 = iv_data[c.CHI2].values[0]
+            red_chi2 = iv_data[c.REDUCED_CHI2].values[0]
+
+            d_v_f = iv_data[c.ERROR_STRING.format(c.FLOAT_POT)].values[0]
+            d_T_e = iv_data[c.ERROR_STRING.format(c.ELEC_TEMP)].values[0]
+            d_a = iv_data[c.ERROR_STRING.format(c.SHEATH_EXP)].values[0]
+            d_I_sat = iv_data[c.ERROR_STRING.format(c.ION_SAT)].values[0]
+
+            c_s = lp.sound_speed(T_e, gamma_i=1)
+            d_c_s = lp.d_sound_speed(c_s, T_e, d_T_e)
+            n_e = lp.electron_density(I_sat, c_s, A_coll_0)
+            d_n_e = lp.d_electron_density(n_e, c_s, d_c_s, A_coll_0, d_A_coll, I_sat, d_I_sat)
+
+            # print('iv = {}: \n'
+            #       '\t v_f = {:.3g} +- {:.1g} \n'
+            #       '\t T_e = {:.3g} +- {:.1g} \n'
+            #       '\t I_sat = {:.3g} +- {:.1g} \n'
+            #       '\t n_e = {:.3g} +- {:.1g} \n'
+            #       '\t a = {:.3g} +- {:.1g} \n'
+            #       '\t c_s = {:.3g} +- {:.1g} \n'
+            #       '\t A_coll = {:.3g} +- {:.1g} \n'
+            #       .format(i, v_f, d_v_f, T_e, d_T_e, I_sat, d_I_sat, n_e,
+            #               d_n_e, a, d_a, c_s, d_c_s, A_coll_0, d_A_coll))
+
+            measured_vals[i] = [v_f, d_v_f, T_e, d_T_e, I_sat, d_I_sat, n_e, d_n_e, a, d_a, c_s, d_c_s, A_coll_0, d_A_coll,
+                                chi2, red_chi2]
+
+        measured_vals = np.array(measured_vals)
+
+        plt.figure()
+        for i, iv in enumerate(ivs):
+            plt.plot(iv[0], iv[1], label=trim_lower[i])
+        plt.xlabel('Voltage (V)')
+        plt.ylabel('Current (A)')
+        plt.legend()
+
+        plt.figure()
+        plt.errorbar(trim_lower, measured_vals[:, 2], yerr=measured_vals[:, 3])
+        plt.xlabel('Lower_trim percentage')
+        plt.ylabel('Measured Temperature (eV)')
+
+        plt.figure()
+        plt.errorbar(trim_lower, measured_vals[:, 0], yerr=measured_vals[:, 1])
+        plt.xlabel('Lower_trim percentage')
+        plt.ylabel('Measured Floating potential (V)')
+
+        plt.figure()
+        plt.errorbar(trim_lower, measured_vals[:, 6], yerr=measured_vals[:, 7])
+        plt.xlabel('Lower_trim percentage')
+        plt.ylabel(r'Measured density (m$^{-3}$)')
+
+        plt.figure()
+        # plt.plot(trim_lower, measured_vals[:, 14], label=r'$\chi^2$')
+        plt.plot(trim_lower, measured_vals[:, 15], label=r'Reduced $\chi^2$')
+        plt.axhline(y=1, linestyle='dashed', color='red')
+        plt.xlabel('Lower_trim percentage')
+        plt.legend()
+
+    if trim_upper_fl:
+        trim_upper = [1.0, 0.96, 0.92, 0.88, 0.84, 0.80, 0.76, 0.72, 0.68, 0.64]
+        measured_vals = [[] for dummy in range(len(trim_upper))]
+        ivs = [[] for dummy in range(len(trim_upper))]
+        for i, tu in enumerate(trim_upper):
+            # for tu in trim_upper:
+            magopter.trim(trim_beg=0.0, trim_end=tu)
+            fit_df_0, fit_df_1 = magopter.fit()
+            iv_data = fit_df_0.iloc[[0]]
+
+            ivs[i] = [iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0]]
+
+            # Extract individual values from dataframe
+            v_f = iv_data[c.FLOAT_POT].values[0]
+            T_e = iv_data[c.ELEC_TEMP].values[0]
+            a = iv_data[c.SHEATH_EXP].values[0]
+            I_sat = iv_data[c.ION_SAT].values[0]
+
+            d_v_f = iv_data[c.ERROR_STRING.format(c.FLOAT_POT)].values[0]
+            d_T_e = iv_data[c.ERROR_STRING.format(c.ELEC_TEMP)].values[0]
+            d_a = iv_data[c.ERROR_STRING.format(c.SHEATH_EXP)].values[0]
+            d_I_sat = iv_data[c.ERROR_STRING.format(c.ION_SAT)].values[0]
+
+            c_s = lp.sound_speed(T_e, gamma_i=1)
+            d_c_s = lp.d_sound_speed(c_s, T_e, d_T_e)
+            n_e = lp.electron_density(I_sat, c_s, A_coll_0)
+            d_n_e = lp.d_electron_density(n_e, c_s, d_c_s, A_coll_0, d_A_coll, I_sat, d_I_sat)
+
+            # print('iv = {}: \n'
+            #       '\t v_f = {:.3g} +- {:.1g} \n'
+            #       '\t T_e = {:.3g} +- {:.1g} \n'
+            #       '\t I_sat = {:.3g} +- {:.1g} \n'
+            #       '\t n_e = {:.3g} +- {:.1g} \n'
+            #       '\t a = {:.3g} +- {:.1g} \n'
+            #       '\t c_s = {:.3g} +- {:.1g} \n'
+            #       '\t A_coll = {:.3g} +- {:.1g} \n'
+            #       .format(i, v_f, d_v_f, T_e, d_T_e, I_sat, d_I_sat, n_e,
+            #               d_n_e, a, d_a, c_s, d_c_s, A_coll_0, d_A_coll))
+
+            measured_vals[i] = [v_f, d_v_f, T_e, d_T_e, I_sat, d_I_sat, n_e, d_n_e, a, d_a, c_s, d_c_s, A_coll_0, d_A_coll]
+
+        measured_vals = np.array(measured_vals)
+
+        plt.figure()
+        for i, iv in enumerate(ivs):
+            plt.plot(iv[0], iv[1], label=trim_upper[i])
+        plt.xlabel('Voltage (V)')
+        plt.ylabel('Current (A)')
+        plt.legend()
+
+        plt.figure()
+        plt.errorbar(trim_upper, measured_vals[:, 2], yerr=measured_vals[:, 3])
+        plt.xlabel('Upper_trim percentage')
+        plt.ylabel('Measured Temperature (eV)')
+
+        plt.figure()
+        plt.errorbar(trim_upper, measured_vals[:, 0], yerr=measured_vals[:, 1])
+        plt.xlabel('Upper_trim percentage')
+        plt.ylabel('Measured Floating potential (V)')
+
+        plt.figure()
+        plt.errorbar(trim_upper, measured_vals[:, 6], yerr=measured_vals[:, 7])
+        plt.xlabel('Upper_trim percentage')
+        plt.ylabel(r'Measured density (m$^{-3}$)')
+
+    plt.show()
+
+
 def multi_file_analysis(probe_0, folder, files):
     params = np.zeros([6, len(files)])
     for i, f in enumerate(files):
@@ -772,6 +1024,8 @@ if __name__ == '__main__':
     # integrated_analysis(mp.probe_s, mp.probe_c, folder, file)
     # ts_ir_comparison(mp.probe_s, mp.probe_c, folder, file, ts_file)
     # multi_file_analysis(mp.probe_s, folder, files[285:297])
-    deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=False)
+    # deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=False)
+    multifit_trim_filter_analysis(mp.probe_s, folder, file)
+    # multifit_trim_iv_analysis(mp.probe_s, folder, file)
 
     plt.show()
