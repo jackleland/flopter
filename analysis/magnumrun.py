@@ -711,6 +711,7 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
 
 def multifit_trim_filter_analysis(probe_0, folder, file):
     fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
+    fitter = f.FullIVFitter()
     for i, freq in enumerate([None, 4000]):
         magopter = Magopter(folder, file, ts_filename=ts_file)
         magopter.prepare(down_sampling_rate=1, roi_b_plasma=True, crit_freq=freq, crit_ampl=None)
@@ -718,10 +719,12 @@ def multifit_trim_filter_analysis(probe_0, folder, file):
         index = int(0.5 * len(magopter.iv_arrs[0]))
         iv_data = magopter.iv_arrs[0][index]
 
-        fitdata = iv_data.multi_fit()
+        fitdata = iv_data.multi_fit(fitter=fitter)
+
         iv_data.trim_beg = 0.01
-        iv_data.trim_end = 0.30
-        fitdata_1 = iv_data.multi_fit()
+        iv_data.trim_end = 0.45
+        fitdata_1 = iv_data.multi_fit(fitter=fitter)
+        print('{}:{}'.format(iv_data.trim_beg, iv_data.trim_end))
         fitdata_1.print_fit_params()
         # fitdata_1_fvf = iv_data.multi_fit(plot_fl=False, fix_vf_fl=True)
 
@@ -737,8 +740,8 @@ def multifit_trim_filter_analysis(probe_0, folder, file):
         plt.plot(untrimmed_x, fitdata.fit_function(untrimmed_x), label='Fit - No Trim', color='green', zorder=10)
 
         # Plot the comparion between fixed vf and free vf
-        plt.plot(untrimmed_x, fitdata_1.fit_function(untrimmed_x), color='red', linewidth=1, label='Fit - {}:{}'
-                 .format(iv_data.trim_end, iv_data.trim_beg))
+        plt.plot(untrimmed_x, fitdata_1.fit_function(untrimmed_x), color='red', linewidth=1,
+                 label=r'T_e = {:.3g},  $\chi^2$ = {:.3g}'.format(fitdata_1.get_temp().value, fitdata_1.reduced_chi2))
         plt.axvline(x=np.max(fitdata_1.raw_x), label='Trim Min/Max', color='red', linestyle='dashed', linewidth=1)
         plt.axvline(x=np.min(fitdata_1.raw_x), color='red', linestyle='dashed', linewidth=1)
         # plt.plot(untrimmed_x, fitdata_1_fvf.fit_function(untrimmed_x), label=r'Fixed $V_f$ Fit - {}:{}'
@@ -752,26 +755,28 @@ def multifit_trim_filter_analysis(probe_0, folder, file):
         # Trim and plot again
         iv_data.trim_beg = -0.05
         iv_data.trim_end = 0.45
-        fitdata_2 = iv_data.multi_fit()
+        fitdata_2 = iv_data.multi_fit(fitter=fitter)
+        print('{}:{}'.format(iv_data.trim_beg, iv_data.trim_end))
         fitdata_2.print_fit_params()
         # fitdata_2_fvf = iv_data.multi_fit(fix_vf_fl=True)
 
-        plt.plot(untrimmed_x, fitdata_2.fit_function(untrimmed_x), color='blue', linewidth=1, label='Fit - {}:{}'
-                 .format(iv_data.trim_end, iv_data.trim_beg))
+        plt.plot(untrimmed_x, fitdata_2.fit_function(untrimmed_x), color='blue', linewidth=1,
+                 label=r'T_e = {:.3g},  $\chi^2$ = {:.3g}'.format(fitdata_2.get_temp().value, fitdata_2.reduced_chi2))
         plt.axvline(x=np.max(fitdata_2.raw_x), label='Trim Min/Max', color='blue', linestyle='dashed', linewidth=1)
         plt.axvline(x=np.min(fitdata_2.raw_x), color='blue', linestyle='dashed', linewidth=1)
         # plt.plot(untrimmed_x, fitdata_0160_fvf.fit_function(untrimmed_x), label=r'Fixed $V_f$ Fit - {}:{}'
         #          .format(iv_data.trim_end, iv_data.trim_beg), color='blue', linestyle='-.')
 
         # Trim and plot again
-        iv_data.trim_beg = 0.01
+        iv_data.trim_beg = -0.1
         iv_data.trim_end = 0.45
-        fitdata_3 = iv_data.multi_fit()
+        fitdata_3 = iv_data.multi_fit(fitter=fitter)
+        print('{}:{}'.format(iv_data.trim_beg, iv_data.trim_end))
         fitdata_3.print_fit_params()
         # fitdata_3_fvf = iv_data.multi_fit(fix_vf_fl=True)
 
-        plt.plot(untrimmed_x, fitdata_3.fit_function(untrimmed_x), color='orange', linewidth=1, label='Fit - {}:{}'
-                 .format(iv_data.trim_end, iv_data.trim_beg))
+        plt.plot(untrimmed_x, fitdata_3.fit_function(untrimmed_x), color='orange', linewidth=1,
+                 label=r'T_e = {:.3g},  $\chi^2$ = {:.3g}'.format(fitdata_3.get_temp().value, fitdata_3.reduced_chi2))
         plt.axvline(x=np.max(fitdata_3.raw_x), label='Trim Min/Max', color='orange', linestyle='dashed', linewidth=1)
         plt.axvline(x=np.min(fitdata_3.raw_x), color='orange', linestyle='dashed', linewidth=1)
 
@@ -779,7 +784,7 @@ def multifit_trim_filter_analysis(probe_0, folder, file):
         # plt.plot(untrimmed_x, f.FullIVFitter().fit_function(untrimmed_x, *custom_params), label='Custom Fit {}'
         #          .format(', '.join([str(i) for i in custom_params])))
         plt.axhline(color='black', linewidth=1)
-        plt.ylim(-0.4, 1.6)
+        plt.ylim(-1.1, 1.6)
         plt.xlabel('Voltage (V)')
         plt.ylabel('Current (A)')
         plt.legend()

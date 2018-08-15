@@ -253,6 +253,9 @@ class FullIVFitter(IVFitter):
 
 
 class SimpleIVFitter(IVFitter):
+    """
+    Fitter object for a 3-parameter IV characteristic fit
+    """
     def __init__(self):
         super().__init__()
         self._param_labels = {

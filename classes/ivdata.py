@@ -87,13 +87,14 @@ class IVData(dict):
         copied_iv_data.untrimmed_items = self.untrimmed_items
         return copied_iv_data
 
-    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, fix_vf_fl=False, plot_fl=False):
+    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, fitter=None, fix_vf_fl=False, plot_fl=False):
         """
         Multi-stage fitting method using an initial straight line fit to the saturation region of the IV curve (decided
         by the sat_region kwarg). The fitted I_sat is then left fixed while T_e and a are found with a 2 parameter fit,
         which gives the guess parameters for an unconstrained full IV fit.
         :param sat_region:  Threshold voltage value below which the 'Straight section' is defined. The straight section
                             is fitted to get an initial value of saturation current for subsequent fits.
+        :param fitter:      Fitter object to be used for the fixed-I_sat fit and the final, full-free fit.
         :param plot_fl:     (Boolean) If true, plots the output of all 3 stages of fitting. Default is False.
         :param fix_vf_fl:   (Boolean) If true, fixes the floating potential for all 3 stages of fitting. The value used
                             is the interpolated value of Voltage where Current = 0. Default is False.
@@ -101,6 +102,11 @@ class IVData(dict):
         """
         import fitters as f
         import matplotlib.pyplot as plt
+
+        if fitter is None:
+            fitter = f.FullIVFitter()
+        else:
+            print('Running with non-standard fitter {}'.format(fitter.name))
 
         # find floating potential and max potential
         v_f = f.IVFitter.find_floating_pot_iv_data(self)
@@ -123,19 +129,19 @@ class IVData(dict):
 
         # Use I_sat value to fit a fixed_value 4-parameter IV fit
         I_sat_guess = siv_f_data.get_isat().value
-        fitter = f.FullIVFitter()
+        fitter_type = f.FullIVFitter()
         if fix_vf_fl:
-            fitter.set_fixed_values({c.FLOAT_POT: v_f, c.ION_SAT: I_sat_guess})
+            fitter_type.set_fixed_values({c.FLOAT_POT: v_f, c.ION_SAT: I_sat_guess})
         else:
-            fitter.set_fixed_values({c.ION_SAT: I_sat_guess})
-        first_fit_data = fitter.fit_iv_data(iv_data_trim, sigma=iv_data_trim[c.SIGMA])
+            fitter_type.set_fixed_values({c.ION_SAT: I_sat_guess})
+        first_fit_data = fitter_type.fit_iv_data(iv_data_trim, sigma=iv_data_trim[c.SIGMA])
 
         # Do a full 4 parameter fit with initial guess params taken from previous fit
         params = first_fit_data.fit_params.get_values()
-        fitter.unset_fixed_values()
+        fitter_type.unset_fixed_values()
         if fix_vf_fl:
-            fitter.set_fixed_values({c.FLOAT_POT: v_f})
-        ff_data = fitter.fit_iv_data(iv_data_trim, initial_vals=params, sigma=iv_data_trim[c.SIGMA])
+            fitter_type.set_fixed_values({c.FLOAT_POT: v_f})
+        ff_data = fitter_type.fit_iv_data(iv_data_trim, initial_vals=params, sigma=iv_data_trim[c.SIGMA])
 
         if plot_fl:
             fig = plt.figure()
