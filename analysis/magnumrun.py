@@ -997,11 +997,13 @@ def multifit_std_err_scale_analysis(folder, file):
     plt.legend()
 
 
-def multi_file_analysis(probe_0, folder, files):
+def multi_file_analysis(probe_0, folder, files, save_fl=True, deallocate_fl=True):
+    print('\nRunning multi-file analysis. Analysing {} file(s).\n'.format(len(files)))
     params = np.zeros([6, len(files)])
     for i, f in enumerate(files):
         # Run analysis for shot.
-        dsr = 1
+        dsr = 10
+        print('\nAnalysing file: {} ({} of {}) \n'.format(f, i + 1, len(files)))
         m = Magopter(folder, f)
         m.prepare(down_sampling_rate=dsr, roi_b_plasma=True, crit_freq=4000, crit_ampl=None)
         fit_df_0, fit_df_1 = m.fit()
@@ -1020,6 +1022,11 @@ def multi_file_analysis(probe_0, folder, files):
         d_I_sat = fit_df_0[c.ION_SAT].std() / np.sqrt(fit_df_0[c.ION_SAT].count())
         params[2:, i] = [T_e, d_T_e, I_sat, d_I_sat]
 
+        if deallocate_fl:
+            del m, T_e, d_T_e, I_sat, d_I_sat
+            import gc
+            gc.collect()
+
     # noinspection PyTypeChecker
     fig, ax = plt.subplots(2, 1, sharex=False, sharey='all')
     plt.sca(ax[0])
@@ -1031,6 +1038,11 @@ def multi_file_analysis(probe_0, folder, files):
     plt.ylabel(r'I$_{sat}$')
     plt.xlabel('Target Chamber Pressure')
     plt.legend()
+
+    if save_fl:
+        np.save('neutral_pressure_scan.npy', params)
+        fig.savefig('neutral_pressure_scan.pdf', bbox_inches='tight')
+        plt.close(fig)
 
 
 if __name__ == '__main__':
@@ -1060,10 +1072,11 @@ if __name__ == '__main__':
     # main_magopter_analysis()
     # integrated_analysis(mp.probe_s, mp.probe_c, folder, file)
     # ts_ir_comparison(mp.probe_s, mp.probe_c, folder, file, ts_file)
-    # multi_file_analysis(mp.probe_s, folder, files[285:297])
+    multi_file_analysis(mp.probe_s, folder, files[285:289], save_fl=True)
+    # multi_file_analysis(mp.probe_s, folder, files[285:297], save_fl=True)
     # deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=False)
     # multifit_trim_filter_analysis(mp.probe_s, folder, file)
     # multifit_trim_iv_analysis(mp.probe_s, folder, file)
-    multifit_std_err_scale_analysis(folder, file)
+    # multifit_std_err_scale_analysis(folder, file)
 
     plt.show()
