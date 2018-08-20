@@ -111,7 +111,7 @@ class IVData(dict):
         import fitters as f
         import matplotlib.pyplot as plt
 
-        if fitter is None:
+        if fitter is None or not isinstance(fitter, f.IVFitter):
             fitter = f.FullIVFitter()
 
         print('Running fit with {}'.format(fitter.name))
@@ -137,19 +137,18 @@ class IVData(dict):
 
         # Use I_sat value to fit a fixed_value 4-parameter IV fit
         I_sat_guess = siv_f_data.get_isat().value
-        fitter_type = f.FullIVFitter()
         if fix_vf_fl:
-            fitter_type.set_fixed_values({c.FLOAT_POT: v_f, c.ION_SAT: I_sat_guess})
+            fitter.set_fixed_values({c.FLOAT_POT: v_f, c.ION_SAT: I_sat_guess})
         else:
-            fitter_type.set_fixed_values({c.ION_SAT: I_sat_guess})
-        first_fit_data = fitter_type.fit_iv_data(iv_data_trim, sigma=iv_data_trim[c.SIGMA])
+            fitter.set_fixed_values({c.ION_SAT: I_sat_guess})
+        first_fit_data = fitter.fit_iv_data(iv_data_trim, sigma=iv_data_trim[c.SIGMA])
 
         # Do a full 4 parameter fit with initial guess params taken from previous fit
         params = first_fit_data.fit_params.get_values()
-        fitter_type.unset_fixed_values()
+        fitter.unset_fixed_values()
         if fix_vf_fl:
-            fitter_type.set_fixed_values({c.FLOAT_POT: v_f})
-        ff_data = fitter_type.fit_iv_data(iv_data_trim, initial_vals=params, sigma=iv_data_trim[c.SIGMA])
+            fitter.set_fixed_values({c.FLOAT_POT: v_f})
+        ff_data = fitter.fit_iv_data(iv_data_trim, initial_vals=params, sigma=iv_data_trim[c.SIGMA])
 
         if plot_fl:
             fig = plt.figure()
