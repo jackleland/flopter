@@ -16,10 +16,11 @@ class IVData(dict):
     _DEFAULT_TRIM_BEG = 0.0
     _DEFAULT_TRIM_END = 1.0
     _DEFAULT_STRAIGHT_CUTOFF = -30
+    _DEFAULT_STD_SCALER = 1.0
 
-    def __init__(self, voltage, total_current, time, e_current=None, i_current=None,
-                 trim_beg=_DEFAULT_TRIM_BEG, trim_end=_DEFAULT_TRIM_END, estimate_error_fl=True,
-                 sat_region=_DEFAULT_STRAIGHT_CUTOFF, sigma=None):
+    def __init__(self, voltage, total_current, time, e_current=None, i_current=None, sigma=None, estimate_error_fl=True,
+                 sat_region=_DEFAULT_STRAIGHT_CUTOFF, std_err_scaler=_DEFAULT_STD_SCALER,
+                 trim_beg=_DEFAULT_TRIM_BEG, trim_end=_DEFAULT_TRIM_END):
         super().__init__([
             (c.CURRENT, total_current),
             (c.POTENTIAL, voltage),
@@ -38,7 +39,7 @@ class IVData(dict):
         if estimate_error_fl and c.SIGMA not in self:
             str_sec = np.where(self[c.POTENTIAL] <= sat_region)
             i_ss = self[c.CURRENT][str_sec]
-            self[c.SIGMA] = np.std(i_ss) * np.ones_like(self[c.CURRENT])
+            self[c.SIGMA] = std_err_scaler * np.std(i_ss) * np.ones_like(self[c.CURRENT])
 
         self.untrimmed_items = {}
         for k, v in self.items():
@@ -50,10 +51,17 @@ class IVData(dict):
         else:
             return self[c.POTENTIAL], self[c.CURRENT]
 
+    def set_trim(self, trim_beg=_DEFAULT_TRIM_BEG, trim_end=_DEFAULT_TRIM_END):
+        assert self._DEFAULT_TRIM_BEG <= trim_beg < trim_end <= self._DEFAULT_TRIM_END
+        if trim_beg != self._DEFAULT_TRIM_BEG:
+            self.trim_beg = trim_beg
+        if trim_end != self._DEFAULT_TRIM_END:
+            self.trim_end = trim_end
+
     def trim(self, trim_beg=None, trim_end=None):
         if not trim_beg and not trim_end:
             if self.trim_beg == self._DEFAULT_TRIM_BEG and self.trim_end == self._DEFAULT_TRIM_END:
-                print('WARNING: simple_relative_trim values unchanged from default, no trimming will take place')
+                print('WARNING: trim values unchanged from default, no trimming will take place')
                 return
             else:
                 print('Continuing with pre-set trim values.')
@@ -105,8 +113,8 @@ class IVData(dict):
 
         if fitter is None:
             fitter = f.FullIVFitter()
-        else:
-            print('Running with non-standard fitter {}'.format(fitter.name))
+
+        print('Running fit with {}'.format(fitter.name))
 
         # find floating potential and max potential
         v_f = f.IVFitter.find_floating_pot_iv_data(self)
@@ -159,19 +167,19 @@ class IVData(dict):
         return ff_data
 
     @staticmethod
-    def simple_relative_trim(iv_data, trim_beg=0.0, trim_end=1.0):
+    def percentage_trim(iv_data, trim_beg=0.0, trim_end=1.0):
         if not iv_data or not isinstance(iv_data, IVData):
             raise ValueError('Invalid iv_data given.')
         full_length = len(iv_data[c.CURRENT])
         start = int(full_length * trim_beg)
         stop = int(full_length * trim_end)
-        return IVData.simple_absolute_trim(iv_data, start, stop)
+        return IVData.positional_trim(iv_data, start, stop)
 
     @staticmethod
-    def simple_absolute_trim(iv_data, start, stop):
+    def positional_trim(iv_data, start, stop):
         """
         Function for trimming an IVData object by array index.
-        :param iv_data: IVData object to simple_relative_trim
+        :param iv_data: IVData object to trim
         :param start:   Start trimming from this index - must be integer
         :param stop:    Stop index - must be integer
         :return: trimmed IVData object with arrays of length (stop - start)

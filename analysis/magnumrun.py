@@ -63,7 +63,7 @@ def main_magopter_analysis():
     # plt.show()
     dsr = 10
     magopter.prepare(down_sampling_rate=dsr, plot_fl=True)
-    # magopter.simple_relative_trim(trim_end=0.82)
+    # magopter.trim(trim_end=0.82)
     magopter.trim(trim_end=0.83)
     fit_df_0, fit_df_1 = magopter.fit()
 
@@ -967,6 +967,43 @@ def multifit_trim_iv_analysis(probe_0, folder, file, trim_upper_fl=False, trim_l
     plt.show()
 
 
+def multifit_std_err_scale_analysis(folder, file):
+    fig, ax = plt.subplots(2, 1, sharex='all', sharey='all')
+    magopter = Magopter(folder, file, ts_filename=ts_file)
+    magopter.prepare(down_sampling_rate=1, roi_b_plasma=True, crit_freq=4000, crit_ampl=None)
+
+    index = int(0.5 * len(magopter.iv_arrs[0]))
+
+    for i, fitter in enumerate([f.SimpleIVFitter(), f.FullIVFitter()]):
+        raw_iv_data = magopter.iv_arrs[0][index].copy()
+        sigma = raw_iv_data[c.SIGMA]
+
+        # Plot the raw signal
+        plt.sca(ax[i])
+        plt.title(fitter.name)
+        plt.errorbar(raw_iv_data[c.POTENTIAL], raw_iv_data[c.CURRENT], fmt='.', yerr=raw_iv_data[c.SIGMA], label='Raw',
+                     color='silver', zorder=-10)
+
+        for scaler, colour in [(0.5, 'red'), (0.75, 'orange'), (1.0, 'green'), (1.5, 'blue')]:
+            raw_iv_data[c.SIGMA] = sigma * scaler
+            fitdata = raw_iv_data.multi_fit(fitter=fitter)
+            print('Sigma * {}'.format(scaler))
+            fitdata.print_fit_params()
+
+            # Plot the fit for the given value of error scaling
+            plt.plot(raw_iv_data[c.POTENTIAL], fitdata.fit_function(raw_iv_data[c.POTENTIAL]), color=colour,
+                     linewidth=1, label=r'$\delta I$ = {}$\sigma$, $T_e$ = {:.3g},  $\chi^2$ = {:.3g}'
+                     .format(scaler, fitdata.get_temp().value, fitdata.reduced_chi2))
+            plt.axvline(x=np.max(fitdata.raw_x), label='Trim Min/Max', color=colour, linestyle='dashed', linewidth=1)
+            plt.axvline(x=np.min(fitdata.raw_x), color=colour, linestyle='dashed', linewidth=1)
+
+        plt.axhline(color='black', linewidth=1)
+        plt.ylim(-1.1, 1.6)
+        plt.xlabel('Voltage (V)')
+        plt.ylabel('Current (A)')
+        plt.legend()
+
+
 def multi_file_analysis(probe_0, folder, files):
     params = np.zeros([6, len(files)])
     for i, f in enumerate(files):
@@ -1030,7 +1067,8 @@ if __name__ == '__main__':
     # ts_ir_comparison(mp.probe_s, mp.probe_c, folder, file, ts_file)
     # multi_file_analysis(mp.probe_s, folder, files[285:297])
     # deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=False)
-    multifit_trim_filter_analysis(mp.probe_s, folder, file)
+    # multifit_trim_filter_analysis(mp.probe_s, folder, file)
     # multifit_trim_iv_analysis(mp.probe_s, folder, file)
+    multifit_std_err_scale_analysis(folder, file)
 
     plt.show()

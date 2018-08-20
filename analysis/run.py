@@ -15,7 +15,7 @@ def run_param_scan(flopter):
     # flopter_nogap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/')
 
     ivdata_g = flopter.trim(trim_end=0.8)
-    # ivdata_ng = flopter_nogap.simple_relative_trim()
+    # ivdata_ng = flopter_nogap.trim()
 
     fig = plt.figure()
     flopter.plot_iv(iv_data=ivdata_g, fig=fig, plot_tot=True, label='Gap')

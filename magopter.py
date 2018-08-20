@@ -168,13 +168,10 @@ class Magopter(fl.IVAnalyser):
                               fig=plt.subplot(211), show_fl=False)
                 low_pass.plot(self.raw_time, self.raw_current[0], apply_plot_fl=False, range=[[12.22, 12.25], [-2.25, 1.35]],
                               fig=plt.subplot(212))
-            self.current[0] = low_pass.apply(self.raw_time, self.raw_current[0])
-            self.current[1] = low_pass.apply(self.raw_time, self.raw_current[1])
-            self.current = np.array(self.current)
-
-            # raw_voltage = filt_voltage
-            # raw_current_0 = filt_current_0
-            # raw_current_1 = filt_current_1
+            # self.current[0] = low_pass.apply(self.raw_time, self.raw_current[0])
+            # self.current[1] = low_pass.apply(self.raw_time, self.raw_current[1])
+            # self.current = np.array(self.current)
+            self.current = np.array(self.raw_current)
 
         if crit_ampl:
             gate = filt.GatedFilter(crit_ampl)
