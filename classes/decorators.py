@@ -49,3 +49,21 @@ def plotmethod(func):  # the decorator
         return return_var
 
     return wrapper
+
+
+def printmethod(func):
+    """
+    Decorator function used to add kwargs common to all plotting functions.
+    :param func:    Function to be decorated.
+    :return:        Decorated function
+    """
+    def wrapper(*args, print_fl=False, **kwargs):
+        """
+        Wrapper for function which adds printing functionality.
+        :param print_fl:    (boolean) Flag to control whether to run print statement in function is executed. Default is
+                            False.
+        """
+        return_var = func(*args, **kwargs)
+        return return_var
+
+    return wrapper
