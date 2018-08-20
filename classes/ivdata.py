@@ -95,7 +95,8 @@ class IVData(dict):
         copied_iv_data.untrimmed_items = self.untrimmed_items
         return copied_iv_data
 
-    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, fitter=None, fix_vf_fl=False, plot_fl=False):
+    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, fitter=None, fix_vf_fl=False, plot_fl=False,
+                  print_fl=False):
         """
         Multi-stage fitting method using an initial straight line fit to the saturation region of the IV curve (decided
         by the sat_region kwarg). The fitted I_sat is then left fixed while T_e and a are found with a 2 parameter fit,
@@ -106,6 +107,7 @@ class IVData(dict):
         :param plot_fl:     (Boolean) If true, plots the output of all 3 stages of fitting. Default is False.
         :param fix_vf_fl:   (Boolean) If true, fixes the floating potential for all 3 stages of fitting. The value used
                             is the interpolated value of Voltage where Current = 0. Default is False.
+        :param print_fl:    (Boolean) If true, prints fitter information to console.
         :return:            Full 4-param IVFit data
         """
         import fitters as f
@@ -114,7 +116,8 @@ class IVData(dict):
         if fitter is None or not isinstance(fitter, f.IVFitter):
             fitter = f.FullIVFitter()
 
-        print('Running fit with {}'.format(fitter.name))
+        if print_fl:
+            print('Running fit with {}'.format(fitter.name))
 
         # find floating potential and max potential
         v_f = f.IVFitter.find_floating_pot_iv_data(self)
