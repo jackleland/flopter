@@ -314,10 +314,6 @@ class Magopter(fl.IVAnalyser):
                     continue
 
             sweep_current = [current[sweep_start:sweep_stop] for current in self.current]
-            # sweep_current = self.current[:, sweep_start:sweep_stop]
-            # sweep_current = [[]] * self.coaxes
-            # for j in range(self.coaxes):
-            #     sweep_current[j] = self.current[j][sweep_start:sweep_stop]
 
             # Reverse alternate sweeps if not operating in combined sweeps mode, so
             if not self.combine_sweeps_fl and sweep_voltage[0] > sweep_voltage[-1]:
@@ -327,11 +323,9 @@ class Magopter(fl.IVAnalyser):
                     sweep_current[j] = np.array(list(reversed(sweep_current[j])))
 
             # Create IVData objects for each sweep (or sweep pair)
-            # for j in range(self.coaxes):
-            #     self.iv_arrs[j].append(iv.IVData(np.array(sweep_voltage) - np.array(sweep_current[j]),
-            #                                      sweep_current[j], sweep_time))
             for j in range(self.coaxes):
-                self.iv_arrs[j].append(iv.IVData(sweep_voltage - sweep_current[j], sweep_current[j], sweep_time))
+                self.iv_arrs[j].append(iv.IVData(sweep_voltage - sweep_current[j], sweep_current[j], sweep_time,
+                                                 std_err_scaler=0.95))
 
     def trim(self, trim_beg=0.0, trim_end=1.0):
         self.trim_beg = trim_beg

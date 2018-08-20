@@ -12,7 +12,7 @@ import databases.magnum as mag
 from scipy.interpolate import interp1d
 import scipy.signal as sig
 import fitters as f
-from tkinter.filedialog import askopenfilename
+# from tkinter.filedialog import askopenfilename
 
 
 def main_magopter_analysis():
@@ -710,6 +710,7 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
 
 
 def multifit_trim_filter_analysis(probe_0, folder, file):
+    # noinspection PyTypeChecker
     fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
     fitter = f.FullIVFitter()
     for i, freq in enumerate([None, 4000]):
@@ -968,40 +969,32 @@ def multifit_trim_iv_analysis(probe_0, folder, file, trim_upper_fl=False, trim_l
 
 
 def multifit_std_err_scale_analysis(folder, file):
-    fig, ax = plt.subplots(2, 1, sharex='all', sharey='all')
+    # fig, ax = plt.subplots(2, 1, sharex='all', sharey='all')
     magopter = Magopter(folder, file, ts_filename=ts_file)
     magopter.prepare(down_sampling_rate=1, roi_b_plasma=True, crit_freq=4000, crit_ampl=None)
 
     index = int(0.5 * len(magopter.iv_arrs[0]))
+    scales = np.arange(0.5, 1.2, 0.05)
+    chis = np.zeros_like(scales)
+
+    plt.figure()
 
     for i, fitter in enumerate([f.SimpleIVFitter(), f.FullIVFitter()]):
         raw_iv_data = magopter.iv_arrs[0][index].copy()
         sigma = raw_iv_data[c.SIGMA]
 
-        # Plot the raw signal
-        plt.sca(ax[i])
-        plt.title(fitter.name)
-        plt.errorbar(raw_iv_data[c.POTENTIAL], raw_iv_data[c.CURRENT], fmt='.', yerr=raw_iv_data[c.SIGMA], label='Raw',
-                     color='silver', zorder=-10)
-
-        for scaler, colour in [(0.5, 'red'), (0.75, 'orange'), (1.0, 'green'), (1.5, 'blue')]:
+        for j, scaler in enumerate(scales):
             raw_iv_data[c.SIGMA] = sigma * scaler
             fitdata = raw_iv_data.multi_fit(fitter=fitter)
             print('Sigma * {}'.format(scaler))
             fitdata.print_fit_params()
+            chis[j] = fitdata.reduced_chi2
 
-            # Plot the fit for the given value of error scaling
-            plt.plot(raw_iv_data[c.POTENTIAL], fitdata.fit_function(raw_iv_data[c.POTENTIAL]), color=colour,
-                     linewidth=1, label=r'$\delta I$ = {}$\sigma$, $T_e$ = {:.3g},  $\chi^2$ = {:.3g}'
-                     .format(scaler, fitdata.get_temp().value, fitdata.reduced_chi2))
-            plt.axvline(x=np.max(fitdata.raw_x), label='Trim Min/Max', color=colour, linestyle='dashed', linewidth=1)
-            plt.axvline(x=np.min(fitdata.raw_x), color=colour, linestyle='dashed', linewidth=1)
-
-        plt.axhline(color='black', linewidth=1)
-        plt.ylim(-1.1, 1.6)
-        plt.xlabel('Voltage (V)')
-        plt.ylabel('Current (A)')
-        plt.legend()
+        plt.plot(scales, chis, label=fitter.name)
+    plt.axhline(y=1.0, color='black', linewidth=1)
+    plt.xlabel('$\delta I$ ($\sigma$)')
+    plt.ylabel(r'Reduced $\chi^2$')
+    plt.legend()
 
 
 def multi_file_analysis(probe_0, folder, files):
@@ -1010,7 +1003,7 @@ def multi_file_analysis(probe_0, folder, files):
         # Run analysis for shot.
         dsr = 1
         m = Magopter(folder, f)
-        m.prepare(down_sampling_rate=dsr, roi_b_plasma=True, crit_freq=4000, crit_ampl=1e-3)
+        m.prepare(down_sampling_rate=dsr, roi_b_plasma=True, crit_freq=4000, crit_ampl=None)
         fit_df_0, fit_df_1 = m.fit()
 
         for j, data_tag in enumerate([mag.TARGET_CHAMBER_PRESSURE, mag.TARGET_TILT]):
@@ -1027,11 +1020,13 @@ def multi_file_analysis(probe_0, folder, files):
         d_I_sat = fit_df_0[c.ION_SAT].std() / np.sqrt(fit_df_0[c.ION_SAT].count())
         params[2:, i] = [T_e, d_T_e, I_sat, d_I_sat]
 
-    fig, ax = plt.subplots()
+    # noinspection PyTypeChecker
+    fig, ax = plt.subplots(2, 1, sharex=False, sharey='all')
+    plt.sca(ax[0])
     plt.errorbar(params[0], params[2], yerr=params[3], label='Temperature')
     plt.ylabel('Temperature')
 
-    ax2 = ax.twinx()
+    plt.sca(ax[1])
     plt.errorbar(params[0], params[4], yerr=params[5], label=r'I$_{sat}$')
     plt.ylabel(r'I$_{sat}$')
     plt.xlabel('Target Chamber Pressure')
