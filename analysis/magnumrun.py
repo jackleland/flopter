@@ -1046,8 +1046,9 @@ def multi_file_analysis(probe_0, folder, files, save_fl=True, deallocate_fl=True
 
 
 if __name__ == '__main__':
-    folders = ['2018-05-01_Leland/', '2018-05-02_Leland/', '2018-05-03_Leland/',
-               '2018-06-05_Leland/', '2018-06-06_Leland/', '2018-06-07_Leland/']
+    data_path = Magopter.get_data_path()
+    folders = next(os.walk(data_path))[1]
+
     files = []
     file_folders = []
     for folder1 in folders:
@@ -1064,6 +1065,8 @@ if __name__ == '__main__':
     ts_file = files[284]
     folder = file_folders[-2]
     print(folder, file, ts_file)
+
+    exit()
 
     mp = MagnumProbes()
 
