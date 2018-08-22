@@ -1,4 +1,4 @@
-import flopter as fl
+from classes.base import IVAnalyser
 import fitters as f
 import filtering as filt
 import numpy as np
@@ -21,7 +21,7 @@ import glob
 import os
 
 
-class Magopter(fl.IVAnalyser):
+class Magopter(IVAnalyser):
     # Default values
     _FOLDER_STRUCTURE = '/Data/Magnum/'
     _TAR_VOLTAGE_CHANNEL = 0

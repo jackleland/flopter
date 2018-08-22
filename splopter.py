@@ -10,6 +10,7 @@ from scipy.io import loadmat
 from scipy.optimize import curve_fit
 from scipy.signal import argrelmax, savgol_filter
 
+from classes.base import IVAnalyser
 from classes.fitdata import IVFitData
 from classes.ivdata import IVData
 import classes.spicedata as sd
@@ -18,49 +19,9 @@ from homogenisation import Spice2Homogeniser
 from inputparser import InputParser
 from normalisation import Denormaliser
 from fitters import IVFitter, FullIVFitter, GaussianFitter
-
-
-class IVAnalyser(ABC):
-    """
-    Abstract base class for the analysis of Langmuir Probe data.
-    """
-    @abstractmethod
-    def prepare(self):
-        pass
-
-    @abstractmethod
-    def trim(self):
-        pass
-
-    @abstractmethod
-    def denormalise(self):
-        pass
-
-    @abstractmethod
-    def fit(self, *args, **kwargs):
-        pass
-
-    @staticmethod
-    def trim_generic(data, trim_beg=0.0, trim_end=1.0):
-        full_length = len(data)
-        # Cut off the noise in the electron saturation region
-        return data[int(full_length * trim_beg):int(full_length * trim_end)]
-
-    @classmethod
-    def create_from_file(cls, filename):
-        # TODO: Implement a saving and loading system
-        pass
-
-    # @abstractmethod
-    # def plot(self):
-    #     pass
-    #
-    # @abstractmethod
-    # def save(self):
-    #     pass
     
 
-class Flopter(IVAnalyser):
+class Splopter(IVAnalyser):
     """
         Implementation of IVAnalyser for the analysis of probe data from SPICE
     """
@@ -200,11 +161,11 @@ class Flopter(IVAnalyser):
             iv_data = self.iv_data
 
         # Cut off the noise in the electron saturation region
-        t = Flopter.trim_generic(iv_data[c.TIME], trim_beg=trim_beg, trim_end=trim_end)
-        V = Flopter.trim_generic(iv_data[c.POTENTIAL], trim_beg=trim_beg, trim_end=trim_end)
-        I = Flopter.trim_generic(iv_data[c.CURRENT], trim_beg=trim_beg, trim_end=trim_end)
-        I_e = Flopter.trim_generic(iv_data[c.ELEC_CURRENT], trim_beg=trim_beg, trim_end=trim_end)
-        I_i = Flopter.trim_generic(iv_data[c.ION_CURRENT], trim_beg=trim_beg, trim_end=trim_end)
+        t = Splopter.trim_generic(iv_data[c.TIME], trim_beg=trim_beg, trim_end=trim_end)
+        V = Splopter.trim_generic(iv_data[c.POTENTIAL], trim_beg=trim_beg, trim_end=trim_end)
+        I = Splopter.trim_generic(iv_data[c.CURRENT], trim_beg=trim_beg, trim_end=trim_end)
+        I_e = Splopter.trim_generic(iv_data[c.ELEC_CURRENT], trim_beg=trim_beg, trim_end=trim_end)
+        I_i = Splopter.trim_generic(iv_data[c.ION_CURRENT], trim_beg=trim_beg, trim_end=trim_end)
 
         return IVData(V, I, t, i_current=I_i, e_current=I_e)
 

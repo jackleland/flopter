@@ -1,4 +1,4 @@
-import flopter as fl
+import splopter as spl
 import fitters as f
 import constants as c
 import normalisation as n
@@ -6,28 +6,27 @@ import matplotlib.pyplot as plt
 import numpy as np
 import classes.spicedata as sd
 from scipy.signal import argrelmax, savgol_filter
-import scipy as sp
 from scipy.io import loadmat
 
 
-def run_param_scan(flopter):
-    # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
-    # flopter_nogap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/')
+def run_param_scan(splopter):
+    # splopter = spl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/')
+    # splopter_nogap = Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/')
 
-    ivdata_g = flopter.trim(trim_end=0.8)
-    # ivdata_ng = flopter_nogap.trim()
+    ivdata_g = splopter.trim(trim_end=0.8)
+    # ivdata_ng = splopter_nogap.trim()
 
     fig = plt.figure()
-    flopter.plot_iv(iv_data=ivdata_g, fig=fig, plot_tot=True, label='Gap')
+    splopter.plot_iv(iv_data=ivdata_g, fig=fig, plot_tot=True, label='Gap')
     n_params = 4
     params = [[]]*n_params
     errors = [[]]*n_params
     trim_space = np.linspace(0.4, 0.5, 11)
     print(params)
     for trim_end in trim_space:
-        ivdata = flopter.trim(trim_end=trim_end)
-        ivfitdata = flopter.fit(ivdata)
-        flopter.plot_f_fit(ivfitdata, fig=fig, plot_raw=False, plot_vf=False, label=str(trim_end))
+        ivdata = splopter.trim(trim_end=trim_end)
+        ivfitdata = splopter.fit(ivdata)
+        splopter.plot_f_fit(ivfitdata, fig=fig, plot_raw=False, plot_vf=False, label=str(trim_end))
         fit_params, fit_errors = ivfitdata.get_fit_params().split()
         for i in range(n_params):
             if len(params[i]) == 0:
@@ -49,51 +48,51 @@ def run_param_scan(flopter):
 
 
 def run_gap_nogap_comparison():
-    flopter_gap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullgap/', prepare=True)
-    flopter_nogap = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullnogap/', prepare=True)
+    splopter_gap = spl.Splopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullgap/', prepare=True)
+    splopter_nogap = spl.Splopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullnogap/', prepare=True)
 
-    ivdata_g = flopter_gap.trim()
-    ivdata_ng = flopter_nogap.trim()
+    ivdata_g = splopter_gap.trim()
+    ivdata_ng = splopter_nogap.trim()
 
-    ivdata_g2 = flopter_gap.trim(trim_end=0.5)
-    ivdata_ng2 = flopter_nogap.trim(trim_end=0.5)
+    ivdata_g2 = splopter_gap.trim(trim_end=0.5)
+    ivdata_ng2 = splopter_nogap.trim(trim_end=0.5)
 
-    ifit_g = flopter_gap.fit(ivdata_g, f.IonCurrentSEFitter(), print_fl=True)
-    ifit_ng = flopter_nogap.fit(ivdata_ng, f.IonCurrentSEFitter(), print_fl=True)
+    ifit_g = splopter_gap.fit(ivdata_g, f.IonCurrentSEFitter(), print_fl=True)
+    ifit_ng = splopter_nogap.fit(ivdata_ng, f.IonCurrentSEFitter(), print_fl=True)
 
-    ffit_g2 = flopter_gap.fit(ivdata_g2, print_fl=True)
-    ffit_ng2 = flopter_nogap.fit(ivdata_ng2, print_fl=True)
+    ffit_g2 = splopter_gap.fit(ivdata_g2, print_fl=True)
+    ffit_ng2 = splopter_nogap.fit(ivdata_ng2, print_fl=True)
 
     fig1 = plt.figure()
-    flopter_gap.plot_iv(fig=fig1, plot_tot=True, label='Gap')
-    flopter_nogap.plot_iv(fig=fig1, plot_vf=True, plot_tot=True, label='No Gap')
+    splopter_gap.plot_iv(fig=fig1, plot_tot=True, label='Gap')
+    splopter_nogap.plot_iv(fig=fig1, plot_vf=True, plot_tot=True, label='No Gap')
 
     fig2 = plt.figure()
-    flopter_gap.plot_f_fit(ffit_g2, fig=fig2, label='Gap ', plot_vf=False)
-    flopter_nogap.plot_f_fit(ffit_ng2, fig=fig2, label='No Gap ')
+    splopter_gap.plot_f_fit(ffit_g2, fig=fig2, label='Gap ', plot_vf=False)
+    splopter_nogap.plot_f_fit(ffit_ng2, fig=fig2, label='No Gap ')
 
     fig3 = plt.figure()
-    flopter_gap.plot_i_fit(ifit_g, fig=fig3, label='Gap ')
-    flopter_nogap.plot_i_fit(ifit_ng, fig=fig3, label='No Gap ')
+    splopter_gap.plot_i_fit(ifit_g, fig=fig3, label='Gap ')
+    splopter_nogap.plot_i_fit(ifit_ng, fig=fig3, label='No Gap ')
     plt.legend()
     plt.show()
 
 
-def run_histogram_extr(flopter=None, z_high=370.0, z_low=70.0, fig=None, show=False, normalise_v=True, species=2,
+def run_histogram_extr(splopter=None, z_high=370.0, z_low=70.0, fig=None, show=False, normalise_v=True, species=2,
                        t_flag=False, fitter=None):
-    if not flopter:
-        flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
-    flopter.prepare(make_denormaliser=True, homogenise=False)
+    if not splopter:
+        splopter = spl.Splopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
+    splopter.prepare(make_denormaliser=True, homogenise=False)
     # path = 'bin/data_local/benchmarking/disttest_fullnogap/'
-    nproc = int(np.squeeze(flopter.tdata.nproc))
+    nproc = int(np.squeeze(splopter.tdata.nproc))
 
     u_par = np.array([])
-    ralpha = (-flopter.tdata.alphayz / 180.0) * 3.141591
-    rbeta = ((90.0 - flopter.tdata.alphaxz) / 180) * 3.14159
+    ralpha = (-splopter.tdata.alphayz / 180.0) * 3.141591
+    rbeta = ((90.0 - splopter.tdata.alphaxz) / 180) * 3.14159
 
     for i in range(nproc):
         num = str(i).zfill(2)
-        filename = flopter.tfile_path.replace('.mat', '{}.mat'.format(num))
+        filename = splopter.tfile_path.replace('.mat', '{}.mat'.format(num))
         p_file = loadmat(filename)
 
         # [print(key+': ', str(np.shape(array))) for key, array in p_file.items() if '__' not in key]
@@ -103,15 +102,15 @@ def run_histogram_extr(flopter=None, z_high=370.0, z_low=70.0, fig=None, show=Fa
 
     print('Finished compiling...')
     v_scale = 1000
-    mass = {1: n.ELECTRON_MASS * flopter.denormaliser.mu,
+    mass = {1: n.ELECTRON_MASS * splopter.denormaliser.mu,
             2: n.ELECTRON_MASS}
     if normalise_v:
-        u_par = -flopter.denormaliser(u_par, c.CONV_VELOCITY) / v_scale
+        u_par = -splopter.denormaliser(u_par, c.CONV_VELOCITY) / v_scale
 
     hist, gaps = np.histogram(u_par, bins='auto', density=True)
     hist_bins = (gaps[:-1] + gaps[1:]) / 2
 
-    fitdata = get_histogram_fit(flopter, hist, hist_bins, fitter=fitter, v_scale=v_scale)
+    fitdata = get_histogram_fit(splopter, hist, hist_bins, fitter=fitter, v_scale=v_scale)
 
     if t_flag:
         T_e = (fitdata.fit_params[0].value * mass[species]) / (2 * n.ELEM_CHARGE)
@@ -139,7 +138,7 @@ def run_histogram_extr(flopter=None, z_high=370.0, z_low=70.0, fig=None, show=Fa
     return fitdata
 
 
-def get_histogram_fit(flopter, hist, hist_bins, fitter=None, v_scale=1, plot_fl=False):
+def get_histogram_fit(splopter, hist, hist_bins, fitter=None, v_scale=1, plot_fl=False):
     if not fitter:
         fitter = f.GaussianVelElecEvFitter()
         fitter.set_mass_scaler(0.5)
@@ -160,16 +159,16 @@ def get_histogram_fit(flopter, hist, hist_bins, fitter=None, v_scale=1, plot_fl=
 
     v_0_guess = hist_bins[int((max + min) / 2)]
     # print(((hist_bins[min] - hist_bins[max]) * mass[species] * v_scale ** 2 * 0.5) / (2 * n.ELEM_CHARGE))
-    t_e_guess = flopter.denormaliser.temperature / (v_scale**2)
+    t_e_guess = splopter.denormaliser.temperature / (v_scale**2)
     guess = [t_e_guess, v_0_guess]
 
     return fitter.fit(hist_bins, hist, initial_vals=guess)
 
 
 def run_multihistogram_extr(z_high=370.0, z_low=70.0, num_samples=11, fig=None, show=None):
-    flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
+    splopter = spl.Splopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
     # path = 'bin/data_local/benchmarking/disttest_fullnogap/'
-    nproc = int(np.squeeze(flopter.tdata.nproc))
+    nproc = int(np.squeeze(splopter.tdata.nproc))
 
     u_pars = {}
     assert isinstance(num_samples, int)
@@ -179,12 +178,12 @@ def run_multihistogram_extr(z_high=370.0, z_low=70.0, num_samples=11, fig=None, 
     for z in z_vals[:-1]:
         u_pars[z] = np.array([], dtype=np.float64)
 
-    ralpha = (-flopter.tdata.alphayz / 180.0) * np.pi
-    rbeta = ((90.0 - flopter.tdata.alphaxz) / 180) * np.pi
+    ralpha = (-splopter.tdata.alphayz / 180.0) * np.pi
+    rbeta = ((90.0 - splopter.tdata.alphaxz) / 180) * np.pi
 
     for i in range(nproc):
         num = str(i).zfill(2)
-        filename = flopter.tfile_path.replace('.mat', '{}.mat'.format(num))
+        filename = splopter.tfile_path.replace('.mat', '{}.mat'.format(num))
         p_file = loadmat(filename)
 
         # [print(key+': ', str(np.shape(array))) for key, array in p_file.items() if '__' not in key]
@@ -210,7 +209,7 @@ def run_multihistogram_extr(z_high=370.0, z_low=70.0, num_samples=11, fig=None, 
 
     # plt.hist(u_pars['u_par'], bins=500)
     # plt.title('z_high = {}, z_low = {}'.format(z_high, z_low))
-    # run_spice_df_analysis(flopter, fig=fig)
+    # run_spice_df_analysis(splopter, fig=fig)
 
     for z_val, u_par in u_pars.items():
         print(u_par)
@@ -224,23 +223,23 @@ def run_multihistogram_extr(z_high=370.0, z_low=70.0, num_samples=11, fig=None, 
         
 
 def run_current_comparison():
-    flopter_prep = fl.Flopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/', prepare=False)
-    flopter_top = fl.Flopter('bin/data/', 'bms_distruns/', 'disttest_fullnogap_top/', prepare=False)
-    flopter_bottom = fl.Flopter('bin/data/', 'bms_distruns/', 'disttest_fullnogap_bottom/', prepare=False)
-    flopters = {'prep': flopter_prep, 'top': flopter_top, 'bottom': flopter_bottom}
+    splopter_prep = spl.Splopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/', prepare=False)
+    splopter_top = spl.Splopter('bin/data/', 'bms_distruns/', 'disttest_fullnogap_top/', prepare=False)
+    splopter_bottom = spl.Splopter('bin/data/', 'bms_distruns/', 'disttest_fullnogap_bottom/', prepare=False)
+    splopters = {'prep': splopter_prep, 'top': splopter_top, 'bottom': splopter_bottom}
 
     currents = {}
     times = {}
     diagnostics = {}
-    for name, f in flopters.items():
-        currents[name] = f.tdata.objectscurrente[0]
-        times[name] = f.tdata.t[1:]
-        diagnostics[name] = [diag for diag_name, diag in f.tdata.diagnostics.items()
+    for name, sp in splopters.items():
+        currents[name] = sp.tdata.objectscurrente[0]
+        times[name] = sp.tdata.t[1:]
+        diagnostics[name] = [diag for diag_name, diag in sp.tdata.diagnostics.items()
                              if 'eHist' in diag_name]
 
     print(np.shape(diagnostics.items()))
 
-    for name in flopters.keys():
+    for name in splopters.keys():
         plt.figure(1)
         plt.plot(times[name], currents[name], label=name)
         plt.legend()
@@ -250,11 +249,11 @@ def run_current_comparison():
             plt.plot(diag, label=name.join(str(i)))
         plt.legend()
 
-    # current_prep = flopter_prep.tdata.objectscurrente
-    # time_prep = flopter_prep.tdata.t[1:]
+    # current_prep = splopter_prep.tdata.objectscurrente
+    # time_prep = splopter_prep.tdata.t[1:]
     # print(np.shape(time_prep), np.shape(current_prep))
-    # current_top = flopter_top.tdata.objectscurrente
-    # time_top = flopter_top.tdata.t[1:]
+    # current_top = splopter_top.tdata.objectscurrente
+    # time_top = splopter_top.tdata.t[1:]
 
     # for i in range(len(current_prep)):
     #     plt.figure()
@@ -265,30 +264,30 @@ def run_current_comparison():
     #     plt.legend()
 
     plt.figure()
-    plt.imshow(flopter_prep.tdata.pot)
+    plt.imshow(splopter_prep.tdata.pot)
     plt.colorbar()
 
     plt.figure()
-    plt.imshow(flopter_top.tdata.pot)
+    plt.imshow(splopter_top.tdata.pot)
     plt.colorbar()
 
     plt.figure()
-    plt.imshow(flopter_bottom.tdata.pot)
+    plt.imshow(splopter_bottom.tdata.pot)
     plt.colorbar()
 
-    print(flopter_prep.tdata.diagnostics.keys())
-    print(flopter_top.tdata.diagnostics.keys())
+    print(splopter_prep.tdata.diagnostics.keys())
+    print(splopter_top.tdata.diagnostics.keys())
 
     plt.show()
 
 
 def run_maxwellian_comparison():
-    flopter_sheath = fl.Flopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/', prepare=False)
-    flopter_whole = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', prepare=False)
+    splopter_sheath = spl.Splopter('bin/data/', 'benchmarking_sam/', 'disttest_fullnogap/', prepare=False)
+    splopter_whole = spl.Splopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', prepare=False)
 
     fig = plt.figure()
-    run_spice_df_analysis(flopter_sheath, fig=fig)
-    run_spice_df_analysis(flopter_whole, fig=fig)
+    run_spice_df_analysis(splopter_sheath, fig=fig)
+    run_spice_df_analysis(splopter_whole, fig=fig)
     plt.show()
 
 
@@ -315,13 +314,13 @@ def get_hist_index(hist_name, parser):
     return None
 
 
-def run_spice_df_analysis(flopter, fig=None, show=False):
-    assert isinstance(flopter, fl.Flopter)
+def run_spice_df_analysis(splopter, fig=None, show=False):
+    assert isinstance(splopter, spl.Splopter)
 
-    flopter.prepare(homogenise=False, make_denormaliser=True)
+    splopter.prepare(homogenise=False, make_denormaliser=True)
 
-    tdata = flopter.tdata
-    print(flopter.tdata.diagnostics.keys())
+    tdata = splopter.tdata
+    print(splopter.tdata.diagnostics.keys())
 
     # Get all arrays in the t-file which contain diagnostic histograms and put them into
     hist_names = [hist_name for hist_name in tdata.diagnostics.keys()
@@ -362,7 +361,7 @@ def run_spice_df_analysis(flopter, fig=None, show=False):
         plt.figure()
 
     for name, data in diagnostic_histograms.items():
-        diag_index = get_hist_index(name, flopter.parser)
+        diag_index = get_hist_index(name, splopter.parser)
         print(diag_index)
         for i in range(len(data)):
             hist_x = np.linspace(fvlimits[(diag_index*3)+i][0], fvlimits[(diag_index*3)+i][1], fvbin)
@@ -412,14 +411,14 @@ def run_spice_df_analysis(flopter, fig=None, show=False):
         plt.show()
 
 
-def draw_potential(flopter=None, t_dict_label=sd.POT, plot_obj_fl=False):
-    if not flopter:
-        flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
-        # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/', prepare=False)
+def draw_potential(splopter=None, t_dict_label=sd.POT, plot_obj_fl=False):
+    if not splopter:
+        splopter = spl.Splopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
+        # splopter = spl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/', prepare=False)
 
-    plasma_parameter = np.flip(flopter.tdata.t_dict[t_dict_label], 0)
-    objects_raw = np.flip(flopter.tdata.objectsenum, 0)
-    probe_obj_indices = flopter.parser.get_probe_obj_indices()
+    plasma_parameter = np.flip(splopter.tdata.t_dict[t_dict_label], 0)
+    objects_raw = np.flip(splopter.tdata.objectsenum, 0)
+    probe_obj_indices = splopter.parser.get_probe_obj_indices()
     objects = np.zeros(np.shape(plasma_parameter))
 
     wall_indices = np.where(plasma_parameter == 0)
@@ -445,13 +444,13 @@ def draw_potential(flopter=None, t_dict_label=sd.POT, plot_obj_fl=False):
     plt.xlabel(r'y / $\lambda_D$', fontsize=15)
     plt.ylabel(r'z / $\lambda_D$', fontsize=15)
     # plt.title('Electrostatic potential for a flush mounted probe', fontsize=20)
-    plt.quiver([200], [200], flopter.tdata.by, flopter.tdata.bz, scale=5)
+    plt.quiver([200], [200], splopter.tdata.by, splopter.tdata.bz, scale=5)
     plt.colorbar(im, fraction=0.035, pad=0.04)
     plt.show()
 
 
 def test():
-    flpt = fl.Flopter('bin/data_local/', 'benchmarking/', 'nogap/')
+    flpt = spl.Splopter('bin/data_local/', 'benchmarking/', 'nogap/')
 
     vf = flpt.get_vf()
     phi = flpt.get_plasma_potential()
@@ -463,7 +462,7 @@ def test():
 
 
 def test2():
-    flpt = fl.Flopter('bin/data_local/', 'benchmarking/', 'nogap/')
+    flpt = spl.Splopter('bin/data_local/', 'benchmarking/', 'nogap/')
 
     # plt.figure()
 
@@ -484,13 +483,13 @@ def test2():
     plt.show()
 
 
-def run_multi_hist_analysis(flopter=None, species=2, fitter=None, show_fl=False):
+def run_multi_hist_analysis(splopter=None, species=2, fitter=None, show_fl=False):
     if not fitter:
         fitter = f.GaussianVelElecEvFitter()
-    fitdata_sheath = run_histogram_extr(flopter=flopter, z_high=90, z_low=75, show=False, species=species, fitter=fitter)
-    fitdata_mid = run_histogram_extr(flopter=flopter, z_high=180, z_low=165, show=False, species=species, fitter=fitter)
-    fitdata_mid2 = run_histogram_extr(flopter=flopter, z_high=270, z_low=255, show=False, species=species, fitter=fitter)
-    fitdata_inj = run_histogram_extr(flopter=flopter, z_high=370, z_low=340, show=False, species=species, fitter=fitter)
+    fitdata_sheath = run_histogram_extr(splopter=splopter, z_high=90, z_low=75, show=False, species=species, fitter=fitter)
+    fitdata_mid = run_histogram_extr(splopter=splopter, z_high=180, z_low=165, show=False, species=species, fitter=fitter)
+    fitdata_mid2 = run_histogram_extr(splopter=splopter, z_high=270, z_low=255, show=False, species=species, fitter=fitter)
+    fitdata_inj = run_histogram_extr(splopter=splopter, z_high=370, z_low=340, show=False, species=species, fitter=fitter)
     plt.legend()
 
     hists = {
@@ -512,15 +511,15 @@ def run_multi_hist_analysis(flopter=None, species=2, fitter=None, show_fl=False)
 
 
 def injection_dist_function(gauss_fl=True, show_fl=True):
-    flopter = fl.Flopter('bin/data_local/', 'tests/', 'injtestperp_halfnogap2/')
-    # flopter = fl.Flopter('bin/data_local/', 'tests/', 'injtest_halfnogap1/')
-    flopter.prepare(homogenise=False)
+    splopter = spl.Splopter('bin/data_local/', 'tests/', 'injtestperp_halfnogap2/')
+    # splopter = spl.Flopter('bin/data_local/', 'tests/', 'injtest_halfnogap1/')
+    splopter.prepare(homogenise=False)
     v_scale = 1000
 
-    i_inj_path = flopter.afile_path.replace('.mat', '.i_inj')
-    e_inj_path = flopter.afile_path.replace('.mat', '.e_inj')
-    i_inj = -flopter.denormaliser(np.loadtxt(i_inj_path), c.CONV_VELOCITY) / v_scale
-    e_inj = -flopter.denormaliser(np.loadtxt(e_inj_path), c.CONV_VELOCITY) / v_scale
+    i_inj_path = splopter.afile_path.replace('.mat', '.i_inj')
+    e_inj_path = splopter.afile_path.replace('.mat', '.e_inj')
+    i_inj = -splopter.denormaliser(np.loadtxt(i_inj_path), c.CONV_VELOCITY) / v_scale
+    e_inj = -splopter.denormaliser(np.loadtxt(e_inj_path), c.CONV_VELOCITY) / v_scale
 
     # runpath = 'data/'
     # i_inj_path = runpath + 'injtest_halfnogap.i_inj'
@@ -533,20 +532,20 @@ def injection_dist_function(gauss_fl=True, show_fl=True):
     e_hist, e_gaps = np.histogram(e_inj, density=True, bins='auto')
     e_bins = (e_gaps[:-1] + e_gaps[1:]) / 2
 
-    t_e_guess = flopter.denormaliser.temperature / (v_scale ** 2)
+    t_e_guess = splopter.denormaliser.temperature / (v_scale ** 2)
     guess = [t_e_guess, 1]
 
     if gauss_fl:
-        i_fitter = f.GaussianVelIonEvFitter(mu=flopter.denormaliser.mu)
-        i_fdata = get_histogram_fit(flopter, i_hist, i_bins, i_fitter, v_scale=v_scale)
+        i_fitter = f.GaussianVelIonEvFitter(mu=splopter.denormaliser.mu)
+        i_fdata = get_histogram_fit(splopter, i_hist, i_bins, i_fitter, v_scale=v_scale)
     else:
-        i_fitter = f.MaxwellianVelFitter(mu=flopter.denormaliser.mu)
+        i_fitter = f.MaxwellianVelFitter(mu=splopter.denormaliser.mu)
         i_fdata = i_fitter.fit(i_bins, i_hist, initial_vals=guess)
     i_fdata.print_fit_params()
 
     if gauss_fl:
         e_fitter = f.GaussianVelElecEvFitter()
-        e_fdata = get_histogram_fit(flopter, e_hist, e_bins, e_fitter, v_scale=v_scale)
+        e_fdata = get_histogram_fit(splopter, e_hist, e_bins, e_fitter, v_scale=v_scale)
     else:
         e_fitter = f.MaxwellianVelFitter(mu=1)
         e_fdata = e_fitter.fit(e_bins, e_hist, initial_vals=guess)
@@ -566,22 +565,22 @@ def injection_dist_function(gauss_fl=True, show_fl=True):
         plt.show()
 
 
-def extract_density(flopter):
-    nproc = int(np.squeeze(flopter.tdata.nproc))
-    print(flopter.afile.keys())
+def extract_density(splopter):
+    nproc = int(np.squeeze(splopter.tdata.nproc))
+    print(splopter.afile.keys())
     for i in range(nproc):
         num = str(i).zfill(2)
-        filename = flopter.tfile_path.replace('.mat', '{}.mat'.format(num))
+        filename = splopter.tfile_path.replace('.mat', '{}.mat'.format(num))
         p_file = loadmat(filename)
         if len(p_file.keys()) != 13:
             print(i)
 
     plt.figure()
-    plt.imshow(np.flip(flopter.afile['dens01'], 0))
+    plt.imshow(np.flip(splopter.afile['dens01'], 0))
     plt.colorbar()
 
     plt.figure()
-    plt.imshow(np.flip(flopter.afile['temperature01'], 0))
+    plt.imshow(np.flip(splopter.afile['temperature01'], 0))
     plt.colorbar()
 
     for sp in [1, 2]:
@@ -592,7 +591,7 @@ def extract_density(flopter):
     # plt.imshow(np.flip(p_file['temperature01'], 0))
     # plt.colorbar()
 
-    for label, data in flopter.afile.items():
+    for label, data in splopter.afile.items():
         if isinstance(data, np.ndarray):
             shape = np.shape(data)
         else:
@@ -608,27 +607,27 @@ if __name__ == '__main__':
     # run_maxwellian_comparison()
     # run_current_comparison()
     # test2()
-    flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/')
-    # flopter = fl.Flopter('bin/data_local/', 'benchmarking/', 'gap/')
+    splopter = spl.Splopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/')
+    # splopter = spl.Flopter('bin/data_local/', 'benchmarking/', 'gap/')
 
-    # flopter = fl.Flopter('bin/data/', 'tests/', 'nproctest_fullnogap/', prepare=True)
-    # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullgap/', prepare=True)
-    # flopter = fl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullnogap/', prepare=True)
-    # flopter = fl.Flopter('bin/data/', 'angledtip/', 'angledtiptest/', prepare=False)
-    # flopter = fl.Flopter('bin/data/', 'angledtip/', 'angledtiptest1/', prepare=False)
-    # flopter = fl.Flopter('bin/data/', 'test/', 'floatingpottest/', prepare=False)
-    flopter.prepare(homogenise=False, make_denormaliser=False)
-    # flopter.plot_2d_variable(show_fl=False)
+    # splopter = spl.Flopter('bin/data/', 'tests/', 'nproctest_fullnogap/', prepare=True)
+    # splopter = spl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullgap/', prepare=True)
+    # splopter = spl.Flopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullnogap/', prepare=True)
+    # splopter = spl.Flopter('bin/data/', 'angledtip/', 'angledtiptest/', prepare=False)
+    # splopter = spl.Flopter('bin/data/', 'angledtip/', 'angledtiptest1/', prepare=False)
+    # splopter = spl.Flopter('bin/data/', 'test/', 'floatingpottest/', prepare=False)
+    splopter.prepare(homogenise=False, make_denormaliser=False)
+    # splopter.plot_2d_variable(show_fl=False)
 
-    # flopter.analyse_iv(show_fl=True)
-    # flopter.plot_1d_variable(variable_label=c.DIAG_WALL_POT, time_dep_fl=True, diagnostic_fl=True)
-    # flopter.plot_1d_variable(variable_label=sd.NZ)
+    # splopter.analyse_iv(show_fl=True)
+    # splopter.plot_1d_variable(variable_label=c.DIAG_WALL_POT, time_dep_fl=True, diagnostic_fl=True)
+    # splopter.plot_1d_variable(variable_label=sd.NZ)
 
-    # extract_density(flopter)
-    run_multi_hist_analysis(flopter=flopter, show_fl=True, species=1)
+    # extract_density(splopter)
+    run_multi_hist_analysis(splopter=splopter, show_fl=True, species=1)
     # run_gap_nogap_comparison()
 
-    # run_multi_hist_analysis(flopter=flopter, fitter=f.GaussianVelElecEvFitter(), show_fl=False)
+    # run_multi_hist_analysis(splopter=splopter, fitter=f.GaussianVelElecEvFitter(), show_fl=False)
     # draw_potential()
 
     # run_histogram_extr(z_high=100, z_low=70, show=True, species=1, fit_guess=[6, 15000],
