@@ -12,6 +12,9 @@ import databases.magnum as mag
 from scipy.interpolate import interp1d
 import scipy.signal as sig
 import fitters as f
+import concurrent.futures as cf
+import pathlib as pth
+import pandas as pd
 # from tkinter.filedialog import askopenfilename
 
 
@@ -239,9 +242,9 @@ def main_magopter_analysis():
 
 def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     magopter = Magopter(folder, file, ts_filename=ts_file)
-    dsr = 10
-    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True)
-    magopter.trim(trim_end=0.83)
+    dsr = 1
+    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, crit_freq=4000, crit_ampl=None)
+    # magopter.trim(trim_end=0.83)
     fit_df_0, fit_df_1 = magopter.fit()
 
     theta_perp = np.radians(10)
@@ -298,7 +301,7 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     plt.axhline(y=T_e, linestyle='dashed', linewidth=1, color='gray', label='TS')
     plt.axhline(y=T_e + d_T_e, linestyle='dotted', linewidth=0.5, color='gray')
     plt.axhline(y=T_e - d_T_e, linestyle='dotted', linewidth=0.5, color='gray')
-    # plt.legend()
+    plt.legend()
     plt.setp(ax1.get_xticklabels(), visible=False)
 
     ax2 = plt.subplot(212, sharex=ax1)
@@ -308,7 +311,7 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     plt.plot(fit_df_0.index, n_e_0, 'x', label='Half Area')
     plt.plot(fit_df_1.index, n_e_1, 'x', label='Cylinder Area')
     plt.axhline(y=n_e, linestyle='dashed', linewidth=1, color='gray', label='TS')
-    # plt.legend()
+    plt.legend()
     plt.setp(ax2.get_xticklabels(), visible=False)
 
     for ax in [ax1, ax2]:
@@ -333,7 +336,7 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
                 else:
                     plt.axvline(x=magopter.ts_temp[0][k], color='m', linestyle='--', linewidth=1)
 
-        plt.plot(target_pos_t, target_pos_x, color='k', label='Target Position')
+        # plt.plot(target_pos_t, target_pos_x, color='k', label='Target Position')
         # plt.axvline(x=0, color='k', linewidth=1, linestyle='-.')
         plt.xlabel('Time (s)')
         plt.legend()
@@ -533,7 +536,7 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
 
     magopter.iv_arrs[0] = magopter.iv_arrs[0][index:index + 3]
     magopter.iv_arrs[1] = []
-    magopter.trim(trim_beg=0.05, trim_end=0.7)
+    # magopter.trim(trim_beg=0.05, trim_end=0.7)
     fit_df_0, fit_df_1 = magopter.fit(print_fl=True)
 
     if magopter.ts_temp is not None:
@@ -640,12 +643,12 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
                                          print_fl=True)
         plt.figure()
         plt.errorbar(iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0], yerr=iv_data[c.SIGMA].tolist()[0],
-                     fmt='x', label='Raw IV', ecolor='silver')
-        plt.plot(iv_data[c.RAW_X].tolist()[0], I_f, label='Analytical - measured', linestyle='dashed', linewidth=1, color='r')
+                     fmt='x', label='Raw IV', ecolor='silver', color='silver', zorder=-1)
+        # plt.plot(iv_data[c.RAW_X].tolist()[0], I_f, label='Analytical - measured', linestyle='dashed', linewidth=1, color='r')
         plt.plot(iv_data[c.RAW_X].tolist()[0], I_ts, label='Analytical - TS', linestyle='dashed', linewidth=1, color='m')
         plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.FIT_Y].tolist()[0], color='orange', label='Fit IV')
         plt.legend()
-        plt.title('Comparison of analytical to measured IV curves for the small area probe')
+        # plt.title('Comparison of analytical to measured IV curves for the small area probe')
         plt.xlabel('Voltage (V)')
         plt.ylabel('Current (A)')
 
@@ -997,52 +1000,65 @@ def multifit_std_err_scale_analysis(folder, file):
     plt.legend()
 
 
+def fit_and_save(folderfile):
+    # Run analysis for shot.
+    folder, f, count = folderfile
+    dsr = 1
+    print('\nAnalysing file: {} \n'.format(f))
+    m = Magopter(folder, f)
+    m.prepare(down_sampling_rate=dsr, roi_b_plasma=True, crit_freq=4000, crit_ampl=None)
+
+    fit_df_0, fit_df_1 = m.fit()
+
+    fit_param_df = pd.DataFrame(fit_df_0[[c.ION_SAT, c.ERROR_STRING.format(c.ION_SAT),
+                                c.ELEC_TEMP, c.ERROR_STRING.format(c.ELEC_TEMP),
+                                c.SHEATH_EXP, c.ERROR_STRING.format(c.SHEATH_EXP),
+                                c.FLOAT_POT, c.ERROR_STRING.format(c.FLOAT_POT),
+                                c.REDUCED_CHI2]])
+
+    if m.ts_temp is not None:
+        temps = [np.max(temp) / nrm.ELEM_CHARGE for temp in m.ts_temp[mag.DATA]]
+        denss = [np.max(dens) for dens in m.ts_dens[mag.DATA]]
+        T_e_ts = np.mean(temps)
+        d_T_e_ts = np.std(temps) / np.sqrt(len(temps))
+        n_e_ts = np.mean(denss)
+        d_n_e_ts = np.std(denss) / np.sqrt(len(denss))
+    else:
+        T_e_ts = None
+        d_T_e_ts = None
+        n_e_ts = None
+        d_n_e_ts = None
+
+    fit_param_df['T_e_ts'] = T_e_ts
+    fit_param_df['d_T_e_ts'] = d_T_e_ts
+    fit_param_df['n_e_ts'] = n_e_ts
+    fit_param_df['d_n_e_ts'] = d_n_e_ts
+
+    for j, data_tag in enumerate([mag.TARGET_CHAMBER_PRESSURE, mag.TARGET_TILT]):
+        t, data = m.magnum_data[data_tag]
+        if isinstance(data, np.ndarray):
+            data = data.mean()
+        if data_tag is mag.TARGET_TILT:
+            data = data * (180 / np.pi)
+        fit_param_df[data_tag] = data
+
+    csv_filename = '{}{}{}ndsfile{}.csv'.format(pth.Path.home(), m._FOLDER_STRUCTURE, m.directory, count)
+
+    print('Saving fit data from {} to csv: {}'.format(f, csv_filename))
+    fit_param_df.to_csv(path_or_buf=csv_filename)
+
+    del m, fit_df_0, fit_df_1, fit_param_df, T_e_ts, d_T_e_ts, n_e_ts, d_n_e_ts
+    import gc
+    gc.collect()
+
+
 def multi_file_analysis(probe_0, folder, files, save_fl=True, deallocate_fl=True):
     print('\nRunning multi-file analysis. Analysing {} file(s).\n'.format(len(files)))
-    params = np.zeros([6, len(files)])
-    for i, f in enumerate(files):
-        # Run analysis for shot.
-        dsr = 10
-        print('\nAnalysing file: {} ({} of {}) \n'.format(f, i + 1, len(files)))
-        m = Magopter(folder, f)
-        m.prepare(down_sampling_rate=dsr, roi_b_plasma=True, crit_freq=4000, crit_ampl=None)
-        fit_df_0, fit_df_1 = m.fit()
+    params = np.zeros([10, len(files)])
 
-        for j, data_tag in enumerate([mag.TARGET_CHAMBER_PRESSURE, mag.TARGET_TILT]):
-            t, data = m.magnum_data[data_tag]
-            if isinstance(data, np.ndarray):
-                data = data.mean()
-            if data_tag is mag.TARGET_TILT:
-                data = data * (180/np.pi)
-            params[j, i] = data
-
-        T_e = fit_df_0[c.ELEC_TEMP].mean()
-        d_T_e = fit_df_0[c.ELEC_TEMP].std() / np.sqrt(fit_df_0[c.ELEC_TEMP].count())
-        I_sat = fit_df_0[c.ION_SAT].mean()
-        d_I_sat = fit_df_0[c.ION_SAT].std() / np.sqrt(fit_df_0[c.ION_SAT].count())
-        params[2:, i] = [T_e, d_T_e, I_sat, d_I_sat]
-
-        if deallocate_fl:
-            del m, T_e, d_T_e, I_sat, d_I_sat
-            import gc
-            gc.collect()
-
-    # noinspection PyTypeChecker
-    fig, ax = plt.subplots(2, 1, sharex=False, sharey='all')
-    plt.sca(ax[0])
-    plt.errorbar(params[0], params[2], yerr=params[3], label='Temperature')
-    plt.ylabel('Temperature')
-
-    plt.sca(ax[1])
-    plt.errorbar(params[0], params[4], yerr=params[5], label=r'I$_{sat}$')
-    plt.ylabel(r'I$_{sat}$')
-    plt.xlabel('Target Chamber Pressure')
-    plt.legend()
-
-    if save_fl:
-        np.save('neutral_pressure_scan.npy', params)
-        fig.savefig('neutral_pressure_scan.pdf', bbox_inches='tight')
-        plt.close(fig)
+    # Execute fitting and saving of files concurrently
+    with cf.ProcessPoolExecutor() as executor:
+        executor.map(fit_and_save, [[folder, file, i] for i, file in enumerate(files)])
 
 
 if __name__ == '__main__':
@@ -1063,10 +1079,8 @@ if __name__ == '__main__':
     # file = files[286]
     file = files[285]
     ts_file = files[284]
-    folder = file_folders[-2]
+    folder = file_folders[-2] + '/'
     print(folder, file, ts_file)
-
-    exit()
 
     mp = MagnumProbes()
 
@@ -1075,11 +1089,12 @@ if __name__ == '__main__':
     # main_magopter_analysis()
     # integrated_analysis(mp.probe_s, mp.probe_c, folder, file)
     # ts_ir_comparison(mp.probe_s, mp.probe_c, folder, file, ts_file)
-    multi_file_analysis(mp.probe_s, folder, files[285:289], save_fl=True)
+    # multi_file_analysis(mp.probe_s, folder, files[285:289], save_fl=True)
     # multi_file_analysis(mp.probe_s, folder, files[285:297], save_fl=True)
-    # deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=False)
+    deeper_iv_analysis(mp.probe_s, folder, file, plot_timeline_fl=False)
     # multifit_trim_filter_analysis(mp.probe_s, folder, file)
     # multifit_trim_iv_analysis(mp.probe_s, folder, file)
     # multifit_std_err_scale_analysis(folder, file)
+    # fit_and_save([folder, ts_file, 100])
 
     plt.show()
