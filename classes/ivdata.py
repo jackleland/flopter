@@ -157,14 +157,17 @@ class IVData(dict):
             fig = plt.figure()
             plt.subplot(311)
             siv_f_data.plot(fig=fig, show_fl=False)
+            plt.xlabel('')
 
             plt.subplot(312)
             first_fit_data.plot(fig=fig, show_fl=False)
+            plt.xlabel('')
 
             plt.subplot(313)
             ff_data.plot(fig=fig, show_fl=False)
-            plt.xlabel('Volt')
+            plt.xlabel('Voltage (V)')
             fig.suptitle('lower_offset = {}, upper_offset = {}'.format(self.trim_beg, self.trim_end))
+            plt.show()
 
         return ff_data
 
