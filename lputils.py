@@ -49,9 +49,10 @@ class FlushCylindricalProbe(LangmuirProbe):
 
 
 def calc_probe_collection_area(a, b, L, g, d_perp, theta_perp, theta_p, theta_f, print_fl=False):
-    d = max(0, ((d_perp - (g * np.tan(theta_perp)))
-            / (np.sin(theta_p) + (np.tan(theta_perp) * np.cos(theta_p)))))
-    h_coll = max(0, (g * np.tan(theta_perp) - d_perp) * np.cos(theta_perp))
+    # d = max(0, ((d_perp - (g * np.tan(theta_perp)))
+    #         / (np.sin(theta_p) + (np.tan(theta_perp) * np.cos(theta_p)))))
+    # h_coll = max(0, (g * np.tan(theta_perp) - d_perp) * np.cos(theta_perp))
+    d, h_coll = calc_probe_exposed_lengths(g, d_perp, theta_perp, theta_p)
     if print_fl:
         print("d = {}, h_coll = {}".format(d, h_coll))
     L_exp = (L / np.cos(theta_p)) - d
@@ -59,9 +60,9 @@ def calc_probe_collection_area(a, b, L, g, d_perp, theta_perp, theta_p, theta_f,
 
 
 def calc_probe_exposed_lengths(g, d_perp, theta_perp, theta_p):
-    d = max(0, ((d_perp - (g * np.tan(theta_perp)))
-                / (np.sin(theta_p) + (np.tan(theta_perp) * np.cos(theta_p)))))
-    h_coll = max(0, (g * np.tan(theta_perp) - d_perp) * np.cos(theta_perp))
+    d = np.array((d_perp - (g * np.tan(theta_perp)))
+                 / (np.sin(theta_p) + (np.tan(theta_perp) * np.cos(theta_p)))).clip(min=0)
+    h_coll = np.array((g * np.tan(theta_perp) - d_perp) * np.cos(theta_perp)).clip(min=0)
     return d, h_coll
 
 
