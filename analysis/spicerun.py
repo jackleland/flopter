@@ -601,6 +601,83 @@ def extract_density(splopter):
     plt.show()
 
 
+def compare_larmor_radii(files, mount='bin/data/', folder='benchmarking_mass/'):
+    import gc
+    splopters = {}
+    for file in files:
+        sp = spl.Splopter(mount, folder, file, prepare=True)
+        print(sp.tdata.diagnostics.keys())
+
+        print(len(sp.tdata.diagnostics['eTrackery']), np.size(sp.tdata.diagnostics['iTrackery']))
+
+        print('Tracking Ions')
+        i_splits = np.where(np.abs(np.diff(sp.tdata.diagnostics['iTrackery'], axis=0)) > 0.5)[0] + 1
+        iy_tracks = np.split(sp.tdata.diagnostics['iTrackery'], i_splits)
+        iz_tracks = np.split(sp.tdata.diagnostics['iTrackerz'], i_splits)
+
+        iy_tracks.sort(key=len, reverse=True)
+        iz_tracks.sort(key=len, reverse=True)
+
+        # print(i_splits.shape, len(iy_tracks), iy_tracks[200])
+        # for i, t in enumerate(iy_tracks):
+        #     print('{}) {}'.format(i, len(t)))
+
+        i_tracks = zip(iy_tracks[:200], iz_tracks[:200])
+
+        print('Tracking Electrons')
+        # Find positions within tracking array where target seems to change by selecting elements with a large jump
+        e_splits = np.where(np.abs(np.diff(sp.tdata.diagnostics['eTrackery'], axis=0)) > 0.5)[0] + 1
+
+        # Split tracking diagnostic array into different tracks using points found above
+        ey_tracks = np.split(sp.tdata.diagnostics['eTrackery'], e_splits)
+        ez_tracks = np.split(sp.tdata.diagnostics['eTrackerz'], e_splits)
+
+        # Sort the tracks in descending order by length
+        ey_tracks.sort(key=len, reverse=True)
+        ez_tracks.sort(key=len, reverse=True)
+
+        # Create a zip of the tracks individual components
+        e_tracks = zip(ey_tracks[:200], ez_tracks[:200])
+
+        # 'iTrackery', 'iTrackerz', 'iTrackerux', 'iTrackeruy', 'iTrackeruz',
+        # 'eTrackery', 'eTrackerz', 'eTrackerux', 'eTrackeruy', 'eTrackeruz'
+
+        print('Lengths. ion: {}, electron: {}'.format(len(i_splits), len(e_splits)))
+
+        print('Plotting 1')
+        plt.figure()
+        for y_track, z_track in i_tracks:
+            plt.plot(y_track, z_track)
+        plt.title(file + ' - Ions')
+        plt.xlabel('Timestep')
+        plt.ylabel(r'Z Position ($\lambda_D$)')
+
+        plt.figure()
+        print('Plotting 2')
+        for y_track, z_track in e_tracks:
+            plt.plot(y_track, z_track)
+        plt.title(file + ' - Electrons')
+        plt.xlabel('Timestep')
+        plt.ylabel(r'Z Position ($\lambda_D$)')
+
+        print('...finished plotting')
+
+        # plt.figure()
+        # # plt.plot(sp.tdata.diagnostics['iTrackery'], sp.tdata.diagnostics['iTrackerz'], 'x', label='Ion track')
+        # plt.plot(sp.tdata.diagnostics['eTrackery'], sp.tdata.diagnostics['eTrackerz'], 'x', label='Electron track')
+        # plt.legend()
+        # plt.title(file)
+        # plt.xlabel(r'Y Position ($\lambda_D$)')
+        # plt.ylabel(r'Z Position ($\lambda_D$)')
+
+        # deallocate the splopter object
+
+        del sp
+        gc.collect()
+
+    plt.show()
+
+
 if __name__ == '__main__':
     # run_gap_nogap_comparison()
     # run_param_scan()
@@ -616,7 +693,17 @@ if __name__ == '__main__':
     # splopter = spl.Flopter('bin/data/', 'angledtip/', 'angledtiptest/', prepare=False)
     # splopter = spl.Flopter('bin/data/', 'angledtip/', 'angledtiptest1/', prepare=False)
     # splopter = spl.Flopter('bin/data/', 'test/', 'floatingpottest/', prepare=False)
-    splopter.prepare(homogenise=False, make_denormaliser=False)
+
+    # Radii comparison files
+    # comparison_files = ['benchmark_ms_g_hg/', 'massrationtest_ms_g_hg/', 'ionmasstest_ms_g_hg/',
+    #                     'speciesmasstest_ms_g_hg/']
+    # compare_larmor_radii(comparison_files)
+
+    # splopter = spl.Splopter('bin/data/', 'benchmarking_mass/', 'benchmark_ms_g_hg/', prepare=True)
+    # splopter = spl.Splopter('bin/data/', 'benchmarking_mass/', 'massrationtest_ms_g_hg/', prepare=True)
+    # splopter = spl.Splopter('bin/data/', 'benchmarking_mass/', 'ionmasstest_ms_g_hg/', prepare=True)
+    # splopter = spl.Splopter('bin/data/', 'benchmarking_mass/', 'speciesmasstest_ms_g_hg/', prepare=True)
+
     # splopter.plot_2d_variable(show_fl=False)
 
     # splopter.analyse_iv(show_fl=True)

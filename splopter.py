@@ -109,7 +109,7 @@ class Splopter(IVAnalyser):
 
     def prepare(self, homogenise=True, make_denormaliser=True):
         """
-            Check existence of and then populate the main flopter objects: inputparser, denormaliser and homogeniser.
+            Check existence of, and then populate, the main flopter objects: inputparser, denormaliser and homogeniser.
 
             Default behaviour is to populate all, mandatory behaviour is only to create input parser. Homogeniser and
             Denormaliser creation is controlled through the boolean input flags. Note that specifying the
