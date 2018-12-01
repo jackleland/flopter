@@ -620,6 +620,9 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
         d_a_fitted = iv_data[c.ERROR_STRING.format(c.SHEATH_EXP)].values[0]
         d_I_sat_fitted = iv_data[c.ERROR_STRING.format(c.ION_SAT)].values[0]
 
+        v_f_approx = - 3 * T_e_fitted
+        d_v_f_approx = 0.05 * v_f_approx
+
         c_s_fitted = lp.sound_speed(T_e_fitted, gamma_i=1)
         d_c_s_fitted = lp.d_sound_speed(c_s_fitted, T_e_fitted, d_T_e_fitted)
         n_e_fitted = lp.electron_density(I_sat_fitted, c_s_fitted, A_coll_0)
@@ -639,18 +642,21 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
 
         I_f = probe_0.get_analytical_iv(iv_data[c.RAW_X].tolist()[0], v_f_fitted, theta_perp, T_e_fitted, n_e_fitted,
                                         print_fl=True)
-        I_ts = probe_0.get_analytical_iv(iv_data[c.RAW_X].tolist()[0], v_f_fitted, theta_perp, T_e_ts, n_e_ts,
+        I_ts = probe_0.get_analytical_iv(iv_data[c.RAW_X].tolist()[0], v_f_approx, theta_perp, T_e_ts, n_e_ts,
                                          print_fl=True)
         plt.figure()
         plt.errorbar(iv_data[c.RAW_X].tolist()[0], iv_data[c.RAW_Y].tolist()[0], yerr=iv_data[c.SIGMA].tolist()[0],
                      fmt='x', label='Raw IV', ecolor='silver', color='silver', zorder=-1)
         # plt.plot(iv_data[c.RAW_X].tolist()[0], I_f, label='Analytical - measured', linestyle='dashed', linewidth=1, color='r')
-        plt.plot(iv_data[c.RAW_X].tolist()[0], I_ts, label='Analytical - TS', linestyle='dashed', linewidth=1, color='m')
-        plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.FIT_Y].tolist()[0], color='orange', label='Fit IV')
+        plt.plot(iv_data[c.RAW_X].tolist()[0], I_ts, linestyle='dashed', linewidth=1, color='m',
+                 label='Analytical from TS - ({:.2g}eV, {:.2g}m'.format(T_e_ts, n_e_ts)+'$^{-3}$)')
+        plt.plot(iv_data[c.RAW_X].tolist()[0], iv_data[c.FIT_Y].tolist()[0], color='orange',
+                 label='Fit - ({:.2g}eV, {:.2g}m'.format(T_e_fitted, n_e_fitted)+r'$^{-3}$)')
         plt.legend()
         # plt.title('Comparison of analytical to measured IV curves for the small area probe')
         plt.xlabel('Voltage (V)')
         plt.ylabel('Current (A)')
+        plt.ylim([-0.35, 1.55])
 
     ##################################################
     #         Comparison of Parameter Scales         #
