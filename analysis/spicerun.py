@@ -486,17 +486,21 @@ def test2():
 def run_multi_hist_analysis(splopter=None, species=2, fitter=None, show_fl=False):
     if not fitter:
         fitter = f.GaussianVelElecEvFitter()
-    fitdata_sheath = run_histogram_extr(splopter=splopter, z_high=90, z_low=75, show=False, species=species, fitter=fitter)
-    fitdata_mid = run_histogram_extr(splopter=splopter, z_high=180, z_low=165, show=False, species=species, fitter=fitter)
-    fitdata_mid2 = run_histogram_extr(splopter=splopter, z_high=270, z_low=255, show=False, species=species, fitter=fitter)
-    fitdata_inj = run_histogram_extr(splopter=splopter, z_high=370, z_low=340, show=False, species=species, fitter=fitter)
+    fitdata_sheath = run_histogram_extr(splopter=splopter, z_high=90, z_low=75, show=False, species=species,
+                                        normalise_v=True, fitter=fitter)
+    fitdata_mid = run_histogram_extr(splopter=splopter, z_high=180, z_low=165, show=False, species=species,
+                                     normalise_v=True, fitter=fitter)
+    fitdata_mid2 = run_histogram_extr(splopter=splopter, z_high=270, z_low=255, show=False, species=species,
+                                      normalise_v=True, fitter=fitter)
+    fitdata_inj = run_histogram_extr(splopter=splopter, z_high=370, z_low=355, show=False, species=species,
+                                     normalise_v=True, fitter=fitter)
     plt.legend()
 
     hists = {
-        'Sheath': fitdata_sheath,
-        'Lower-mid': fitdata_mid,
-        'Upper-mid': fitdata_mid2,
-        'Injection': fitdata_inj
+        r'Sheath - $T_e$ = {t:2.1f}eV'.format(t=fitdata_sheath.get_param(c.ELEC_TEMP, errors_fl=False)): fitdata_sheath,
+        'Lower-mid - $T_e$ = {t:2.1f}eV'.format(t=fitdata_mid.get_param(c.ELEC_TEMP, errors_fl=False)): fitdata_mid,
+        'Upper-mid - $T_e$ = {t:2.1f}eV'.format(t=fitdata_mid2.get_param(c.ELEC_TEMP, errors_fl=False)): fitdata_mid2,
+        'Injection - $T_e$ = {t:2.1f}eV'.format(t=fitdata_inj.get_param(c.ELEC_TEMP, errors_fl=False)): fitdata_inj
     }
 
     plt.figure()
@@ -504,6 +508,8 @@ def run_multi_hist_analysis(splopter=None, species=2, fitter=None, show_fl=False
     for label, hist in hists.items():
         plt.plot(hist.raw_x, hist.raw_y, label=label)
     plt.legend()
+    plt.xlabel(r'Velocity ($km s^{-1}$)')
+    plt.ylabel(r'Normalised f(v)')
 
     print(fitdata_sheath.get_param(c.ELEC_TEMP, errors_fl=False) / fitdata_inj.get_param(c.ELEC_TEMP, errors_fl=False))
     if show_fl:
@@ -684,7 +690,7 @@ if __name__ == '__main__':
     # run_maxwellian_comparison()
     # run_current_comparison()
     # test2()
-    splopter = spl.Splopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/')
+    splopter = spl.Splopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
     # splopter = spl.Flopter('bin/data_local/', 'benchmarking/', 'gap/')
 
     # splopter = spl.Flopter('bin/data/', 'tests/', 'nproctest_fullnogap/', prepare=True)
@@ -711,7 +717,8 @@ if __name__ == '__main__':
     # splopter.plot_1d_variable(variable_label=sd.NZ)
 
     # extract_density(splopter)
-    run_multi_hist_analysis(splopter=splopter, show_fl=True, species=1)
+    splopter.prepare(homogenise=False, make_denormaliser=False)
+    run_multi_hist_analysis(splopter=splopter, show_fl=True, species=2)
     # run_gap_nogap_comparison()
 
     # run_multi_hist_analysis(splopter=splopter, fitter=f.GaussianVelElecEvFitter(), show_fl=False)

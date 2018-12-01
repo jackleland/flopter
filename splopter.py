@@ -274,8 +274,12 @@ class Splopter(IVAnalyser):
     def find_se_temp_ratio(self, v_scale=1000, plot_fl=False, species=2):
         # TODO: Make function to find regions automatically
         regions = [
-            [74, 80, 0, 200],       # Sheath edge
-            [364, 370, 0, 200]      # Injection area
+            [74, 90, 0, 1000],       # Sheath edge
+            [354, 370, 0, 1000]      # Injection area
+        ]
+        region_names = [
+            'Sheath Edge',
+            'Injection'
         ]
         hists = self.extract_histograms(regions, denormalise=True, v_scale=v_scale, species=species)
         temperature = self.parser.get_commented_params()[c.ELEC_TEMP]
@@ -287,16 +291,16 @@ class Splopter(IVAnalyser):
             fitdatas.append(fitdata)
 
         if plot_fl:
+            plt.figure()
             for i in range(len(hists)):
                 fitdatas[i].print_fit_params()
-                plt.figure()
-                plt.plot(*hists[i], label='Hist')
+                plt.plot(*hists[i], label='Hist - {}'.format(region_names[i]))
                 plt.plot(*fitdatas[i].get_fit_plottables(), label='Fit')
                 plt.legend()
             plt.show()
 
         ratio = fitdatas[0].fit_params[0].value / fitdatas[1].fit_params[0].value
-        print(ratio)
+        print('Sheath edge temperature ratio is: {}'.format(ratio))
         return ratio
 
     def extract_histograms(self, regions, denormalise=False, v_scale=1, species=2):
