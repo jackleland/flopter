@@ -48,17 +48,20 @@ def run_param_scan(splopter):
 
 
 def run_gap_nogap_comparison():
-    splopter_gap = spl.Splopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullgap/', prepare=True)
-    splopter_nogap = spl.Splopter('bin/data/', 'benchmarking_sam/', 'prebprobe2_fullnogap/', prepare=True)
+    splopter_gap = spl.Splopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/', prepare=False)
+    splopter_nogap = spl.Splopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', prepare=False)
+
+    splopter_gap.prepare(make_denormaliser=False)
+    splopter_nogap.prepare(make_denormaliser=False)
 
     ivdata_g = splopter_gap.trim()
     ivdata_ng = splopter_nogap.trim()
 
-    ivdata_g2 = splopter_gap.trim(trim_end=0.5)
-    ivdata_ng2 = splopter_nogap.trim(trim_end=0.5)
+    ivdata_g2 = splopter_gap.trim(trim_beg=0.05, trim_end=0.45)
+    ivdata_ng2 = splopter_nogap.trim(trim_beg=0.05, trim_end=0.45)
 
-    ifit_g = splopter_gap.fit(ivdata_g, f.IonCurrentSEFitter(), print_fl=True)
-    ifit_ng = splopter_nogap.fit(ivdata_ng, f.IonCurrentSEFitter(), print_fl=True)
+    # ifit_g = splopter_gap.fit(ivdata_g, f.IonCurrentSEFitter(), print_fl=True)
+    # ifit_ng = splopter_nogap.fit(ivdata_ng, f.IonCurrentSEFitter(), print_fl=True)
 
     ffit_g2 = splopter_gap.fit(ivdata_g2, print_fl=True)
     ffit_ng2 = splopter_nogap.fit(ivdata_ng2, print_fl=True)
@@ -68,12 +71,14 @@ def run_gap_nogap_comparison():
     splopter_nogap.plot_iv(fig=fig1, plot_vf=True, plot_tot=True, label='No Gap')
 
     fig2 = plt.figure()
-    splopter_gap.plot_f_fit(ffit_g2, fig=fig2, label='Gap ', plot_vf=False)
-    splopter_nogap.plot_f_fit(ffit_ng2, fig=fig2, label='No Gap ')
+    splopter_gap.plot_f_fit(ffit_g2, fig=fig2, plot_vf=False, label=r'Gap - $T_e$ = {:.2g}, $I_{}$ = {:.3g}'
+                            .format(ffit_g2.get_temp(errors_fl=False), r'{sat}', ffit_g2.get_isat(errors_fl=False)))
+    splopter_nogap.plot_f_fit(ffit_ng2, fig=fig2, label=r'No Gap - $T_e$ = {:.2g}, $I_{}$ = {:.3g}'
+                              .format(ffit_ng2.get_temp(errors_fl=False), '{sat}', ffit_ng2.get_isat(errors_fl=False)))
 
-    fig3 = plt.figure()
-    splopter_gap.plot_i_fit(ifit_g, fig=fig3, label='Gap ')
-    splopter_nogap.plot_i_fit(ifit_ng, fig=fig3, label='No Gap ')
+    # fig3 = plt.figure()
+    # splopter_gap.plot_i_fit(ifit_g, fig=fig3, label='Gap ')
+    # splopter_nogap.plot_i_fit(ifit_ng, fig=fig3, label='No Gap ')
     plt.legend()
     plt.show()
 
@@ -685,7 +690,9 @@ def compare_larmor_radii(files, mount='bin/data/', folder='benchmarking_mass/'):
 
 
 if __name__ == '__main__':
-    # run_gap_nogap_comparison()
+    run_gap_nogap_comparison()
+    exit(0)
+
     # run_param_scan()
     # run_maxwellian_comparison()
     # run_current_comparison()
