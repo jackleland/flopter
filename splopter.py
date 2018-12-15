@@ -303,7 +303,7 @@ class Splopter(IVAnalyser):
         print('Sheath edge temperature ratio is: {}'.format(ratio))
         return ratio
 
-    def extract_histograms(self, regions, denormalise=False, v_scale=1, species=2):
+    def extract_histograms(self, regions, denormalise=False, v_scale=1, species=2, deallocate_fl=True):
         if denormalise and not self.denormaliser:
             self.prepare(homogenise=False)
         elif not self.parser:
@@ -340,6 +340,11 @@ class Splopter(IVAnalyser):
             hist, gaps = np.histogram(-region_vels[i], bins='auto', density=True)
             bins = (gaps[:-1] + gaps[1:]) / 2
             hists.append([bins, hist])
+
+        if deallocate_fl:
+            import gc
+            del region_vels
+            gc.collect()
 
         return hists
 
