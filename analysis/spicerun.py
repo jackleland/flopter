@@ -85,62 +85,48 @@ def run_gap_nogap_comparison():
 
 def run_histogram_extr(splopter=None, z_high=370.0, z_low=70.0, fig=None, show=False, normalise_v=True, species=2,
                        t_flag=False, fitter=None):
-    if not splopter:
-        splopter = spl.Splopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
-    splopter.prepare(make_denormaliser=True, homogenise=False)
-    # path = 'bin/data_local/benchmarking/disttest_fullnogap/'
-    nproc = int(np.squeeze(splopter.tdata.nproc))
-
-    u_par = np.array([])
-    ralpha = (-splopter.tdata.alphayz / 180.0) * 3.141591
-    rbeta = ((90.0 - splopter.tdata.alphaxz) / 180) * 3.14159
-
-    for i in range(nproc):
-        num = str(i).zfill(2)
-        filename = splopter.tfile_path.replace('.mat', '{}.mat'.format(num))
-        p_file = loadmat(filename)
-
-        # [print(key+': ', str(np.shape(array))) for key, array in p_file.items() if '__' not in key]
-        indices = np.where((p_file['z'] > z_low) & (p_file['z'] <= z_high) & (p_file['stype'] == species))
-        u_par = np.append(u_par, (p_file['uy'][indices] * np.cos(ralpha) * np.cos(rbeta))
-                          - (p_file['uz'][indices] * np.sin(ralpha)))
-
-    print('Finished compiling...')
-    v_scale = 1000
-    mass = {1: n.ELECTRON_MASS * splopter.denormaliser.mu,
-            2: n.ELECTRON_MASS}
-    if normalise_v:
-        u_par = -splopter.denormaliser(u_par, c.CONV_VELOCITY) / v_scale
-
-    hist, gaps = np.histogram(u_par, bins='auto', density=True)
-    hist_bins = (gaps[:-1] + gaps[1:]) / 2
-
-    fitdata = get_histogram_fit(splopter, hist, hist_bins, fitter=fitter, v_scale=v_scale)
-
-    if t_flag:
-        T_e = (fitdata.fit_params[0].value * mass[species]) / (2 * n.ELEM_CHARGE)
-        T_e_err = (fitdata.fit_params[0].error * mass[species]) / (2 * n.ELEM_CHARGE)
-        print('T_e = {} +/- {}'.format(T_e, T_e_err))
-    else:
-        fitdata.fit_params[0].value *= v_scale ** 2
-        fitdata.fit_params[0].error *= v_scale ** 2
-        # fitdata.fit_params[1].value *= v_scale
-        # fitdata.fit_params[1].error *= v_scale
-    fitdata.print_fit_params()
-
-    if not fig:
-        fig = plt.figure()
-
-    plt.plot(hist_bins, hist, label='z: {} - {}'.format(z_low, z_high))
-    plt.plot(hist_bins, fitdata.fit_y, label="T_e = {t:2.1f}eV".format(t=fitdata.get_param(c.ELEC_TEMP, errors_fl=False)))
-    plt.xlabel(r'Velocity ($m s^{-1}$)')
-    plt.ylabel(r'Normalised f(v)')
-    plt.legend()
-
-    if show:
-        plt.show()
-
-    return fitdata
+    """
+        NOTE: This has been implemented more generally as a method - splopter.extract_histograms() - and therefore this
+        function has now been deprecated.
+    """
+    # if not splopter:
+    #     splopter = spl.Splopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
+    #
+    # region = {'Region': [z_low, z_high, y_low, y_high]}
+    # v_scale = 1000
+    # mass = {1: n.ELECTRON_MASS * splopter.denormaliser.mu,
+    #         2: n.ELECTRON_MASS}
+    #
+    # hists = splopter.extract_histograms(region, denormalise=normalise_v, v_scale=v_scale)
+    # hist_bins, hist = hists
+    #
+    # fitdata = get_histogram_fit(splopter, hist, hist_bins, fitter=fitter, v_scale=v_scale)
+    #
+    # if t_flag:
+    #     T_e = (fitdata.fit_params[0].value * mass[species]) / (2 * n.ELEM_CHARGE)
+    #     T_e_err = (fitdata.fit_params[0].error * mass[species]) / (2 * n.ELEM_CHARGE)
+    #     print('T_e = {} +/- {}'.format(T_e, T_e_err))
+    # else:
+    #     fitdata.fit_params[0].value *= v_scale ** 2
+    #     fitdata.fit_params[0].error *= v_scale ** 2
+    #     # fitdata.fit_params[1].value *= v_scale
+    #     # fitdata.fit_params[1].error *= v_scale
+    # fitdata.print_fit_params()
+    #
+    # if not fig:
+    #     fig = plt.figure()
+    #
+    # plt.plot(hist_bins, hist, label='z: {} - {}'.format(z_low, z_high))
+    # plt.plot(hist_bins, fitdata.fit_y, label="T_e = {t:2.1f}eV".format(t=fitdata.get_param(c.ELEC_TEMP, errors_fl=False)))
+    # plt.xlabel(r'Velocity ($m s^{-1}$)')
+    # plt.ylabel(r'Normalised f(v)')
+    # plt.legend()
+    #
+    # if show:
+    #     plt.show()
+    #
+    # return fitdata
+    pass
 
 
 def get_histogram_fit(splopter, hist, hist_bins, fitter=None, v_scale=1, plot_fl=False):
@@ -488,35 +474,58 @@ def test2():
     plt.show()
 
 
-def run_multi_hist_analysis(splopter=None, species=2, fitter=None, show_fl=False):
+_DEFAULT_HIST_REGIONS = {
+    'Sheath': [75, 90, 0, 822],
+    'Lower-mid': [165, 180, 0, 822],
+    'Upper-mid': [255, 270, 0, 822],
+    'Injection': [355, 370, 0, 822]
+}
+
+
+def run_multi_hist_analysis(splopter=None, species=2, fitter=None, show_fl=False, regions=None):
     if not fitter:
         fitter = f.GaussianVelElecEvFitter()
-    fitdata_sheath = run_histogram_extr(splopter=splopter, z_high=90, z_low=75, show=False, species=species,
-                                        normalise_v=True, fitter=fitter)
-    fitdata_mid = run_histogram_extr(splopter=splopter, z_high=180, z_low=165, show=False, species=species,
-                                     normalise_v=True, fitter=fitter)
-    fitdata_mid2 = run_histogram_extr(splopter=splopter, z_high=270, z_low=255, show=False, species=species,
-                                      normalise_v=True, fitter=fitter)
-    fitdata_inj = run_histogram_extr(splopter=splopter, z_high=370, z_low=355, show=False, species=species,
-                                     normalise_v=True, fitter=fitter)
-    plt.legend()
+    if not regions or not isinstance(regions, dict):
+        regions = _DEFAULT_HIST_REGIONS
 
-    hists = {
-        r'Sheath - $T_e$ = {t:2.1f}eV'.format(t=fitdata_sheath.get_param(c.ELEC_TEMP, errors_fl=False)): fitdata_sheath,
-        'Lower-mid - $T_e$ = {t:2.1f}eV'.format(t=fitdata_mid.get_param(c.ELEC_TEMP, errors_fl=False)): fitdata_mid,
-        'Upper-mid - $T_e$ = {t:2.1f}eV'.format(t=fitdata_mid2.get_param(c.ELEC_TEMP, errors_fl=False)): fitdata_mid2,
-        'Injection - $T_e$ = {t:2.1f}eV'.format(t=fitdata_inj.get_param(c.ELEC_TEMP, errors_fl=False)): fitdata_inj
-    }
+    v_scale = 1000
+    raw_hists = splopter.extract_histograms(list(regions.values()), denormalise=True, v_scale=v_scale, species=species)
+    fitted_hists = {}
+
+    for i, (bins, histogram) in enumerate(raw_hists):
+        # Retrieve label and coords from regions dictionary
+        region_label = list(regions.keys())[i]
+        region_coords = list(regions.values())[i]
+
+        # Fit histogram with fitter and populate the fitted_hists dictionary
+        fitdata = get_histogram_fit(splopter, histogram, bins, fitter=fitter, v_scale=v_scale)
+
+        fitdata.fit_params[0].value *= v_scale ** 2
+        fitdata.fit_params[0].error *= v_scale ** 2
+        # fitdata.fit_params[1].value *= v_scale
+        # fitdata.fit_params[1].error *= v_scale
+        fitdata.print_fit_params()
+
+        dict_label = r'{label} - $T_e$ = {t:2.1f}eV'.format(label=region_label,
+                                                            t=fitdata.get_param(c.ELEC_TEMP, errors_fl=False))
+        fitted_hists[dict_label] = fitdata
+
+        plt.figure()
+        plt.plot(bins, histogram, label='z: {} - {}'.format(region_coords[0], region_coords[1]))
+        plt.plot(bins, fitdata.fit_y, label="T_e = {t:2.1f}eV".format(t=fitdata.get_param(c.ELEC_TEMP, errors_fl=False)))
+        plt.xlabel(r'Velocity ($m s^{-1}$)')
+        plt.ylabel(r'Normalised f(v)')
+        plt.legend()
 
     plt.figure()
     plt.axvline(linestyle='--', color='black')
-    for label, hist in hists.items():
-        plt.plot(hist.raw_x, hist.raw_y, label=label)
+    for region_label, histogram in fitted_hists.items():
+        plt.plot(histogram.raw_x, histogram.raw_y, label=region_label)
     plt.legend()
     plt.xlabel(r'Velocity ($km s^{-1}$)')
     plt.ylabel(r'Normalised f(v)')
 
-    print(fitdata_sheath.get_param(c.ELEC_TEMP, errors_fl=False) / fitdata_inj.get_param(c.ELEC_TEMP, errors_fl=False))
+    # print(fitdata_sheath.get_param(c.ELEC_TEMP, errors_fl=False) / fitdata_inj.get_param(c.ELEC_TEMP, errors_fl=False))
     if show_fl:
         plt.show()
 
@@ -690,14 +699,11 @@ def compare_larmor_radii(files, mount='bin/data/', folder='benchmarking_mass/'):
 
 
 if __name__ == '__main__':
-    run_gap_nogap_comparison()
-    exit(0)
-
     # run_param_scan()
     # run_maxwellian_comparison()
     # run_current_comparison()
     # test2()
-    splopter = spl.Splopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
+    # splopter = spl.Splopter('bin/data_local/', 'benchmarking/', 'disttest_fullnogap/', prepare=False)
     # splopter = spl.Flopter('bin/data_local/', 'benchmarking/', 'gap/')
 
     # splopter = spl.Flopter('bin/data/', 'tests/', 'nproctest_fullnogap/', prepare=True)
@@ -716,6 +722,8 @@ if __name__ == '__main__':
     # splopter = spl.Splopter('bin/data/', 'benchmarking_mass/', 'massrationtest_ms_g_hg/', prepare=True)
     # splopter = spl.Splopter('bin/data/', 'benchmarking_mass/', 'ionmasstest_ms_g_hg/', prepare=True)
     # splopter = spl.Splopter('bin/data/', 'benchmarking_mass/', 'speciesmasstest_ms_g_hg/', prepare=True)
+    splopter = spl.Splopter('bin/data/', 'magnum/', 'sprobe_1e19_nopadding1/')
+    # splopter = spl.Splopter('bin/data/', 'magnum/', 'sprobe_1e19_nopadding1/')
 
     # splopter.plot_2d_variable(show_fl=False)
 
@@ -724,8 +732,9 @@ if __name__ == '__main__':
     # splopter.plot_1d_variable(variable_label=sd.NZ)
 
     # extract_density(splopter)
-    splopter.prepare(homogenise=False, make_denormaliser=False)
-    run_multi_hist_analysis(splopter=splopter, show_fl=True, species=2)
+    splopter.prepare(homogenise=True, make_denormaliser=False)
+    regions = splopter.parser.get_hist_diag_regions(2)
+    # run_multi_hist_analysis(regions=regions, splopter=splopter, show_fl=True, species=2)
     # run_gap_nogap_comparison()
 
     # run_multi_hist_analysis(splopter=splopter, fitter=f.GaussianVelElecEvFitter(), show_fl=False)
