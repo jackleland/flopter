@@ -39,6 +39,8 @@ SWEEP_LOWER = -9.95
 SWEEP_UPPER = 10.05
 PROBE_PARAMETER = 3
 WALL_PARAMETER = 2
+SPICE_SPECIES_ION = 1
+SPICE_SPECIES_ELECTRON = 2
 
 # Input File Variables Labels
 INF_MAGNETIC_FIELD = 'B'
@@ -52,8 +54,20 @@ INF_PART_PER_CELL = 'Npc'
 INF_SWEEP_PARAM = 'param1'
 INF_SHAPE_NAMES = ['rectangle', 'triangle', 'circle']    # Indexed in order listed in input file
 INF_DIAGS_NUM = 'no_diag_reg'
+
+# Input File Diagnostic Specific Labels
 INF_DIAG_NAME = 'diag_name'
 INF_DIAG_PROPERTY = 'record_property'
+INF2_DIAG_ZLOW = 'z_low'
+INF2_DIAG_ZHIGH = 'z_high'
+INF2_DIAG_YLOW = 'y_low'
+INF2_DIAG_YHIGH = 'y_high'
+INF3_DIAG_ZLOW = 'zlow'
+INF3_DIAG_ZHIGH = 'zhigh'
+INF3_DIAG_YLOW = 'ylow'
+INF3_DIAG_YHIGH = 'yhigh'
+INF3_DIAG_XLOW = 'xlow'
+INF3_DIAG_XHIGH = 'xhigh'
 
 # Input File Section Headers
 INF_SEC_PLASMA = 'plasma'
