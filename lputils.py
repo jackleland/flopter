@@ -107,3 +107,83 @@ def electron_density(I_sat, c_s, A_coll):
 
 def d_electron_density(n_e, c_s, d_c_s, A_coll, d_A_coll, I_sat, d_I_sat):
     return np.abs(n_e) * np.sqrt((d_c_s / c_s)**2 + (d_A_coll / A_coll)**2 + (d_I_sat / I_sat)**2)
+
+
+class MagnumProbes(object):
+    def __init__(self):
+        # TODO: Definition of this class is not yet complete, individual definitions of d_perp need to be added.
+        L_small = 3e-3  # m
+        a_small = 2e-3  # m
+        b_small = 3e-3  # m
+        g_small = 2e-3  # m
+        theta_f_small = np.radians(72)
+        d_perp_small = 3e-4  # m
+
+        L_large = 5e-3  # m
+        a_large = 4.5e-3  # m
+        b_large = 6e-3  # m
+        g_large = 1e-3  # m
+        theta_f_large = np.radians(73.3)
+
+        L_reg = 5e-3  # m
+        a_reg = 2e-3  # m
+        b_reg = 3.34e-3  # m
+        g_reg = 1e-3  # m
+        theta_f_reg = np.radians(75)
+
+        L_cyl = 4e-3  # m
+        g_cyl = 5e-4  # m
+
+        d_perp = 3e-4  # m
+        theta_p = np.radians(10)
+
+        self.probe_s = AngledTipProbe(a_small, b_small, L_small, g_small, d_perp, theta_f_small, theta_p)
+        self.probe_l = AngledTipProbe(a_large, b_large, L_large, g_large, d_perp, theta_f_large, theta_p)
+        self.probe_r = AngledTipProbe(a_reg, b_reg, L_reg, g_reg, d_perp, theta_f_reg, theta_p)
+        self.probe_c = FlushCylindricalProbe(L_cyl / 2, g_cyl, d_perp)
+        self.probes = {
+            's': self.probe_s,
+            'r': self.probe_r,
+            'l': self.probe_l,
+            'c': self.probe_c,
+        }
+        self.position = ['s', 'r', 'l', 'c']
+
+
+class MagnumProbesOld(object):
+    def __init__(self):
+        L_small = 3e-3  # m
+        a_small = 2e-3  # m
+        b_small = 3e-3  # m
+        g_small = 2e-3  # m
+        theta_f_small = np.radians(72)
+
+        L_large = 5e-3  # m
+        a_large = 4.5e-3  # m
+        b_large = 6e-3  # m
+        g_large = 1e-3  # m
+        theta_f_large = np.radians(73.3)
+
+        L_reg = 5e-3  # m
+        a_reg = 2e-3  # m
+        b_reg = 3.34e-3  # m
+        g_reg = 1e-3  # m
+        theta_f_reg = np.radians(75)
+
+        L_cyl = 4e-3  # m
+        g_cyl = 5e-4  # m
+
+        d_perp = 3e-4  # m
+        theta_p = np.radians(10)
+
+        self.probe_s = AngledTipProbe(a_small, b_small, L_small, g_small, d_perp, theta_f_small, theta_p)
+        self.probe_l = AngledTipProbe(a_large, b_large, L_large, g_large, d_perp, theta_f_large, theta_p)
+        self.probe_r = AngledTipProbe(a_reg, b_reg, L_reg, g_reg, d_perp, theta_f_reg, theta_p)
+        self.probe_c = FlushCylindricalProbe(L_cyl / 2, g_cyl, d_perp)
+        self.probes = {
+            's': self.probe_s,
+            'r': self.probe_r,
+            'l': self.probe_l,
+            'c': self.probe_c,
+        }
+        self.position = ['s', 'r', 'l', 'c']

@@ -2,7 +2,8 @@ import lputils as lp
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from magopter import Magopter, MagnumProbes
+from magopter import Magopter
+from lputils import MagnumProbes
 import glob
 import external.magnumdbutils as ut
 import external.readfastadc as adc
