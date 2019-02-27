@@ -271,17 +271,22 @@ class Splopter(IVAnalyser):
 #              DF Extraction              #
 ###########################################
 
-    def find_se_temp_ratio(self, v_scale=1000, plot_fl=False, species=2):
-        # TODO: Make function to find regions automatically
-        regions = [
-            [74, 90, 0, 1000],       # Sheath edge
-            [354, 370, 0, 1000]      # Injection area
-        ]
-        region_names = [
-            'Sheath Edge',
-            'Injection'
-        ]
-        hists = self.extract_histograms(regions, denormalise=True, v_scale=v_scale, species=species)
+    def find_se_temp_ratio(self, v_scale=1000, plot_fl=False, species=2, regions=None):
+        # TODO: (14/01/19) Make function to find regions from simulation object geometry first, then tries to interpret
+        # TODO: from the input file.
+        # If no regions specified, find them from diagnostic regions in input file
+        if not regions:
+            regions = self.parser.get_hist_diag_regions(species)
+
+        # If still not regions
+        if not isinstance(regions, dict) or len(regions) == 0:
+            print('WARNING: No viable sheath edge comparison regions provided or found, using defaults.')
+            regions = {
+                'Sheath Edge': [74, 90, 0, 1000],       # Sheath edge
+                'Injection': [354, 370, 0, 1000]        # Injection area
+            }
+
+        hists = self.extract_histograms(list(regions.values()), denormalise=True, v_scale=v_scale, species=species)
         temperature = self.parser.get_commented_params()[c.ELEC_TEMP]
 
         fitdatas = []
@@ -294,7 +299,7 @@ class Splopter(IVAnalyser):
             plt.figure()
             for i in range(len(hists)):
                 fitdatas[i].print_fit_params()
-                plt.plot(*hists[i], label='Hist - {}'.format(region_names[i]))
+                plt.plot(*hists[i], label='Hist - {}'.format(list(regions.keys())[i]))
                 plt.plot(*fitdatas[i].get_fit_plottables(), label='Fit')
                 plt.legend()
             plt.show()

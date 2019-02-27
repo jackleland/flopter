@@ -232,16 +232,43 @@ class InputParser(ConfigParser):
         return None
 
     def get_hist_index(self, hist_name):
-        """Find the index of diagnostics which are histograms within an input file"""
+        """Find the index of a diagnostic which is a histogram within an input file"""
         count = -1
+        # Iterate through all diagnostic sections
         for i in range(len([section for section in self.sections() if c.INF_SEC_DIAG in section]) - 1):
             diag_section_name = c.INF_SEC_DIAG + str(i)
+            # Checks if the diagnostic is a histogram or not
             if self.getint(diag_section_name, c.INF_DIAG_PROPERTY) == 3:
                 count += 1
                 if self.get(diag_section_name, c.INF_DIAG_NAME).strip('\\\'') == hist_name:
                     return count
         print('No diagnostic region making histograms found matching "{}"'.format(hist_name))
         return None
+
+    def get_hist_diag_regions(self, species=2):
+        """
+            Find the simulation coordinates of each diagnostic which is a histogram and return them as a dictionary of
+            lists.
+            :return: [[]]   Dictionary of lists containing the coordinates of the diagnostic region. In the format
+                            {diag_name: [z_low, z_high, y_low, y_high], ... }
+        """
+        diag_regions = {}
+        species_diag_name = 'i' if species == 1 else 'e' if species == 2 else '' + c.DIAG_DIST_FUNCTION_HIST
+
+        # Iterate through all diagnostic sections
+        for i in range(len([section for section in self.sections() if c.INF_SEC_DIAG in section]) - 1):
+            diag_section_name = c.INF_SEC_DIAG + str(i)
+            # Checks if the diagnostic is a histogram or not
+            if self.getint(diag_section_name, c.INF_DIAG_PROPERTY) == 3 \
+                    and species_diag_name in self.get(diag_section_name, c.INF_DIAG_NAME).strip('\\\''):
+                diag_name = self.get(diag_section_name, c.INF_DIAG_NAME).strip('\\\'')
+                y_low = self.getint(diag_section_name, c.INF2_DIAG_YLOW)
+                y_high = self.getint(diag_section_name, c.INF2_DIAG_YHIGH)
+                z_low = self.getint(diag_section_name, c.INF2_DIAG_ZLOW)
+                z_high = self.getint(diag_section_name, c.INF2_DIAG_ZHIGH)
+                diag_regions[diag_name] = [z_low, z_high, y_low, y_high]
+
+        return diag_regions
 
     def get_probe_obj_indices(self):
         """
