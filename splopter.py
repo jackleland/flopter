@@ -27,6 +27,7 @@ class Splopter(IVAnalyser):
     """
     _tfile_prefix = 't-'
     _file_suffix = '.mat'
+    _dump_suffix = '.2d.'
 
     def __init__(self, data_mount_dir, group_name, folder_name, run_name=None, prepare=False):
         ##################################
@@ -135,6 +136,7 @@ class Splopter(IVAnalyser):
 
     @classmethod
     def get_ta_filenames(cls, directory):
+        # TODO: Update this to work with Paths
         cwd = os.getcwd()
         if os.path.exists(directory):
             os.chdir(directory)
@@ -145,7 +147,7 @@ class Splopter(IVAnalyser):
         all_tfiles = glob.glob(tfile_all_glob_str)
         numbered_tfiles = glob.glob(tfile_num_glob_str)
         tfile_name = [tfile for tfile in all_tfiles if tfile not in numbered_tfiles]
-        afile_name = glob.glob('[!{}]*[!0-9]{}'.format(cls._tfile_prefix, cls._file_suffix))
+        afile_name = glob.glob('[!{}]*[!0-9][!{}]{}'.format(cls._tfile_prefix, cls._dump_suffix, cls._file_suffix))
         os.chdir(cwd)
         return next(iter(tfile_name), None), next(iter(afile_name), None)
 
