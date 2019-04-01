@@ -199,7 +199,9 @@ class InputParser(ConfigParser):
     def get_commented_params(self):
         """
         Returns commented parameters if they have been read into the object, throws exception if not.
+
         :return: Dictionary containing commented parameters
+
         """
         if self.COMMENT_PARAMS_SECTNAME in self._sections:
             return self._sections[self.COMMENT_PARAMS_SECTNAME]
@@ -208,9 +210,12 @@ class InputParser(ConfigParser):
 
     def read_commented_params(self, comments):
         """
-        Reads out the paramters from the end of a SPICE2 input file if they are embedded within comments.
+        Reads out the parameters from the end of a SPICE2 input file if they are embedded within comments.
+
         :param comments:    List of strings containing the commented parameters (in form '! T_e = 5.2e2 eV')
+
         :return:            Dictionary containing commented parameters
+
         """
         params = {}
         for comment in comments:
@@ -223,7 +228,9 @@ class InputParser(ConfigParser):
         return params
 
     def get_diag_index(self, diag_name):
-        """Find index of diagnostic within an input file"""
+        """
+        Find index of diagnostic within an input file
+        """
         for i in range(len([section for section in self.sections() if c.INF_SEC_DIAG in section]) - 1):
             diag_section_name = c.INF_SEC_DIAG + str(i)
             if self.get(diag_section_name, c.INF_DIAG_NAME).strip('\\\'') == diag_name:
@@ -232,7 +239,9 @@ class InputParser(ConfigParser):
         return None
 
     def get_hist_index(self, hist_name):
-        """Find the index of a diagnostic which is a histogram within an input file"""
+        """
+        Find the index of a diagnostic which is a histogram within an input file
+        """
         count = -1
         # Iterate through all diagnostic sections
         for i in range(len([section for section in self.sections() if c.INF_SEC_DIAG in section]) - 1):
@@ -247,9 +256,10 @@ class InputParser(ConfigParser):
 
     def get_hist_diag_regions(self, species=2):
         """
-            Find the simulation coordinates of each diagnostic which is a histogram and return them as a dictionary of
-            lists.
-            :return: [[]]   Dictionary of lists containing the coordinates of the diagnostic region. In the format
+        Find the simulation coordinates of each diagnostic which is a histogram and return them as a dictionary of
+        lists.
+
+        :return: [list]     Dictionary of lists containing the coordinates of the diagnostic region. In the format
                             {diag_name: [z_low, z_high, y_low, y_high], ... }
         """
         diag_regions = {}
@@ -275,7 +285,9 @@ class InputParser(ConfigParser):
         Returns the index (or indices if the probe is a compound shape) of the object within the simulation which is
         acting as a probe i.e. has 'param1' set to 3. The indices can be used to reference the correct array in
         objectscurrent, for example.
+
         :return: [int]    Indices of probes in simulation object array, returned as a list.
+
         """
         num_blocks_section = self[c.INF_SEC_SHAPES]
         n = 0
@@ -300,7 +312,9 @@ class InputParser(ConfigParser):
         Returns the index (or indices if using a compound shape) of the object within the simulation which is acting set
         to have a floating potential i.e. has 'param1' set to 2. The indices can be used to reference the correct array
         in objectscurrent, for example.
+
         :return: [int]    Indices of floating potential walls in simulation object array, returned as a list.
+
         """
         num_blocks_section = self[c.INF_SEC_SHAPES]
         n = 0
@@ -324,10 +338,12 @@ class InputParser(ConfigParser):
         """
         Calculates the scaling values (n' and r) which are needed to extend the diagnostic outputs to the right length
         and downsample them for homogenisation of SPICE IV sweeps
+
         :param len_diag:    length of raw diagnostic output array   (n)
         :param len_builtin: length of builtin output array          (M)
         :return n_leading:  size of array to prepend onto the diagnostic array
         :return ratio:      ratio of extended diagnostic output array to builtin output array (e.g. objectscurrent):
+
         """
         t_c = self.getfloat(c.INF_SEC_GEOMETRY, c.INF_TIME_SWEEP)
         t_p = self.getfloat(c.INF_SEC_GEOMETRY, c.INF_TIME_END)

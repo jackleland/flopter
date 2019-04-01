@@ -6,12 +6,13 @@ import pandas as pd
 
 class IVData(dict):
     """
-        A dictionary which holds IV specific data, namely
-            - Voltage
-            - Current
-            - Time
-            - [Electron Current] (for simulations)
-            - [Ion Current] (for simulations)
+    A dictionary which holds IV specific data, namely
+        * Voltage
+        * Current
+        * Time
+        * [Electron Current] (for simulations)
+        * [Ion Current] (for simulations)
+
     """
     _DEFAULT_TRIM_BEG = 0.0
     _DEFAULT_TRIM_END = 1.0
@@ -46,12 +47,19 @@ class IVData(dict):
             self.untrimmed_items[k] = v
 
     def split(self):
+        """
+        Returns the potential, current (and optionally ion current) arrays from the IVData object
+
+        :return: Tuple of [potential, current, ion_current (if present)]
+
+        """
         if c.ION_CURRENT in self.keys():
             return self[c.POTENTIAL], self[c.CURRENT], self[c.ION_CURRENT]
         else:
             return self[c.POTENTIAL], self[c.CURRENT]
 
     def set_trim(self, trim_beg=_DEFAULT_TRIM_BEG, trim_end=_DEFAULT_TRIM_END):
+        # TODO: Find alternative to this, it is not clear how it should work.
         assert self._DEFAULT_TRIM_BEG <= trim_beg < trim_end <= self._DEFAULT_TRIM_END
         if trim_beg != self._DEFAULT_TRIM_BEG:
             self.trim_beg = trim_beg
@@ -75,10 +83,26 @@ class IVData(dict):
             self[key] = value[start:stop]
 
     def save(self, filename, columns=(c.TIME, c.POTENTIAL, c.CURRENT, c.SIGMA)):
+        """
+        Converts the IV data object to a pandas dataframe and then stores is at the location specified by filename in
+        csv format. The columns which are saved to file can be altered with the columns kwarg.
+
+        :param filename:    String (or Path-like) to destination file.
+        :param columns:     Which columns from the IVData object to store to file in the form of a tuple of
+                            strings. Default is (c.TIME, c.POTENTIAL, c.CURRENT, c.SIGMA)
+
+        """
         df = pd.DataFrame(data={column: self[column] for column in columns})
         df.to_csv(filename)
 
     def copy(self):
+        """
+        Deep copy of IVData object, including conditional copying for electron and ion current, set trim values, sigma
+        values and the estimation of error flag.
+
+        :return: Deep copy of IVData object
+
+        """
         e_current = None
         i_current = None
         sigma = None
@@ -101,14 +125,16 @@ class IVData(dict):
         Multi-stage fitting method using an initial straight line fit to the saturation region of the IV curve (decided
         by the sat_region kwarg). The fitted I_sat is then left fixed while T_e and a are found with a 2 parameter fit,
         which gives the guess parameters for an unconstrained full IV fit.
-        :param sat_region:  Threshold voltage value below which the 'Straight section' is defined. The straight section
+
+        :param sat_region:  (Integer) Threshold voltage value below which the 'Straight section' is defined. The straight section
                             is fitted to get an initial value of saturation current for subsequent fits.
         :param fitter:      Fitter object to be used for the fixed-I_sat fit and the final, full-free fit.
         :param plot_fl:     (Boolean) If true, plots the output of all 3 stages of fitting. Default is False.
         :param fix_vf_fl:   (Boolean) If true, fixes the floating potential for all 3 stages of fitting. The value used
                             is the interpolated value of Voltage where Current = 0. Default is False.
         :param print_fl:    (Boolean) If true, prints fitter information to console.
-        :return:            Full 4-param IVFit data
+        :return:            (IVFitData) Full 4-param IVFit data
+
         """
         import fitters as f
         import matplotlib.pyplot as plt
@@ -172,7 +198,18 @@ class IVData(dict):
         return ff_data
 
     @staticmethod
-    def percentage_trim(iv_data, trim_beg=0.0, trim_end=1.0):
+    def fractional_trim(iv_data, trim_beg=0.0, trim_end=1.0):
+        """
+        Static method for trimming all the arrays in an IVData object from and to indices calculated from the fraction
+        (0.0-1.0) of the arrays total length. e.g. trim_beg=0.2 would have a trim start at the nearest index to 20%
+        through the array.
+
+        :param iv_data:     IVData object to trim
+        :param trim_beg:    Lower fraction of trim, default is the start of the array.
+        :param trim_end:    Upper fraction of trim, default is the end of the array
+        :return: Trimmed IVData object
+
+        """
         if not iv_data or not isinstance(iv_data, IVData):
             raise ValueError('Invalid iv_data given.')
         full_length = len(iv_data[c.CURRENT])
@@ -183,11 +220,13 @@ class IVData(dict):
     @staticmethod
     def positional_trim(iv_data, start, stop):
         """
-        Function for trimming an IVData object by array index.
+        Function for trimming an IVData's underlying numpy arrays, using start and stop indices.
+
         :param iv_data: IVData object to trim
         :param start:   Start trimming from this index - must be integer
         :param stop:    Stop index - must be integer
         :return: trimmed IVData object with arrays of length (stop - start)
+
         """
         if not iv_data or not isinstance(iv_data, IVData):
             raise ValueError('Invalid iv_data given.')
@@ -198,6 +237,15 @@ class IVData(dict):
 
     @staticmethod
     def non_contiguous_trim(iv_data, selection):
+        """
+        Static method for trimming a non-contiguous section of the IVData arrays. Non-contiguous area is trimmed using
+        an array of indices, usually found with numpy's where() function.
+
+        :param iv_data:     IVData object to be trimmed
+        :param selection:   List of indices referring to non-contiguous area to be trimmed.
+        :return: trimmed IVData object with all arrays of length (len(selection))
+
+        """
         assert isinstance(iv_data, IVData)
         assert isinstance(selection, coll.Iterable)
         new_iv_data = iv_data.copy()
