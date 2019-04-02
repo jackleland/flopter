@@ -1,4 +1,4 @@
-image: python:3.6-alpine
+image: python:3.6
 
 pages:
   script:
@@ -6,7 +6,7 @@ pages:
   - apt-get install -y python-pip
   - python -V
   - pip install -r requirements.txt
-  - apk --no-cache add make
+  - apt-get install make
   - cd docs/
   - make html
   - mv _build/html/ ../public/
