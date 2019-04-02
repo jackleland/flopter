@@ -1,0 +1,451 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>normalisation &mdash; flopter  documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../_static/jquery.js"></script>
+        <script type="text/javascript" src="../_static/underscore.js"></script>
+        <script type="text/javascript" src="../_static/doctools.js"></script>
+        <script type="text/javascript" src="../_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> flopter
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"></div>
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">flopter</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="index.html">Module code</a> &raquo;</li>
+        
+      <li>normalisation</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for normalisation</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">inputparser</span> <span class="k">import</span> <span class="n">InputParser</span>
+<span class="kn">from</span> <span class="nn">inspect</span> <span class="k">import</span> <span class="n">signature</span>
+<span class="kn">from</span> <span class="nn">abc</span> <span class="k">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">import</span> <span class="nn">constants</span> <span class="k">as</span> <span class="nn">c</span>
+<span class="kn">from</span> <span class="nn">classes.ivdata</span> <span class="k">import</span> <span class="n">IVData</span>
+
+<span class="c1"># Physical constants</span>
+<span class="n">BOLTZMANN</span> <span class="o">=</span> <span class="mf">1.38064852e-23</span>  <span class="c1"># m^2 kg s^-2 K^-1</span>
+<span class="n">EPSILON_0</span> <span class="o">=</span> <span class="mf">8.85418782e-12</span>  <span class="c1"># m^-3 kg^-1 s^4 A^2</span>
+<span class="n">ELEM_CHARGE</span> <span class="o">=</span> <span class="mf">1.60217662e-19</span> <span class="c1"># C</span>
+<span class="n">PROTON_MASS</span> <span class="o">=</span> <span class="mf">1.6726219e-27</span> <span class="c1"># kg</span>
+<span class="n">DEUTERIUM_MASS</span> <span class="o">=</span> <span class="mf">2.01410178</span> <span class="o">*</span> <span class="n">PROTON_MASS</span> <span class="c1"># kg</span>
+<span class="n">ELECTRON_MASS</span> <span class="o">=</span> <span class="mf">9.10938356e-31</span> <span class="c1"># kg</span>
+<span class="n">ATOMIC_MASS_UNIT</span> <span class="o">=</span> <span class="n">ELECTRON_MASS</span> <span class="o">*</span> <span class="mf">1822.888486</span>
+<span class="n">P_E_MASS_RATIO</span> <span class="o">=</span> <span class="n">PROTON_MASS</span> <span class="o">/</span> <span class="n">ELECTRON_MASS</span>
+<span class="n">I_E_MASS_RATIO</span> <span class="o">=</span> <span class="n">DEUTERIUM_MASS</span> <span class="o">/</span> <span class="n">ELECTRON_MASS</span>
+
+
+<div class="viewcode-block" id="Converter"><a class="viewcode-back" href="../index.html#normalisation.Converter">[docs]</a><span class="k">class</span> <span class="nc">Converter</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Base class for a converter object, which normalises or denormalises an input variable.</span>
+
+<span class="sd">    Principle method of conversion is to call the converter object itself with the desired conversion_type</span>
+<span class="sd">    as a parameter. Subclasses need to override the given conversion functions defined below</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Conversion types - stored in a dictionary</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">CONVERSION_TYPES</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">c</span><span class="o">.</span><span class="n">CONV_POTENTIAL</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_potential</span><span class="p">,</span>
+            <span class="n">c</span><span class="o">.</span><span class="n">CONV_CURRENT</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_current</span><span class="p">,</span>
+            <span class="n">c</span><span class="o">.</span><span class="n">CONV_LENGTH</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_length</span><span class="p">,</span>
+            <span class="n">c</span><span class="o">.</span><span class="n">CONV_TIME</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_time</span><span class="p">,</span>
+            <span class="n">c</span><span class="o">.</span><span class="n">CONV_DENSITY</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_density</span><span class="p">,</span>
+            <span class="n">c</span><span class="o">.</span><span class="n">CONV_MASS</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_mass</span><span class="p">,</span>
+            <span class="n">c</span><span class="o">.</span><span class="n">CONV_CHARGE</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_charge</span><span class="p">,</span>
+            <span class="n">c</span><span class="o">.</span><span class="n">CONV_TEMPERATURE</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_temperature</span><span class="p">,</span>
+            <span class="n">c</span><span class="o">.</span><span class="n">CONV_FLUX</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_flux</span><span class="p">,</span>
+            <span class="n">c</span><span class="o">.</span><span class="n">CONV_VELOCITY</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_velocity</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variable</span><span class="p">,</span> <span class="n">conversion_type</span><span class="o">=</span><span class="n">c</span><span class="o">.</span><span class="n">CONV_POTENTIAL</span><span class="p">,</span> <span class="n">additional_arg</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param variable:            Variable to be converted. Must be scalable, i.e. a float or a numpy array</span>
+<span class="sd">        :param conversion_type:     Which conversion type should be done (length, potential etc)</span>
+<span class="sd">        :param additional_arg:      Optional argument that may be required in the conversion procedure. Can be a list of</span>
+<span class="sd">                                    arguments.</span>
+<span class="sd">        :return:                    Converted version of variable</span>
+
+<span class="sd">        Calls the function corresponding to the conversion_type argument passed. Feeds in &#39;variable&#39; as an</span>
+<span class="sd">        input into this function as well as any additional args should they be needed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">conversion_type</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONVERSION_TYPES</span><span class="p">:</span>
+            <span class="c1"># Get conversion function and associated metadata</span>
+            <span class="n">function</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONVERSION_TYPES</span><span class="p">[</span><span class="n">conversion_type</span><span class="p">]</span>
+            <span class="n">function_sig</span> <span class="o">=</span> <span class="n">signature</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>
+
+            <span class="c1"># Check if function needs an additional argument</span>
+            <span class="k">if</span> <span class="n">additional_arg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">function_sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">function</span><span class="p">(</span><span class="n">variable</span><span class="p">,</span> <span class="o">*</span><span class="n">additional_arg</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">function_sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="c1"># Raise error if too few arguments provided</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\&#39;</span><span class="si">{a}</span><span class="se">\&#39;</span><span class="s1"> function type requires </span><span class="si">{b}</span><span class="s1"> arguments: </span><span class="si">{c}</span><span class="s1">&#39;</span>
+                                <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">conversion_type</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">function_sig</span><span class="o">.</span><span class="n">parameters</span><span class="p">),</span> <span class="n">c</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">function_sig</span><span class="p">)))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">function</span><span class="p">(</span><span class="n">variable</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s1">&#39;The </span><span class="se">\&#39;</span><span class="s1">function</span><span class="se">\&#39;</span><span class="s1"> argument should be a conversion type - one of: </span><span class="si">{a}</span><span class="s1">&#39;</span>
+                            <span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">CONVERSION_TYPES</span><span class="o">.</span><span class="n">keys</span><span class="p">())))</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_convert_potential</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">potential</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_convert_current</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_convert_length</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">length</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_convert_time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_convert_density</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">density</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_convert_velocity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">velocity</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_convert_mass</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mass</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_convert_charge</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">charge</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_convert_temperature</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">temperature</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_convert_flux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">flux</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="Denormaliser"><a class="viewcode-back" href="../index.html#normalisation.Denormaliser">[docs]</a><span class="k">class</span> <span class="nc">Denormaliser</span><span class="p">(</span><span class="n">Converter</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Class for de-normalising values given by SPICE simulations.</span>
+
+<span class="sd">    Stores an input parser object containing the used input file and then builds conversion values from this.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">dimensions</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">input_parser</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">input_filename</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">edge_ratio</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Creates a denormaliser object by using InputParser to parse an input file for some parameters (principally n_e,</span>
+<span class="sd">        T_e, B and N_pc) which are needed for the denormalisation process.</span>
+
+<span class="sd">        InputParser either passed directly or created from a filename</span>
+<span class="sd">        :param dt                   Float - value of dt from simulation (cannot be ascertained from the input file)</span>
+<span class="sd">        :param dimensions           Int - specify the number of dimensions to be used for calculation of areas/volumes</span>
+<span class="sd">        :param [input_parser]:      InputParser object to be used, must have already read the commented section.</span>
+<span class="sd">        :param [input_filename]:    Directory of input file to be parsed</span>
+
+<span class="sd">        One of input_parser or input_filename is required</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="c1"># Check for input parser or create one from given filename</span>
+        <span class="k">if</span> <span class="n">input_parser</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">input_parser</span><span class="o">.</span><span class="n">has_commented_params</span><span class="p">():</span>
+            <span class="n">parser</span> <span class="o">=</span> <span class="n">input_parser</span>
+        <span class="k">elif</span> <span class="n">input_filename</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">parser</span> <span class="o">=</span> <span class="n">InputParser</span><span class="p">(</span><span class="n">input_filename</span><span class="o">=</span><span class="n">input_filename</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;No valid InputParser object given or able to be created&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Check that valid number of dimensions given</span>
+        <span class="k">if</span> <span class="n">dimensions</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dimensions</span> <span class="o">=</span> <span class="n">dimensions</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Number of dimensions should be 2 or 3&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dt</span> <span class="o">=</span> <span class="n">dt</span>
+
+        <span class="c1"># Save parameters from commented params</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">simulation_params</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">get_commented_params</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">temperature</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="n">temperature</span>
+        <span class="k">elif</span> <span class="s1">&#39;T_e&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">simulation_params</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">simulation_params</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">ELEC_TEMP</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="k">if</span> <span class="n">edge_ratio</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">edge_ratio</span> <span class="o">=</span> <span class="n">edge_ratio</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sheath_edge_temp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">*</span> <span class="n">edge_ratio</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">ksi</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">parser</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">INF_SEC_PLASMA</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">INF_KSI</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mu</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">parser</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">INF_SEC_PLASMA</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">INF_MU</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tau</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">parser</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">INF_SEC_PLASMA</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">INF_TAU</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">debye_length</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="n">EPSILON_0</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">)</span>
+                                    <span class="o">/</span> <span class="p">(</span><span class="n">ELEM_CHARGE</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">simulation_params</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">ELEC_DENS</span><span class="p">]))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">omega_i</span> <span class="o">=</span> <span class="p">((</span><span class="n">ELEM_CHARGE</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">simulation_params</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">INF_MAGNETIC_FIELD</span><span class="p">])</span>
+                        <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mu</span> <span class="o">*</span> <span class="n">ELECTRON_MASS</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">K</span> <span class="o">=</span> <span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">simulation_params</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">ELEC_DENS</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">debye_length</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">dimensions</span><span class="p">)</span>
+                  <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">parser</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">INF_SEC_GEOMETRY</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">INF_PART_PER_CELL</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">CONVERSION_TYPES</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">CONV_IV</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_iv_data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">CONVERSION_TYPES</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">CONV_DIST_FUNCTION</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_distribution_function</span>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">variable</span><span class="p">,</span> <span class="n">conversion_type</span><span class="o">=</span><span class="n">c</span><span class="o">.</span><span class="n">CONV_IV</span><span class="p">,</span> <span class="n">additional_arg</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="n">variable</span><span class="p">,</span> <span class="n">conversion_type</span><span class="o">=</span><span class="n">conversion_type</span><span class="p">,</span> <span class="n">additional_arg</span><span class="o">=</span><span class="n">additional_arg</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">set_temperature</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">temperature</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="n">temperature</span>
+
+    <span class="k">def</span> <span class="nf">set_se_temperature</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ratio</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">edge_ratio</span> <span class="o">=</span> <span class="n">ratio</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sheath_edge_temp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">edge_ratio</span>
+
+    <span class="k">def</span> <span class="nf">_convert_potential</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">potential</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">potential</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span>
+
+    <span class="k">def</span> <span class="nf">_convert_current</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">((</span><span class="n">ELEM_CHARGE</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">K</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">omega_i</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="p">)</span> <span class="o">*</span> <span class="n">current</span>
+
+    <span class="k">def</span> <span class="nf">_convert_length</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">length</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">debye_length</span> <span class="o">*</span> <span class="n">length</span>
+
+    <span class="k">def</span> <span class="nf">_convert_time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">omega_i</span><span class="p">)</span> <span class="o">*</span> <span class="n">time</span>
+
+    <span class="k">def</span> <span class="nf">_convert_velocity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">velocity</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">debye_length</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">omega_i</span><span class="p">)</span> <span class="o">*</span> <span class="n">velocity</span>
+
+    <span class="k">def</span> <span class="nf">_convert_density</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">density</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">simulation_params</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">ELEC_DENS</span><span class="p">]</span> <span class="o">*</span> <span class="n">density</span>
+
+    <span class="k">def</span> <span class="nf">_convert_mass</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mass</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">mu</span> <span class="o">*</span> <span class="n">mass</span>
+
+    <span class="k">def</span> <span class="nf">_convert_charge</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">charge</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ELEM_CHARGE</span> <span class="o">*</span> <span class="n">charge</span>
+
+    <span class="k">def</span> <span class="nf">_convert_temperature</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">temperature</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">*</span> <span class="n">temperature</span>
+
+    <span class="k">def</span> <span class="nf">_convert_flux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">flux</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">simulation_params</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">ELEC_DENS</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">debye_length</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">omega_i</span> <span class="o">*</span> <span class="n">flux</span>
+
+    <span class="k">def</span> <span class="nf">_convert_iv_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">iv_data</span><span class="p">):</span>
+        <span class="n">time</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_time</span><span class="p">(</span><span class="n">iv_data</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">TIME</span><span class="p">])</span>
+        <span class="n">potential</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_potential</span><span class="p">(</span><span class="n">iv_data</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">POTENTIAL</span><span class="p">])</span>
+        <span class="n">current</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_current</span><span class="p">(</span><span class="n">iv_data</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">CURRENT</span><span class="p">])</span>
+        <span class="n">current_e</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_current</span><span class="p">(</span><span class="n">iv_data</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">ELEC_CURRENT</span><span class="p">])</span>
+        <span class="n">current_i</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_current</span><span class="p">(</span><span class="n">iv_data</span><span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">ION_CURRENT</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">IVData</span><span class="p">(</span><span class="n">potential</span><span class="p">,</span> <span class="n">current</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">i_current</span><span class="o">=</span><span class="n">current_i</span><span class="p">,</span> <span class="n">e_current</span><span class="o">=</span><span class="n">current_e</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_convert_distribution_function</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dist_function</span><span class="p">):</span>
+        <span class="n">conversion_factor</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">/</span> <span class="n">DEUTERIUM_MASS</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">ksi</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">200</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mu</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">conversion_factor</span> <span class="o">*</span> <span class="n">dist_function</span>
+
+    <span class="k">def</span> <span class="nf">get_mu</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">mu</span></div>
+
+
+<div class="viewcode-block" id="Normaliser"><a class="viewcode-back" href="../index.html#normalisation.Normaliser">[docs]</a><span class="k">class</span> <span class="nc">Normaliser</span><span class="p">(</span><span class="n">Converter</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Class for normalising values for use in SPICE simulations.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_convert_mass</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mass</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_convert_mass</span><span class="p">(</span><span class="n">mass</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_convert_charge</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">charge</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_convert_charge</span><span class="p">(</span><span class="n">charge</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_convert_temperature</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">temperature</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_convert_temperature</span><span class="p">(</span><span class="n">temperature</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_convert_flux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">flux</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_convert_flux</span><span class="p">(</span><span class="n">flux</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_convert_length</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">length</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_convert_length</span><span class="p">(</span><span class="n">length</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_convert_current</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">current</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_convert_current</span><span class="p">(</span><span class="n">current</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_convert_time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_convert_time</span><span class="p">(</span><span class="n">time</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_convert_potential</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">potential</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_convert_potential</span><span class="p">(</span><span class="n">potential</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_convert_density</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">density</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_convert_density</span><span class="p">(</span><span class="n">density</span><span class="p">)</span></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Jack Leland
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
