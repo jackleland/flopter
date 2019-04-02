@@ -1,7 +1,5 @@
 import scipy.io as spio
-import normalisation as norm
-import constants as c
-
+from flopter.core import constants as c, normalisation as norm
 
 NZ = 'Nz'
 NZMAX = 'Nzmax'

@@ -2,7 +2,7 @@ from configparser import *
 from collections import defaultdict
 import re
 import sys
-import constants as c
+from flopter.core import constants as c
 
 
 class InputParser(ConfigParser):

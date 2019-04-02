@@ -1,10 +1,10 @@
 import os
 from abc import ABC, abstractmethod
 import numpy as np
-from classes.ivdata import IVData
-from classes.spicedata import Spice2TData
-from inputparser import InputParser
-import constants as c
+from flopter.classes.ivdata import IVData
+from flopter.classes.spicedata import Spice2TData
+from flopter.core.inputparser import InputParser
+from flopter.core import constants as c
 
 
 class Homogeniser(ABC):

@@ -1,19 +1,16 @@
-from classes.base import IVAnalyser
-import fitters as f
-import filtering as filt
+from flopter.classes.base import IVAnalyser
 import numpy as np
 import pathlib as pth
 import matplotlib.pyplot as plt
-import classes.magnumadcdata as md
-import classes.ivdata as iv
+import flopter.classes.magnumadcdata as md
+import flopter.classes.ivdata as iv
 import pandas as pd
-import constants as c
 import scipy.signal as sig
-import databases.magnum as mag
-import external.readfastadc as adc
+import flopter.databases.magnum as mag
+import flopter.external.readfastadc as adc
 from codac.datastore import client
 import Ice
-import normalisation as nrm
+from flopter.core import filtering as filt, constants as c, normalisation as nrm, fitters as f
 import glob
 import os
 

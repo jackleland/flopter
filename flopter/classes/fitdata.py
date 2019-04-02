@@ -1,4 +1,4 @@
-import constants as c
+from flopter.core import constants as c
 import matplotlib.pyplot as plt
 
 

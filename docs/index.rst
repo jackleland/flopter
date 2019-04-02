@@ -7,7 +7,7 @@ Welcome to flopter's documentation!
 ===================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 4
    :caption: Contents:
 
 
@@ -21,10 +21,10 @@ The IVAnalyser Class
 Implementations of the IVAnalyser
 =================================
 
-.. automodule:: splopter
+.. automodule:: core.splopter
    :members:
 
-.. automodule:: magopter
+.. automodule:: core.magopter
    :members: 
 
 
@@ -41,20 +41,20 @@ Classes for Dealing with IV Data
 Fitting
 =======
 
-.. automodule:: fitters
+.. automodule:: core.fitters
    :members: 
 
 
 Integration with SPICE
 ======================
 
-.. automodule:: normalisation
+.. automodule:: core.normalisation
    :members:  
 
-.. automodule:: homogenisation
+.. automodule:: core.homogenisation
    :members: 
 
-.. automodule:: inputparser
+.. automodule:: core.inputparser
    :members: 
 
    

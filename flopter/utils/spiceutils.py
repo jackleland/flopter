@@ -1,4 +1,4 @@
-import normalisation as nrm
+from flopter.core import normalisation as nrm
 import numpy as np
 
 

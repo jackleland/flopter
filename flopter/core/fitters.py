@@ -6,10 +6,10 @@ import scipy.signal as sig
 from scipy.interpolate import interp1d
 import collections as coll
 
-from classes.ivdata import IVData
-from classes.fitdata import FitData2, IVFitData
-import constants as c
-from normalisation import BOLTZMANN, ELECTRON_MASS, ELEM_CHARGE, PROTON_MASS, P_E_MASS_RATIO
+from flopter.classes.ivdata import IVData
+from flopter.classes.fitdata import FitData2, IVFitData
+from flopter.core import constants as c
+from flopter.core.normalisation import BOLTZMANN, ELECTRON_MASS, ELEM_CHARGE, P_E_MASS_RATIO
 from warnings import warn
 
 # Curve-fit default values and bounds

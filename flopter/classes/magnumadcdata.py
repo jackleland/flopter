@@ -1,6 +1,6 @@
 import numpy as np
-import external.readfastadc as radc
-import constants as c
+import flopter.external.readfastadc as radc
+from flopter.core import constants as c
 
 
 class MagnumAdcConfig(object):

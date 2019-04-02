@@ -1,9 +1,9 @@
 import numpy as np
-from inputparser import InputParser
+from flopter.core.inputparser import InputParser
 from inspect import signature
 from abc import ABC, abstractmethod
-import constants as c
-from classes.ivdata import IVData
+from flopter.core import constants as c
+from flopter.classes.ivdata import IVData
 
 # Physical constants
 BOLTZMANN = 1.38064852e-23  # m^2 kg s^-2 K^-1

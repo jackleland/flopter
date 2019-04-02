@@ -1,5 +1,5 @@
 import numpy as np
-import normalisation as nrm
+from flopter.core import normalisation as nrm
 from abc import ABC, abstractmethod
 
 

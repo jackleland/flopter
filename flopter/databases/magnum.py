@@ -1,7 +1,7 @@
 from codac.datastore import client
 import numpy as np
-import external.magnumdbutils as ut
-import external.readfastadc as adc
+import flopter.external.magnumdbutils as ut
+import flopter.external.readfastadc as adc
 import re
 
 TIMES = 0

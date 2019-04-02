@@ -1,11 +1,8 @@
-import splopter as spl
-import fitters as f
-import constants as c
-import normalisation as n
+from flopter.core import constants as c, fitters as f, splopter as spl
 import matplotlib.pyplot as plt
 import numpy as np
-import classes.spicedata as sd
-from scipy.signal import argrelmax, savgol_filter
+import flopter.classes.spicedata as sd
+from scipy.signal import savgol_filter
 from scipy.io import loadmat
 
 

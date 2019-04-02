@@ -1,8 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import normalisation as nrm
-import fitters as f
-import pandas as pd
+from flopter.core import normalisation as nrm, fitters as f
 
 # Estimated parameters
 # v_f = 8        # V

@@ -2,7 +2,7 @@ import scipy.signal as sig
 import numpy as np
 import matplotlib.pyplot as plt
 from abc import abstractmethod
-from functions.decorators import plotmethod
+from flopter.functions.decorators import plotmethod
 
 
 class FilterWrapper(object):

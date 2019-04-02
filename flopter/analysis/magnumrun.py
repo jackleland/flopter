@@ -1,18 +1,16 @@
-import lputils as lp
+from utils import lputils as lp
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from magopter import Magopter
-from lputils import MagnumProbes
+from flopter.core.magopter import Magopter
+from flopter.utils.lputils import MagnumProbes
 import glob
-import external.magnumdbutils as ut
-import external.readfastadc as adc
-import constants as c
-import normalisation as nrm
-import databases.magnum as mag
+import flopter.external.magnumdbutils as ut
+import flopter.external.readfastadc as adc
+from flopter.core import constants as c, normalisation as nrm, fitters as f
+import flopter.databases.magnum as mag
 from scipy.interpolate import interp1d
 import scipy.signal as sig
-import fitters as f
 import concurrent.futures as cf
 import pathlib as pth
 import pandas as pd

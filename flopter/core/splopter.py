@@ -1,24 +1,20 @@
 import glob
 import os
-from abc import ABC, abstractmethod
 
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy as sp
 from scipy import interpolate
 from scipy.io import loadmat
-from scipy.optimize import curve_fit
 from scipy.signal import argrelmax, savgol_filter
 
-from classes.base import IVAnalyser
-from classes.fitdata import IVFitData
-from classes.ivdata import IVData
-import classes.spicedata as sd
-import constants as c
-from homogenisation import Spice2Homogeniser
-from inputparser import InputParser
-from normalisation import Denormaliser
-from fitters import IVFitter, FullIVFitter, GaussianFitter
+from flopter.classes.base import IVAnalyser
+from flopter.classes.ivdata import IVData
+import flopter.classes.spicedata as sd
+from flopter.core import constants as c
+from flopter.core.homogenisation import Spice2Homogeniser
+from flopter.core.inputparser import InputParser
+from flopter.core.normalisation import Denormaliser
+from flopter.core.fitters import IVFitter, FullIVFitter, GaussianFitter
     
 
 class Splopter(IVAnalyser):
