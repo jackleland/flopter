@@ -1,4 +1,4 @@
-from flopter.core import constants as c, fitters as f
+from flopter.core import constants as c
 import numpy as np
 import collections as coll
 import pandas as pd
@@ -137,6 +137,7 @@ class IVData(dict):
 
         """
         import matplotlib.pyplot as plt
+        import flopter.core.fitters as f
 
         if fitter is None or not isinstance(fitter, f.IVFitter):
             fitter = f.FullIVFitter()
