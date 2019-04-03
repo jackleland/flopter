@@ -3,3 +3,6 @@ __pycache__/
 *~
 data/
 
+docs/_build/*
+docs/_static/*
+docs/_templates/*

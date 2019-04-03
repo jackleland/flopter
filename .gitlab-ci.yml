@@ -1,14 +1,15 @@
-image: alpine
+image: python:3.6
 
 pages:
   script:
-  - apk --no-cache add py2-pip python-dev
-  - pip install requirements.txt
-  - apk --no-cache add make
+  - apt-get update -q -y
+  - apt-get install -y python-pip
+  - python -V
+  - pip install -r requirements.txt
+  - apt-get install make
   - cd docs/
   - make html
-  - cd ../
-  - mv docs/_build/html/ public/
+  - mv _build/html/ ../public/
   artifacts:
     paths:
     - public

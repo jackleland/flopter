@@ -10,54 +10,11 @@ Welcome to flopter's documentation!
    :maxdepth: 4
    :caption: Contents:
 
+   introduction
+   core
+   spice
+   magnum
 
-The IVAnalyser Class
-====================
-
-.. automodule:: classes.base
-   :members:
-
-
-Implementations of the IVAnalyser
-=================================
-
-.. automodule:: core.splopter
-   :members:
-
-.. automodule:: core.magopter
-   :members: 
-
-
-Classes for Dealing with IV Data
-================================
-
-.. automodule:: classes.ivdata
-   :members: 
-
-.. automodule:: classes.fitdata
-   :members: 
-
-
-Fitting
-=======
-
-.. automodule:: core.fitters
-   :members: 
-
-
-Integration with SPICE
-======================
-
-.. automodule:: core.normalisation
-   :members:  
-
-.. automodule:: core.homogenisation
-   :members: 
-
-.. automodule:: core.inputparser
-   :members: 
-
-   
 Indices and tables
 ==================
 

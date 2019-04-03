@@ -14,20 +14,19 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../flopter/'))
-#sys.path.append('/home/jleland/Coding/Projects/flopter/')
+sys.path.insert(0, os.path.abspath('..'))
 
 
 # -- Project information -----------------------------------------------------
 
-project = 'flopter'
+project = 'Flopter'
 copyright = '2019, Jack Leland'
 author = 'Jack Leland'
 
 # The short X.Y version
-version = ''
+version = 'v0.1'
 # The full version, including alpha/beta/rc tags
-release = ''
+release = 'v0.1.0'
 
 
 # -- General configuration ---------------------------------------------------
