@@ -10,6 +10,7 @@ Welcome to flopter's documentation!
    :maxdepth: 4
    :caption: Contents:
 
+   introduction
    core
    spice
    magnum
