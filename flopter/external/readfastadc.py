@@ -1,8 +1,9 @@
 # coding: utf-8
 import traceback
-import os, struct
+import struct
 import numpy as np
 import re
+import flopter.core.constants as c
 
 """
     File provided by Alex Poelman for the reading of binary data output from the Magnum fast ADC. Minor alterations 
@@ -41,6 +42,11 @@ def read_header(f, print_fl=False):
             print('Channel', i, 'Offset =', header[i]['offset'])
             print('Channel', i, 'Sensitivity =', header[i]['sensitivity'])
     return header
+
+
+def get_time(f, print_fl=False):
+    header = read_header(f, print_fl=print_fl)
+    return np.linspace(0, (header[c.MAGADC_NUM] / header[c.MAGADC_FREQ]), header[c.MAGADC_NUM])
 
 
 def print_data(ch, d):

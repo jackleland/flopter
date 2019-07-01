@@ -41,6 +41,12 @@ def make_time_range(start_str, duration):
     return client.TimeRange(start_time, end_time)
 
 
+def make_time_range_from_dates(start_str, end_str):
+    start_time = client.datetotime(dt.datetime.strptime(start_str, client.DATE_FORMAT))
+    end_time = client.datetotime(dt.datetime.strptime(end_str, client.DATE_FORMAT))
+    return client.TimeRange(start_time, end_time)
+
+
 def get_data_si(db, search_name, time_range, numpify_fl=True):
     db_var = db.findNode(search_name)[0] # only take the first in list
     if numpify_fl:
@@ -56,6 +62,10 @@ def human_time_str(db_time_stamp):
 
 def human_date_str(db_time_stamp):
     return client.timetostring(int(db_time_stamp) & 0xffffffff00000000).split()[0]
+
+
+def human_datetime_str(db_time_stamp):
+    return client.timetostring(int(db_time_stamp) & 0xffffffff00000000)
 
 
 def human_time_ms_str(db_time_stamp):

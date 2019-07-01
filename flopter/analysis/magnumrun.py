@@ -1,4 +1,4 @@
-from utils import lputils as lp
+from flopter.utils import lputils as lp
 import matplotlib.pyplot as plt
 import numpy as np
 import os
