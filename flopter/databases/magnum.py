@@ -71,7 +71,7 @@ class MagnumDB(object):
     _REDUNDANCY_TIME = 10
     _MAX_DURATION = 30
 
-    def __init__(self, time_range=None, time_stamp=None):
+    def __init__(self, time_range=None, time_stamp=None, print_fl=False):
         self.db = client.connect('127.0.0.1')
         self.raw_data = self.db.root.chDir('_Raw')
         if time_range:
@@ -86,8 +86,9 @@ class MagnumDB(object):
             self.time_range = self.TIME_RANGE_MAIN
             self.time_stamp = self.time_range.startTime
 
-        print('Start Time: ', ut.human_time_str(self.time_stamp))
-        print('End Time: ', ut.human_time_str(self.time_range.endTime))
+        if print_fl:
+            print('Start Time: ', ut.human_time_str(self.time_stamp))
+            print('End Time: ', ut.human_time_str(self.time_range.endTime))
         self.all_plasma_states = self.get_data(PLASMA_STATE, self.time_range)
 
         self.b_plasma_timeranges = {}
