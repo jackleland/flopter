@@ -71,12 +71,20 @@ class FitData2(object):
     def get_fit_params(self):
         return self.fit_params
 
-    def get_param(self, label, errors_fl=True):
+    def get_param(self, label, errors_fl=False):
         index = self.fitter.get_param_index(label)
         if errors_fl:
             return self.fit_params[index]
         else:
             return self.fit_params[index].value
+
+    def get_param_val(self, label):
+        index = self.fitter.get_param_index(label)
+        return self.fit_params[index].value
+
+    def get_param_err(self, label):
+        index = self.fitter.get_param_index(label)
+        return self.fit_params[index].error
 
     def get_fitter(self):
         return self.fitter
@@ -132,13 +140,13 @@ class IVFitData(FitData2):
         super().__init__(raw_voltage, raw_current, fit_current, fit_params, fit_stdevs, fitter, sigma=sigma, chi2=chi2,
                          reduced_chi2=reduced_chi2)
 
-    def get_temp(self, errors_fl=True):
+    def get_temp(self, errors_fl=False):
         return self.get_param(c.ELEC_TEMP, errors_fl)
 
-    def get_isat(self, errors_fl=True):
+    def get_isat(self, errors_fl=False):
         return self.get_param(c.ION_SAT, errors_fl)
 
-    def get_sheath_exp(self, errors_fl=True):
+    def get_sheath_exp(self, errors_fl=False):
         return self.get_param(c.SHEATH_EXP, errors_fl)
 
     def get_floating_pot(self):
