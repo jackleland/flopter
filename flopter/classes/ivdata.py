@@ -165,7 +165,7 @@ class IVData(dict):
         siv_f_data = siv_f.fit_iv_data(iv_data_ss, sigma=iv_data_ss[c.SIGMA])
 
         # Use I_sat value to fit a fixed_value 4-parameter IV fit
-        I_sat_guess = siv_f_data.get_isat().value
+        I_sat_guess = siv_f_data.get_isat()
         if fix_vf_fl:
             fitter.set_fixed_values({c.FLOAT_POT: v_f, c.ION_SAT: I_sat_guess})
         else:
@@ -196,6 +196,88 @@ class IVData(dict):
             plt.show()
 
         return ff_data
+
+    def gunn_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, plot_fl=False):
+        """
+        A version of Jamie Gunn's 4-parameter fit by subtracting the straight
+        line of the ion saturation region from the whole IV curve. This is was
+        adapted from a jupyter notebook made for Magnum data, and generates four
+        plots: averaged IV, straight line overlay, corrected IV, 3-param fit to
+        corrected IV.
+
+        :return: A tuple of (corrected_iv_data, corrected_iv_fit_data)
+
+        """
+        import matplotlib.pyplot as plt
+        import flopter.core.fitters as fts
+
+        iv_data = self
+
+        # define a straight section and trim the iv data to it
+        str_sec = np.where(iv_data['V'] <= sat_region)
+        iv_data_ss = IVData.non_contiguous_trim(iv_data, str_sec)
+
+        # needed to define the area of the straight section on a graph with a vertical line
+        str_sec_end = np.argmax(iv_data['V'][str_sec])
+
+        # fit & plot a straight line to the 'straight section'
+        sl_fitter = fts.StraightLineFitter()
+        fit_data_ss = sl_fitter.fit(iv_data_ss['V'], iv_data_ss['I'], sigma=iv_data_ss['sigma'])
+
+        # Extrapolate the straight line over a wider voltage range for illustrative purposes
+        sl_range = np.linspace(-120, 100, 100)
+        sl_function = fit_data_ss.fit_function(sl_range)
+
+        # Subtract the gradient of the straight section from the whole IV curve.
+        iv_data_corrected = iv_data.copy()
+        iv_data_corrected['I'] = iv_data_corrected['I'] - (fit_data_ss.get_param('m') * iv_data_corrected['V'])
+
+        simple_iv_fitter = fts.SimpleIVFitter()
+        fit_data_corrected = iv_data_corrected.multi_fit(sat_region=sat_region, fitter=simple_iv_fitter, plot_fl=plot_fl)
+
+        if plot_fl:
+            plt.figure()
+            plt.errorbar(iv_data['V'], iv_data['I'], yerr=iv_data['sigma'], label='Full IV', color='darkgrey',
+                         ecolor='lightgray')
+            plt.legend()
+            plt.xlabel(r'$V_p$ / V')
+            plt.ylabel(r'$I$ / A')
+            plt.ylim(-0.5, 1.3)
+            plt.xlim(-102, 5)
+
+            plt.figure()
+            plt.errorbar(iv_data['V'], iv_data['I'], yerr=iv_data['sigma'], label='Full IV', color='darkgrey',
+                         ecolor='lightgray')
+            plt.plot(sl_range, sl_function, label='SE Line', color='blue', linewidth=0.5, zorder=10)
+            plt.legend()
+            plt.xlabel(r'$V_p$ / V')
+            plt.ylabel(r'$I$ / A')
+            plt.ylim(-0.5, 1.3)
+            plt.xlim(-102, 5)
+
+            plt.figure()
+            plt.plot(sl_range, sl_function, label='SE Line', color='blue', linewidth=0.5, zorder=10)
+            plt.errorbar(iv_data_corrected['V'], iv_data_corrected['I'], label='Corrected IV',
+                         yerr=iv_data_corrected[c.SIGMA], color='darkgrey', ecolor='lightgray')
+            plt.legend()
+            plt.xlabel(r'$V_p$ / V')
+            plt.ylabel(r'$I$ / A')
+            plt.ylim(-0.5, 1.3)
+            plt.xlim(-102, 5)
+
+            plt.figure()
+            plt.plot(sl_range, sl_function, label='SE Line', color='blue', linewidth=0.5)
+            plt.errorbar(iv_data_corrected['V'], iv_data_corrected['I'], label='Corrected IV',
+                         yerr=iv_data_corrected[c.SIGMA], color='darkgrey', ecolor='lightgray')
+            plt.plot(*fit_data_corrected.get_fit_plottables(), label='3 Param-Fit', zorder=10, color='r')
+            plt.legend()
+            plt.xlabel(r'$V_p$ / V')
+            plt.ylabel(r'$I$ / A')
+            plt.ylim(-0.5, 1.3)
+            plt.xlim(-102, 5)
+
+            plt.show()
+        return iv_data_corrected, fit_data_corrected
 
     @staticmethod
     def fractional_trim(iv_data, trim_beg=0.0, trim_end=1.0):
