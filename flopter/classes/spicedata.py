@@ -90,18 +90,19 @@ HEADER = '__header__'
 VERSION = '__version__'
 GLOBALS = '__globals__'
 
-VERSION_SPICE = 'version' # used by SPICE
+VERSION_SPICE = 'version'  # used by SPICE
 
 
 # Lists of labels specific to each version, those not in these lists are assumed to be diagnostic outputs.
+_MATLAB_LABELS = (HEADER, VERSION, GLOBALS, VERSION_SPICE)
 _GENERAL_LABELS = (NZ, NZMAX, NY, COUNT, HPOS, DELTAH, NPC, DT, DZ, NPROC, Q, M, TEMP, ZG, YG, RHO, ESCZ, ESCY,
                    SURFACEMATRIX, POT, POTVAC, SLICEPROC, EDGECHARGE, T, SNUMBER, TOTALENERGY, ESCT, DPHIQN, PCHI, BX,
                    BY, BZ, NPARTPROC, NODIAGREG, DIAGHISTORIES, FVARRAYS, FVBIN, FVPERARRAYCOUNT, FVLIMITS, HISTLIMITS,
                    TIMEHISTORY_UPPER, TIMEHISTORY_LOWER, FLAGM, EQUIPOTM, FLAG, ITERTIME_UPPER, ITERTIME_LOWER, INJRATE,
                    OBJECTS, EDGES, DIAGM, OBJECTSENUM, OBJECTSCURRENTI, OBJECTSCURRENTE, OBJECTSCURRENTFLUXI,
                    OBJECTSCURRENTFLUXE, RHO1, SOLW01, SOLNS01, RHO2, SOLW02, SOLNS02, KSI, TAU, MU, ALPHAYZ, ALPHAXZ,
-                   NC, NA, NP, IREL, FLOATCONSTANT, HEADER, VERSION, GLOBALS, VERSION_SPICE)
-_SPICE2_LABELS = (MKSN0, MKSB, MKSTE, MKSB, MKSMAINIONM, MKSMAINIONQ, MKSPAR1, MKSPAR2, MKSPAR3)
+                   NC, NA, NP, IREL, FLOATCONSTANT)
+_SPICE2_LABELS = (MKSN0, MKSTE, MKSB, MKSMAINIONM, MKSMAINIONQ, MKSPAR1, MKSPAR2, MKSPAR3)
 _SPICE3_LABELS = ()
 
 _GENERAL_CONV_TYPES = {
@@ -128,13 +129,14 @@ DIAGNOSTIC_CONV_TYPES = {
     'Pot': c.CONV_POTENTIAL,
     'Hist': c.CONV_DIST_FUNCTION
 }
+DEFAULT_REDUCED_DATASET = [label.lower() for label in _GENERAL_CONV_TYPES.keys()]
 
 
 class MatlabData(object):
-    def __init__(self, file):
-        self.version = file[VERSION]
-        self.header = file[HEADER]
-        self.globals = file[GLOBALS]
+    def __init__(self, tfile_dict):
+        self.version = tfile_dict[VERSION]
+        self.header = tfile_dict[HEADER]
+        self.globals = tfile_dict[GLOBALS]
 
 
 class SpiceTData(object):
@@ -142,6 +144,8 @@ class SpiceTData(object):
     _ALL_CONV_TYPES = _GENERAL_CONV_TYPES
 
     def __init__(self, t_filename, deallocate=False, converter=None, convert=False):
+        # TODO: (2019-04-11) This would be better implemented by storing everything in a dictionary, leaving all the
+        #  member variables None, and overriding the __get_attribute__() method to read from the dictionary instead.
         # Read matlab filename into dictionary and then distribute contents into named variables
         self.t_filename = t_filename
         self.converter = converter
@@ -241,6 +245,32 @@ class SpiceTData(object):
     def deallocate(self):
         # Deallocate the t_dict dictionary if deemed unnecessary to keep the data in dict form.
         del self.t_dict
+        import gc
+        gc.collect()
+
+    def reduce(self, reduced_dataset):
+        """
+        Member function which allows for a reduced dataset to be stored in the
+        object to reduce the memory costs running multiple instances of splopter
+        at once for larger simulations.
+
+        Works by going through a fully populated SpiceTData object and removing
+        all the attributes which are not in the reduced_dataset list.
+
+        :param reduced_dataset:     A list of strings corresponding to the
+                                    member variable names that must be kept.
+
+        """
+        if not set(reduced_dataset).issubset({label.lower() for label in self._ALL_LABELS}):
+            raise ValueError('The reduced_dataset provided is not a list of labels which can be removed to reduce the '
+                             'size of the TData object. List must be a subet of _ALL_LABELS when converted to '
+                             'lowercase.')
+        print(type(self))
+        print(dir(self))
+        for label in self._ALL_LABELS:
+            if label.lower() not in reduced_dataset:
+                delattr(self, label.lower())
+
         import gc
         gc.collect()
 
