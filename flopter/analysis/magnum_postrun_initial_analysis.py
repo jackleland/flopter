@@ -23,7 +23,7 @@ SWEEP_RANGE = (0, 750)
 def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=None, probe_designations=PROBE_DESIGNATIONS,
                          shunt_resistance=10, cabling_resistance=2.0, sweep_range=SWEEP_RANGE, downsampling_factor=1):
 
-    mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/external/magnum/'
+    mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/Magnum/adc_files/'
     print('"{}" \t\t "{}"'.format(folder, adc_file))
 
     dsr = downsampling_factor
@@ -162,7 +162,7 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
     gc.collect()
 
 
-os.chdir('/home/leland/Data/external/magnum/')
+os.chdir('/home/jleland/Data/Magnum/adc_files/')
 all_dataset = xr.open_dataset('all_meta_data.nc').max('ts_radial_pos')
 shot_numbers = all_dataset.where(np.isfinite(all_dataset['adc_index']), drop=True)['shot_number'].values
 shot_dataset = all_dataset.sel(shot_number=shot_numbers)
@@ -178,28 +178,49 @@ DESIRED_DATARATE = 10000
 
 
 def get_sweep_range(shot_end_time, adc_end_time, adc_freq):
-    return 1, np.float(np.timedelta64(shot_end_time - adc_end_time, 's')) * adc_freq - 1
+    return 1, int((shot_end_time - adc_end_time) / np.timedelta64(1, 's') * adc_freq / 100)
 
 
 def aia_mapping_wrapper(shot_number):
-    shot_dataarray = shot_dataset.sel(shot_number=shot_number)
-    folder = shot_dataarray['adc_folder'].values
-    adc_file = shot_dataarray['adc_filename'].values
-    output_tag = str(int(shot_dataarray['adc_timestamp'].values))
-    ts_temp = shot_dataarray['ts_temp_max'].values
-    ts_dens = shot_dataarray['ts_dens_max'].values
-    probe_designations = (shot_dataarray['adc_4_probe'].values, shot_dataarray['adc_5_probe'].values)
-    shunt_resistance = shot_dataarray['adc_4_shunt_resistance'].values
-    downsampling_factor = shot_dataarray['adc_freqs'] / DESIRED_DATARATE
-    cabling_resistance = (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'])] + 1.2
-                          + PROBE_RESISTANCES[probe_designations[0]])
-    sweep_range = get_sweep_range(shot_dataarray['shot_end_time'].values, shot_dataarray['adc_end_time'].values,
-                                  shot_dataarray['adc_freqs'].values)
+    print(f'\n Analysing shot {shot_number}...')
+    
+    try:
+        # print('Try statement')
+        shot_dataarray = shot_dataset.sel(shot_number=shot_number)
+        
+        folder = str(shot_dataarray['adc_folder'].values)
+        # print(folder)
 
-    averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=ts_temp, ts_dens=ts_dens,
-                         probe_designations=probe_designations, shunt_resistance=shunt_resistance,
-                         cabling_resistance=cabling_resistance, sweep_range=sweep_range,
-                         downsampling_factor=downsampling_factor)
+        adc_file = str(shot_dataarray['adc_filename'].values)
+        output_tag = '{}_{}'.format(shot_number, int(shot_dataarray['adc_timestamp'].values))
+        # print(adc_file, output_tag)
+
+        ts_temp = shot_dataarray['ts_temp_max'].values
+        ts_dens = shot_dataarray['ts_dens_max'].values
+        # print(ts_temp, ts_dens)
+
+        probe_designations = (str(shot_dataarray['adc_4_probe'].values), str(shot_dataarray['adc_5_probe'].values))
+        shunt_resistance = shot_dataarray['adc_4_shunt_resistance'].values
+        # print(probe_designations, shunt_resistance)
+
+        downsampling_factor = int(shot_dataarray['adc_freqs'].values / DESIRED_DATARATE)
+        cabling_resistance = (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'].values) - 1] + 1.2
+                              + PROBE_RESISTANCES[probe_designations[0]])
+        # print(downsampling_factor, cabling_resistance)
+
+        sweep_range = get_sweep_range(shot_dataarray['shot_end_time'].values, shot_dataarray['adc_end_time'].values,
+                                      shot_dataarray['adc_freqs'].values / downsampling_factor)
+        # print(sweep_range)
+
+        print(f'Attempting analysis on shot {shot_number}')
+    
+        averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=ts_temp, ts_dens=ts_dens,
+                             probe_designations=probe_designations, shunt_resistance=shunt_resistance,
+                             cabling_resistance=cabling_resistance, sweep_range=sweep_range,
+                             downsampling_factor=downsampling_factor)
+    except:
+        traceback.print_exc()
+    print(f'\n ...Finished shot {shot_number}')
 
 
 def multi_file_analysis(shots):
@@ -212,3 +233,4 @@ def multi_file_analysis(shots):
 
 if __name__ == '__main__':
     multi_file_analysis(shot_numbers)
+#    aia_mapping_wrapper(shot_numbers[0])
