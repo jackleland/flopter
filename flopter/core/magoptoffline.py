@@ -107,35 +107,36 @@ class Magoptoffline(IVAnalyser):
             self.m_data.data[ch] = data[downsample]
         self.m_data.time = self.m_data.time[downsample] + self._ADC_TIMER_OFFSET
 
-        self.m_data.data[self._VOLTAGE_CHANNEL] = self.m_data.data[self._VOLTAGE_CHANNEL] * 100
+        # self.m_data.data[self._VOLTAGE_CHANNEL] = self.m_data.data[self._VOLTAGE_CHANNEL] * 100.
 
         start = 0
         end = len(self.m_data.time)
 
-        # Read in raw values from adc file - these are the time and the voltages measured on each channel
-        self.raw_time = np.array(self.m_data.time[start:end])
-        self.raw_voltage = np.array(self.m_data.data[self._VOLTAGE_CHANNEL][start:end])
-        for i, probe_index in enumerate([self._PROBE_CHANNEL_3, self._PROBE_CHANNEL_4]):
-            self.raw_current.append(np.array(self.m_data.data[probe_index][start:end]))
-
         # Account for offset in ADC channels at lower sensitivity
         if self.shunt_resistance > 1.1:
             adc_voltage_offset = 0.12
+            adc_voltage_multiplier = 100
             adc_current_offset = [0.06, 0.05]
         else:
             adc_voltage_offset = 0.0
+            adc_voltage_multiplier = 10
             adc_current_offset = [0.0, 0.0]
+
+        # Read in raw values from adc file - these are the time and the voltages measured on each channel of the ADC
+        # These must be offset and scaled to the appropriate values
+        self.raw_time = np.array(self.m_data.time[start:end])
+        self.raw_voltage = ((np.array(self.m_data.data[self._VOLTAGE_CHANNEL][start:end]) - adc_voltage_offset)
+                            * adc_voltage_multiplier)
+        for i, probe_index in enumerate([self._PROBE_CHANNEL_3, self._PROBE_CHANNEL_4]):
+            self.raw_current.append(np.array(self.m_data.data[probe_index][start:end]) - adc_current_offset[i])
 
         # Convert the adc voltages into the measured values
         for i in range(self.coaxes):
             # Current is ohmicly calculated from the voltage across a shunt resistor
-            self.current.append((self.raw_current[i] - adc_current_offset[i]) / self.shunt_resistance)
+            self.current.append((self.raw_current[i]) / self.shunt_resistance)
 
             # Separate volages are applied to each probe depending on the current they draw
-            self.voltage.append((self.raw_voltage - adc_voltage_offset) - self.raw_current[i]
-                                - (self.cabling_resistance * self.current[i]))
-
-        # self.current = np.array(self.current)
+            self.voltage.append(self.raw_voltage - self.current[i] - (self.cabling_resistance * self.current[i]))
 
         self.filter(crit_ampl=crit_ampl, crit_freq=crit_freq, plot_fl=plot_fl)
 
