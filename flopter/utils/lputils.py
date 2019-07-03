@@ -12,6 +12,11 @@ class LangmuirProbe(ABC):
     def get_analytical_iv(self, voltage, v_f, alpha, temp, dens):
         pass
 
+    def get_density(self, sat_current, temperature, alpha, gamma_i=1, mass=1):
+        c_s = sound_speed(temperature, gamma_i=gamma_i, mass=mass)
+        A_coll = self.get_collection_area(alpha)
+        return electron_density(sat_current, c_s, A_coll)
+
 
 class AngledTipProbe(LangmuirProbe):
     def __init__(self, a, b, L, g, d_perp, theta_f, theta_p):
