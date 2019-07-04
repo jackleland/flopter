@@ -113,7 +113,7 @@ class Magoptoffline(IVAnalyser):
         end = len(self.m_data.time)
 
         # Account for offset in ADC channels at lower sensitivity
-        if self.shunt_resistance > 1.1:
+        if self.shunt_resistance < 1.1:
             adc_voltage_offset = 0.12
             adc_voltage_multiplier = 100
             adc_current_offset = [0.06, 0.05]
@@ -184,6 +184,7 @@ class Magoptoffline(IVAnalyser):
                 sweep_time = self.raw_time[sweep_start:sweep_stop]
 
                 if filter_arcs_fl:
+                    # TODO: Fix this
                     sweep_fit = sweep_fitter.fit(sweep_time, sweep_voltage)
                     self.max_voltage.append((np.max(np.abs(sweep_voltage - sweep_fit.fit_y))))
                     if i == 0 and plot_fl:
