@@ -25,7 +25,7 @@ class Splopter(IVAnalyser):
     _file_suffix = '.mat'
     _dump_suffix = '.2d.'
 
-    def __init__(self, data_mount_dir, group_name, folder_name, run_name=None, prepare=False):
+    def __init__(self, data_mount_dir, group_name, folder_name, run_name=None, prepare=False, reduce_fl=False):
         ##################################
         #             Extract            #
         ##################################
@@ -72,6 +72,7 @@ class Splopter(IVAnalyser):
         # input_filename = data_dir + 'prebiasprobe_ng_hg_sbm.inp'
         self.input_filename = self.data_dir + 'input.inp'
 
+        # This appears to be in mostly for backwards compatibility with older SPICE runs
         if not run_name:
             self.tfile_path, self.afile_path = self.get_ta_filenames(self.data_dir)
         else:
@@ -83,7 +84,9 @@ class Splopter(IVAnalyser):
         if self.tfile_path:
             if not run_name:
                 self.tfile_path = self.data_dir + self.tfile_path
-            self.tdata = sd.Spice2TData(self.tfile_path)
+            self.tdata = sd.Spice2TData(self.tfile_path, deallocate=reduce_fl)
+            if reduce_fl:
+                self.tdata.reduce(sd.DEFAULT_REDUCED_DATASET)
         else:
             raise ValueError('No t-file given')
 
@@ -446,7 +449,7 @@ class Splopter(IVAnalyser):
 
         for var in plot_list:
             if var in _PLOTTABLE.keys():
-                plt.plot(self.iv_data[c.TIME][:-1], self.raw_data[var][:-1], label=_PLOTTABLE[var])
+                plt.plot(self.raw_data[c.TIME][:-1], self.raw_data[var][:-1], label=_PLOTTABLE[var])
         plt.legend()
         if show_fl:
             plt.show()
