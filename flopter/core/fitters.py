@@ -219,39 +219,6 @@ class FullIVFitter(IVFitter):
         return self._param_labels[c.SHEATH_EXP]
 
 
-# class FullIVFixedISatFitter(IVFitter):
-#     """
-#     IV Fitter implementation utilising the full, 4 parameter IV Curve fitting method. V_f and I_sat are kept static.
-#     """
-#     def __init__(self, saturation_current):
-#         super().__init__()
-#         self._param_labels = {
-#             c.SHEATH_EXP: 0,
-#             c.ELEC_TEMP: 1,
-#             c.FLOAT_POT
-#         }
-#         self.I_sat = saturation_current
-#         self.default_values = (0.0204, 1)
-#         self.default_bounds = (
-#             (     0,       0),
-#             (np.inf,  np.inf)
-#         )
-#         self.name = '4 param fixed I_sat'
-#
-#     def fit_function(self, v, *parameters):
-#         I_0 = self.I_sat
-#         a = parameters[self._param_labels[c.SHEATH_EXP]]
-#         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
-#         V = (self.v_f - v) / T_e
-#         return I_0 * (1 - np.exp(-V) + (a * np.float_power(np.absolute(V), [0.75])))
-#
-#     def get_temp_index(self):
-#         return self._param_labels[c.ELEC_TEMP]
-#
-#     def get_a_index(self):
-#         return self._param_labels[c.SHEATH_EXP]
-
-
 class SimpleIVFitter(IVFitter):
     """
     Fitter object for a 3-parameter IV characteristic fit
@@ -336,6 +303,149 @@ class IonCurrentSEFitter(IVFitter):
 
     def get_a_index(self):
         return self._param_labels[c.SHEATH_EXP]
+
+
+# --- Two Temperature IV Fitters --- #
+
+class TwoTempIVFitter(IVFitter):
+    """
+    IV Fitter implementation utilising the full, 4 parameter IV Curve fitting
+    method with 2 temperatures
+
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.ION_SAT: 0,
+            c.SHEATH_EXP: 1,
+            c.ELEC_TEMP: 2,
+            c.FLOAT_POT: 3,
+            c.TTIV_SCALER: 4,
+            c.TTIV_TEMP: 5,
+            c.TTIV_VFLOAT: 6
+        }
+        self.default_values = (30.0, 0.0204, 1, -1, 0.1, 8, -1)
+        self.default_bounds = (
+            (-np.inf,      0,      0, -np.inf,      0,       0, -np.inf),
+            ( np.inf, np.inf, np.inf,  np.inf, np.inf,  np.inf,  np.inf)
+        )
+        self.name = '2-Temp 4-Param Fit'
+
+    def fit_function(self, v, *parameters):
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        a = parameters[self._param_labels[c.SHEATH_EXP]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        alpha = parameters[self._param_labels[c.TTIV_SCALER]]
+        T_e2 = parameters[self._param_labels[c.TTIV_TEMP]]
+        v_f2 = parameters[self._param_labels[c.TTIV_VFLOAT]]
+        V1 = (v_f - v) / T_e
+        V2 = (v_f2 - v) / T_e2
+        return I_0 * (1 - np.exp(-V2) - (alpha * np.exp(-V1)) + (a * np.float_power(np.absolute(V1 + V2), [0.75])))
+
+
+class TwoTempSimpIVFitter(IVFitter):
+    """
+    IV Fitter implementation utilising the 3-parameter IV Curve fitting method
+    with 2 temperatures
+
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.ION_SAT: 0,
+            c.ELEC_TEMP: 1,
+            c.FLOAT_POT: 2,
+            c.TTIV_SCALER: 3,
+            c.TTIV_TEMP: 4,
+            c.TTIV_VFLOAT: 5
+        }
+        self.default_values = (30.0, 1, -1, 0.1, 8, -1)
+        self.default_bounds = (
+            (-np.inf,      0, -np.inf,      0,       0, -np.inf),
+            ( np.inf, np.inf,  np.inf, np.inf,  np.inf,  np.inf)
+        )
+        self.name = '2-Temp 3-Param Fit'
+
+    def fit_function(self, v, *parameters):
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        alpha = parameters[self._param_labels[c.TTIV_SCALER]]
+        T_e2 = parameters[self._param_labels[c.TTIV_TEMP]]
+        v_f2 = parameters[self._param_labels[c.TTIV_VFLOAT]]
+        V1 = (v_f - v) / T_e
+        V2 = (v_f2 - v) / T_e2
+        return I_0 * (1 - np.exp(-V2) - (alpha * np.exp(-V1)))
+
+
+class TwoTempImpurityIVFitter(IVFitter):
+    """
+    IV Fitter implementation utilising two independent 3-parameter IV curves to
+    estimate the response of a simple impurity species
+
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.ION_SAT: 0,
+            c.ELEC_TEMP: 1,
+            c.FLOAT_POT: 2,
+            c.TTIV_ISAT: 3,
+            c.TTIV_TEMP: 4,
+            c.TTIV_VFLOAT: 5
+        }
+        self.default_values = (30.0, 1, -1, 15, 1.5, -1)
+        self.default_bounds = (
+            (0.1, 0, -np.inf, 0.1, 0, -np.inf),
+            (np.inf, np.inf, 10, np.inf, np.inf, 10)
+        )
+        self.name = '2 Independent 3-Param Fits'
+
+    def fit_function(self, v, *parameters):
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        I_02 = parameters[self._param_labels[c.TTIV_ISAT]]
+        T_e2 = parameters[self._param_labels[c.TTIV_TEMP]]
+        v_f2 = parameters[self._param_labels[c.TTIV_VFLOAT]]
+        V1 = (v_f - v) / T_e
+        V2 = (v_f2 - v) / T_e2
+        return (I_0 * (1 - np.exp(-V1))) + (I_02 * (1 - np.exp(-V2)))
+
+
+class SEEIVFitter(IVFitter):
+    """
+    IV Fitter implementation utilising the 3=parameter IV Curve fitting method
+    with an additional term for a Secondary Electron Emission Coefficient
+
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.ION_SAT: 0,
+            c.ELEC_TEMP: 1,
+            c.FLOAT_POT: 2,
+            c.SSE_PARAM: 3
+        }
+        self.default_values = (30.0, 1, -1, 0)
+        self.default_bounds = (
+            (0.1, 0, -np.inf, 0.0,),
+            (np.inf, np.inf, 10, 1.0,)
+        )
+        self.name = 'SEE 3-Param Fit'
+
+    def fit_function(self, v, *parameters):
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        delta = parameters[self._param_labels[c.SSE_PARAM]]
+        V1 = (v_f - v) / T_e
+        return I_0 * (1 - ((1 - delta) * np.exp(-V1)))
 
 
 # --- Maxwellian Fitters --- #

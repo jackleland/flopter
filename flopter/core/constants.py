@@ -24,6 +24,13 @@ OFFSET_X = 'x_0'        # Periodic function x-offset
 ST_DEV = 'sigma'        # Standard deviation in a distribution function
 GRADIENT = 'm'          # Linear function gradient
 EXP_SCALER = 'b'        # Exponential function x-scaler
+TTIV_SCALER = 'alpha'   # Two-temperature IV scaler
+TTIV_TEMP = 'T_e2'      # Two-temperature IV electron temperature label
+TTIV_ISAT = 'I_sat2'      # Two-temperature IV saturation current label
+TTIV_DENS = 'n_e2'      # Two-temperature IV electron density label
+TTIV_VFLOAT = 'V_f2'    # Two-temperature IV floating potential label
+TTIV_SHEX = 'a2'        # Two-temperature IV sheath exapnsion parameter label
+SSE_PARAM = 'delta'     # Secondary Electron Emission Parameter
 
 # FitData Dictionary Labels
 RAW_X = 'raw_x'
