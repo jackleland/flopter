@@ -365,7 +365,7 @@ class InputParser(ConfigParser):
         initial_v = raw_voltage[0]
         if not self._is_within_bounds(initial_v, c.SWEEP_LOWER):
             corr_sweep_length = sweep_length
-            while raw_voltage[corr_sweep_length] == initial_v and corr_sweep_length < len(raw_voltage):
+            while raw_voltage[corr_sweep_length] == initial_v and corr_sweep_length < len(raw_voltage) - 1:
                 corr_sweep_length += 1
             sweep_length = corr_sweep_length
         return sweep_length
