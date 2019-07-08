@@ -24,8 +24,8 @@ SWEEP_RANGE = (0, 750)
 def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=None, probe_designations=PROBE_DESIGNATIONS,
                          shunt_resistance=10, cabling_resistance=2.0, sweep_range=SWEEP_RANGE, downsampling_factor=1):
 
-    mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/external/magnum/'
-    # mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/Magnum/adc_files/'
+    # mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/external/magnum/'
+    mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/Magnum/adc_files/'
     print('"{}" \t\t "{}"'.format(folder, adc_file))
 
     dsr = downsampling_factor
@@ -110,7 +110,7 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
     ds_full = xr.concat(ds_probes, dim=probe)
 
     cwd = os.getcwd()
-    os.chdir(mg.Magoptoffline.get_data_path() + folder)
+    os.chdir(mg.Magoptoffline.get_data_path() + 'analysed_1/')
     ds_full.to_netcdf(f'{output_tag}.nc')
 
     # Select the small probe
@@ -173,8 +173,8 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
     gc.collect()
 
 
-os.chdir('/home/jleland/Data/external/magnum/')
-# os.chdir('/home/jleland/Data/Magnum/adc_files/')
+# os.chdir('/home/jleland/Data/external/magnum/')
+os.chdir('/home/jleland/Data/Magnum/adc_files/')
 all_dataset = xr.open_dataset('all_meta_data.nc').max('ts_radial_pos')
 shot_numbers = all_dataset.where(np.isfinite(all_dataset['adc_index']), drop=True)['shot_number'].values
 shot_dataset = all_dataset.sel(shot_number=shot_numbers)
@@ -219,7 +219,7 @@ def aia_mapping_wrapper(shot_number):
         cabling_resistance = (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'].values) - 1] + 1.2
                               + PROBE_RESISTANCES[probe_designations[0]])
         sweep_range = get_sweep_range(shot_dataarray['shot_end_time'].values, shot_dataarray['adc_end_time'].values,
-                                      shot_dataarray['acquisition_time'].values,
+                                      shot_dataarray['acquisition_length'].values,
                                       shot_dataarray['adc_freqs'].values / downsampling_factor)
 
         print(f'Attempting analysis on shot {shot_number}')
