@@ -7,3 +7,5 @@ data/
 docs/_build/*
 docs/_static/*
 docs/_templates/*
+examples/submission-log/SpiceSubmissionLog-dbf98e37fb9d.json
+examples/submission-log/client_secret.json
