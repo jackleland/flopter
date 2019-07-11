@@ -5,6 +5,7 @@ import numpy as np
 TIMES = 0
 DATA = 1
 
+# TODO: (2019-07-11) There's no reason to have these here as well as in magnum_db, choose one and refactor.
 TARGET_POS = 'TargetLinearCurPos'
 TARGET_ROT = 'TargetRotationCurPos'
 TARGET_TILT = 'TargetTiltingCurPos'
@@ -12,6 +13,19 @@ PLASMA_STATE = 'PlasmaPlcState'
 SOURCE_PUMP_SPEED = 'Rp1SoChSpeed'
 HEATING_PUMP_SPEED = 'Rp3HeChSpeed'
 TARGET_PUMP_SPEED = 'Rp5TaChSpeed'
+PUFFED_D2 = 'TargetFlowD2'
+PUFFED_H2 = 'TargetFlowH2'
+PUFFED_He = 'TargetFlowHe'
+SOURCE_D2 = 'SourceFlowD2'
+SOURCE_H2 = 'SourceFlowH2'
+SOURCE_He = 'SourceFlowHe'
+SOURCE_CURRENT = 'SourceCurrentPs'
+SOURCE_VOLTAGE = 'SourceVoltagePs'
+SOURCE_POS = 'SourceLinCurPos'
+TARGET_VOLTAGE = 'TargetVoltage'
+TARGET_VOLTAGE_PS = 'TargetVoltagePs'
+B_FIELD = 'MagnetBFieldActual'
+
 SLC_STATES = {
     4: 'At Standby',
     5: 'Ramp to Pulse A',
