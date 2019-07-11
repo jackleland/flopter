@@ -6,8 +6,8 @@ import scipy.signal as sig
 from scipy.interpolate import interp1d
 import collections as coll
 
-from flopter.classes.ivdata import IVData
-from flopter.classes.fitdata import FitData2, IVFitData
+from flopter.core.ivdata import IVData
+from flopter.core.fitdata import FitData2, IVFitData
 from flopter.core import constants as c
 from flopter.core.normalisation import BOLTZMANN, ELECTRON_MASS, ELEM_CHARGE, P_E_MASS_RATIO
 from warnings import warn

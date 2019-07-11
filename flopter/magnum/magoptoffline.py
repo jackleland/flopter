@@ -1,21 +1,22 @@
-from flopter.classes.base import IVAnalyser
+from flopter.core.ivanalyser import IVAnalyser
 import numpy as np
 import pathlib as pth
 import matplotlib.pyplot as plt
-import flopter.classes.magnumadcdata as md
-import flopter.classes.ivdata as iv
+import flopter.magnum.magnumadcdata as md
+import flopter.core.ivdata as iv
 import pandas as pd
 import scipy.signal as sig
-import flopter.databases.magnum as mag
-import flopter.external.readfastadc as adc
-from codac.datastore import client
-import Ice
-from flopter.core import filtering as filt, constants as c, normalisation as nrm, fitters as f
+# import flopter.databases.magnum as mag
+import flopter.magnum.readfastadc as adc
+# from flopter.core.magopter import Magopter
+# from codac.datastore import client
+# import Ice
+from flopter.core import filtering as filt, constants as c, fitters as f
 import glob
 import os
 
 
-class Magopter(IVAnalyser):
+class Magoptoffline(IVAnalyser):
     # Default values
     _FOLDER_STRUCTURE = '/Data/Magnum/'
     _TAR_VOLTAGE_CHANNEL = 0
@@ -36,7 +37,7 @@ class Magopter(IVAnalyser):
     _FIT_FILE_GLOBSTR = '*fit*.csv'
 
     def __init__(self, directory, filename, ts_filename=None, coaxes=2, combine_sweeps_fl=True, shunt_resistor=None,
-                 cabling_resistance=None, offline_fl=False):
+                 cabling_resistance=None):
         super().__init__()
         # Check for leading/trailing forward slashes?
         self.directory = directory
@@ -82,39 +83,12 @@ class Magopter(IVAnalyser):
         self.ts_dens = None
         self.ts_dens_d = None
         self.ts_coords = None
-        try:
-            self.offline = False
-            self.magnum_db = mag.MagnumDB(time_stamp=self.timestamp)
-            beam_down = self.magnum_db.get_data(mag.BEAM_DUMP_DOWN)
-            self.beam_down_timestamp = [beam_down[mag.TIMES][i] for i in range(len(beam_down[mag.TIMES]))
-                                        if beam_down[mag.DATA][i]][0]
-            print('Beam Down Timestamp: ', self.beam_down_timestamp, client.timetoposix(self.beam_down_timestamp))
-            print('Regular Timestamp: ', self.timestamp, client.timetoposix(self.timestamp))
-            self.magnum_data = self.magnum_db.get_data_dict(ref_time=self.timestamp)
-            if ts_filename:
-                self.ts_timestamp = int(adc.get_magnumdb_timestamp(ts_filename))
-                ts_time_range = self.magnum_db.get_approx_time_range(filename=self.ts_file)
-                ts_data = self.magnum_db.get_ts_data(time_range=ts_time_range, ref_time=self.ts_timestamp)
-                self.ts_temp = ts_data[mag.TS_TEMP_PROF]
-                self.ts_temp_d = ts_data[mag.TS_TEMP_PROF_D]
-                self.ts_dens = ts_data[mag.TS_DENS_PROF]
-                self.ts_dens_d = ts_data[mag.TS_DENS_PROF_D]
-                self.ts_coords = ts_data[mag.TS_RAD_COORDS]
 
-            elif set(mag.TS_VARS).issubset(self.magnum_data):
-                self.ts_temp = self.magnum_data[mag.TS_TEMP_PROF]
-                self.ts_temp_d = self.magnum_data[mag.TS_TEMP_PROF_D]
-                self.ts_dens = self.magnum_data[mag.TS_DENS_PROF]
-                self.ts_dens_d = self.magnum_data[mag.TS_DENS_PROF_D]
-                self.ts_coords = self.magnum_data[mag.TS_RAD_COORDS]
-
-        except Ice.LocalException as e:
-            print(str(e))
-            print('Database could not be connected to, operating in offline mode.')
-            self.offline = True
-            self.beam_down_timestamp = None
-            self.magnum_db = None
-            self.magnum_data = None
+        print('Running an offline magopter object, operating in offline mode.')
+        self.offline = True
+        self.beam_down_timestamp = None
+        self.magnum_db = None
+        self.magnum_data = None
 
     def prepare(self, down_sampling_rate=5, plot_fl=False, filter_arcs_fl=False, roi_b_plasma=False, crit_freq=640,
                 crit_ampl=1.1e-3):
@@ -133,31 +107,36 @@ class Magopter(IVAnalyser):
             self.m_data.data[ch] = data[downsample]
         self.m_data.time = self.m_data.time[downsample] + self._ADC_TIMER_OFFSET
 
-        self.m_data.data[self._VOLTAGE_CHANNEL] = self.m_data.data[self._VOLTAGE_CHANNEL] * 100
+        # self.m_data.data[self._VOLTAGE_CHANNEL] = self.m_data.data[self._VOLTAGE_CHANNEL] * 100.
 
-        # Find region of interest
-        if roi_b_plasma and not self.offline and np.shape(self.magnum_data[mag.PLASMA_STATE])[1] == 2:
-            start = np.abs(self.m_data.time - self.magnum_data[mag.PLASMA_STATE][0][0]).argmin()
-            end = np.abs(self.m_data.time - self.magnum_data[mag.PLASMA_STATE][0][1]).argmin()
+        start = 0
+        end = len(self.m_data.time)
+
+        # Account for offset in ADC channels at lower sensitivity
+        if self.shunt_resistance < 1.1:
+            adc_voltage_offset = 0.12
+            adc_voltage_multiplier = 100
+            adc_current_offset = [0.06, 0.05]
         else:
-            start = 0
-            end = len(self.m_data.time)
+            adc_voltage_offset = 0.0
+            adc_voltage_multiplier = 10
+            adc_current_offset = [0.0, 0.0]
 
-        # Read in raw values from adc file - these are the time and the voltages measured on each channel
+        # Read in raw values from adc file - these are the time and the voltages measured on each channel of the ADC
+        # These must be offset and scaled to the appropriate values
         self.raw_time = np.array(self.m_data.time[start:end])
-        self.raw_voltage = np.array(self.m_data.data[self._VOLTAGE_CHANNEL][start:end])
+        self.raw_voltage = ((np.array(self.m_data.data[self._VOLTAGE_CHANNEL][start:end]) - adc_voltage_offset)
+                            * adc_voltage_multiplier)
         for i, probe_index in enumerate([self._PROBE_CHANNEL_3, self._PROBE_CHANNEL_4]):
-            self.raw_current.append(np.array(self.m_data.data[probe_index][start:end]))
+            self.raw_current.append(np.array(self.m_data.data[probe_index][start:end]) - adc_current_offset[i])
 
         # Convert the adc voltages into the measured values
         for i in range(self.coaxes):
             # Current is ohmicly calculated from the voltage across a shunt resistor
-            self.current.append(self.raw_current[i] / self.shunt_resistance)
+            self.current.append((self.raw_current[i]) / self.shunt_resistance)
 
             # Separate volages are applied to each probe depending on the current they draw
-            self.voltage.append(self.raw_voltage - self.raw_current[i] - (self.cabling_resistance * self.current[i]))
-
-        # self.current = np.array(self.current)
+            self.voltage.append(self.raw_voltage - self.current[i] - (self.cabling_resistance * self.current[i]))
 
         self.filter(crit_ampl=crit_ampl, crit_freq=crit_freq, plot_fl=plot_fl)
 
@@ -205,6 +184,7 @@ class Magopter(IVAnalyser):
                 sweep_time = self.raw_time[sweep_start:sweep_stop]
 
                 if filter_arcs_fl:
+                    # TODO: Fix this
                     sweep_fit = sweep_fitter.fit(sweep_time, sweep_voltage)
                     self.max_voltage.append((np.max(np.abs(sweep_voltage - sweep_fit.fit_y))))
                     if i == 0 and plot_fl:
@@ -295,33 +275,33 @@ class Magopter(IVAnalyser):
                                                                 self.directory, fit_files[i]))
         return fit_dfs
 
-    def plot_thomson(self, fig=None, show_fl=False):
-        if self.ts_temp is not None:
-            if not fig:
-                fig = plt.figure()
-
-            plt.subplot(211)
-            for i in range(len(self.ts_dens[0])):
-                plt.errorbar(self.ts_coords[mag.DATA][i], self.ts_dens[mag.DATA][i], fmt='x-',
-                             label='t = {:.1f}'.format(self.ts_dens[mag.TIMES][i]),
-                             yerr=self.ts_dens_d[mag.DATA][i])
-            plt.xlabel('Radial position (mm)')
-            plt.ylabel(r'Density (m$^{-3}$)')
-            plt.legend()
-
-            plt.subplot(212)
-            for i in range(len(self.ts_temp[0])):
-                plt.errorbar(self.ts_coords[mag.DATA][i], self.ts_temp[mag.DATA][i] / nrm.ELEM_CHARGE, fmt='x-',
-                             label='t = {:.1f}'.format(self.ts_temp[mag.TIMES][i]),
-                             yerr=self.ts_temp_d[mag.DATA][i] / nrm.ELEM_CHARGE)
-            plt.xlabel('Radial position (mm)')
-            plt.ylabel(r'Temperature (eV)')
-            plt.legend()
-
-            if show_fl:
-                plt.show()
-        else:
-            print('No thomson data found, cannot plot.')
+    # def plot_thomson(self, fig=None, show_fl=False):
+    #     if self.ts_temp is not None:
+    #         if not fig:
+    #             fig = plt.figure()
+    #
+    #         plt.subplot(211)
+    #         for i in range(len(self.ts_dens[0])):
+    #             plt.errorbar(self.ts_coords[mag.DATA][i], self.ts_dens[mag.DATA][i], fmt='x-',
+    #                          label='t = {:.1f}'.format(self.ts_dens[mag.TIMES][i]),
+    #                          yerr=self.ts_dens_d[mag.DATA][i])
+    #         plt.xlabel('Radial position (mm)')
+    #         plt.ylabel(r'Density (m$^{-3}$)')
+    #         plt.legend()
+    #
+    #         plt.subplot(212)
+    #         for i in range(len(self.ts_temp[0])):
+    #             plt.errorbar(self.ts_coords[mag.DATA][i], self.ts_temp[mag.DATA][i] / nrm.ELEM_CHARGE, fmt='x-',
+    #                          label='t = {:.1f}'.format(self.ts_temp[mag.TIMES][i]),
+    #                          yerr=self.ts_temp_d[mag.DATA][i] / nrm.ELEM_CHARGE)
+    #         plt.xlabel('Radial position (mm)')
+    #         plt.ylabel(r'Temperature (eV)')
+    #         plt.legend()
+    #
+    #         if show_fl:
+    #             plt.show()
+    #     else:
+    #         print('No thomson data found, cannot plot.')
 
     def quick_plot(self, index=None, coax=0, fig=None, show_fl=True):
         # TODO: (06/08/2018) Make plottingmethod into a decorator.

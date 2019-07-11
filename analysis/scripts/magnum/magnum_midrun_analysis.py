@@ -1,12 +1,15 @@
 import numpy as np
-import traceback
 import matplotlib.pyplot as plt
 import xarray as xr
+import json
 import os
-import concurrent.futures as cf
-import flopter.core.magoptoffline as mg
-import flopter.classes.ivdata as ivd
+import glob
+# sys.path.append('/home/jleland/Coding/Projects/flopter')
+import flopter.magnum.magoptoffline as mg
+import flopter.core.lputils as lp
+import flopter.core.ivdata as ivd
 import flopter.core.fitters as fts
+from tkinter.filedialog import askopenfilename
 
 
 FOLDERS = ('2019-05-28_Leland/',
@@ -21,18 +24,44 @@ PROBE_DESIGNATIONS = ('S', 'L')
 SWEEP_RANGE = (0, 750)
 
 
-def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=None, probe_designations=PROBE_DESIGNATIONS,
-                         shunt_resistance=10, cabling_resistance=2.0, sweep_range=SWEEP_RANGE, downsampling_factor=1):
+def averaged_iv_analysis(filename=None, ts_temp=None, ts_dens=None, shunt_resistance=10.0, theta_perp=10.0,
+                         probe_designations=PROBE_DESIGNATIONS, sweep_range=SWEEP_RANGE, downsamplnig_factor=1):
+    if filename is None:
+        # folders = ['2019-05-28_Leland/', '2019-05-29_Leland/']
+        mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/external/magnum/'
+        files = []
+        file_folders = []
+        for folder1 in FOLDERS:
+            os.chdir(mg.Magoptoffline.get_data_path() + folder1)
+            files.extend(glob.glob('*.adc'))
+            file_folders.extend([folder1] * len(glob.glob('*.adc')))
+        files.sort()
 
-    # mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/external/magnum/'
-    mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/Magnum/adc_files/'
+        # for i, f in enumerate(files):
+        #     print(i, f)
+
+        # file = files[286]
+        # adc_file = files[285]
+        # ts_file = files[284]
+        adc_file = files[-1]
+        folder = FOLDERS[-1]
+    else:
+        # If using the tkinter file chooser
+        adc_file = filename.split('/')[-1]
+        folder = filename.split('/')[-2] + '/'
+        mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/external/magnum/'
+
     print('"{}" \t\t "{}"'.format(folder, adc_file))
 
-    dsr = downsampling_factor
+    mp = lp.MagnumProbes()
+    probe_S = mp.probe_s
+    probe_B = mp.probe_b
+
+    dsr = downsamplnig_factor
 
     # Create magopter object
     print('Creating magopter object')
-    magopter = mg.Magoptoffline(folder, adc_file, shunt_resistor=shunt_resistance, cabling_resistance=cabling_resistance)
+    magopter = mg.Magoptoffline(folder, adc_file, shunt_resistor=shunt_resistance, cabling_resistance=2)
     magopter._VOLTAGE_CHANNEL = 3
     magopter._PROBE_CHANNEL_3 = 4
     magopter._PROBE_CHANNEL_4 = 5
@@ -51,15 +80,11 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
         n_e_ts = 4.44e20
         d_n_e_ts = 0.01e20
 
-    # print length of the 0th probe's (probe S) number of sweeps
+    # print length of the 0th probes (probe S) number of sweeps
     print(len(magopter.iv_arrs[1]))
 
     # Create relative t array by subtracting the first timestep value from the first time array
     first_time_arr = magopter.iv_arrs[1][0]['t']
-    second_time_arr = magopter.iv_arrs[0][0]['t']
-    if len(first_time_arr) > len(second_time_arr):
-        first_time_arr = second_time_arr
-
     relative_t = np.zeros(len(first_time_arr))
 
     sweep_length = np.shape(relative_t)[0] // 2
@@ -89,7 +114,7 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
                                         'probe': probe_designations[i]})
             ds_list.append(ds)
 
-        # Separate into up and down sweeps then concat along sweep direction as an axis
+        # # Separate into up and down sweeps then concat along sweep direction as an axis
         print('Before equalisation: ', len(ds_list), len(ds_list[::2]), len(ds_list[1::2]))
         if len(ds_list[::2]) == len(ds_list[1::2]) + 1:
             ds_ups = xr.concat(ds_list[:-2:2], 'sweep')
@@ -102,16 +127,7 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
         ds_probes.append(xr.concat([ds_ups, ds_downs], dim=direction))
 
     probe = xr.DataArray(np.array(probe_designations), dims=['probe'], name='probe')
-    min_sweep_number = np.min([len(ds_probes[0]['sweep']), len(ds_probes[1]['sweep'])])
-
-    ds_probes[0] = ds_probes[0].sel(sweep=slice(0, min_sweep_number))
-    ds_probes[1] = ds_probes[1].sel(sweep=slice(0, min_sweep_number))
-
     ds_full = xr.concat(ds_probes, dim=probe)
-
-    cwd = os.getcwd()
-    os.chdir(mg.Magoptoffline.get_data_path() + 'analysed_1/')
-    ds_full.to_netcdf(f'{output_tag}.nc')
 
     # Select the small probe
     ds_full = ds_full.sel(probe=probe_designations[0])
@@ -122,7 +138,6 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
     ds_full.max(dim='time').mean('direction')['current'].plot.line(x='sweep')
     ds_full.max(dim='time').mean('direction').isel(sweep=slice(manual_start, manual_end))['current'].plot.line(
         x='sweep')
-    plt.savefig(f'{output_tag}_shot.png', bbox_inches='tight')
 
     # Choose only the IVs in the static section
     ds_full = ds_full.isel(sweep=slice(manual_start, manual_end))
@@ -150,98 +165,84 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
                          sweep_avg_updn['time'].data,
                          sigma=sweep_avg_updn['d_current'].data, estimate_error_fl=False)
 
-    starting_params = [0.69, 0.009, 1.12, 1]
+    starting_params = [0.69, 0.009, 1.12, +1]
 
     full_iv_fitter = fts.FullIVFitter()
     fit_data = full_iv_fitter.fit_iv_data(iv_data, initial_vals=starting_params)
-
     fig = plt.figure()
     fit_data.plot(fig=fig, show_fl=False)
     # plt.errorbar(fit_data.raw_x, fit_data.raw_y, yerr=iv_data['sigma'], ecolor='silver')
     # plt.plot(fit_data.raw_x, fit_data.fit_y, color='orange', label=r'')
     plt.plot(iv_data['V'], full_iv_fitter.fit_function(iv_data['V'], *starting_params), label='Start-param IV')
     plt.legend()
-    plt.ylim([-.25, 2.0])
+    plt.ylim([-.25, 1])
 
-    plt.tight_layout()
-    plt.savefig(f'{output_tag}_fit.png', bbox_inches='tight')
+    # Create new averaged iv figure
+    theta_perp = np.radians(theta_perp)
 
-    os.chdir(cwd)
+    # probe_selected = probe_L
 
-    del magopter, ds_full, ds_downs, ds_ups, ds_probes, ds_list, sweep_avg_up, sweep_avg_dn, sweep_avg_updn
-    import gc
-    gc.collect()
+    A_coll_0 = probe_S.get_collection_area(theta_perp)
+    d_A_coll = np.abs(probe_S.get_collection_area(theta_perp + np.radians(0.8)) - A_coll_0)
 
+    v_f_fitted = fit_data.get_param('V_f')
+    d_v_f_fitted = fit_data.get_param('V_f', errors_fl=True).error
 
-# os.chdir('/home/jleland/Data/external/magnum/')
-os.chdir('/home/jleland/Data/Magnum/adc_files/')
-all_dataset = xr.open_dataset('all_meta_data.nc').max('ts_radial_pos')
-shot_numbers = all_dataset.where(np.isfinite(all_dataset['adc_index']), drop=True)['shot_number'].values
-shot_dataset = all_dataset.sel(shot_number=shot_numbers)
+    v_f_approx = - 3 * fit_data.get_temp()
+    d_v_f_approx = 0.05 * v_f_approx
 
-CABLE_RESISTANCES = [1.7, 1.7, 1.7, 1.6]
-PROBE_RESISTANCES = {
-    'S': 1.0,
-    'L': 1.0,
-    'B': 1.0,
-    'R': 1.8
-}
-DESIRED_DATARATE = 10000
-COMMONLY_USED_SWEEP_TIME = 0.01
+    v_f_approx_ts = - 3 * T_e_ts
+    d_v_f_approx_ts = 0.05 * v_f_approx_ts
 
+    c_s_fitted = lp.sound_speed(fit_data.get_temp(), gamma_i=1)
+    d_c_s_fitted = lp.d_sound_speed(c_s_fitted, fit_data.get_temp(), fit_data.get_temp(errors_fl=True).error)
+    n_e_fitted = lp.electron_density(fit_data.get_isat(), c_s_fitted, A_coll_0)
+    d_n_e_fitted = lp.d_electron_density(n_e_fitted, c_s_fitted, d_c_s_fitted, A_coll_0, d_A_coll, fit_data.get_isat(),
+                                         fit_data.get_isat(errors_fl=True).error)
 
-def get_sweep_range(shot_end_time, adc_end_time, acq_length, adc_freq):
-    end_index = int(acq_length * adc_freq * COMMONLY_USED_SWEEP_TIME)
-    if shot_end_time < adc_end_time:
-        end_index = int((acq_length - ((shot_end_time - adc_end_time) / np.timedelta64(1, 's')) - 2)
-                        * adc_freq * COMMONLY_USED_SWEEP_TIME)
-    return 1, end_index
+    print("iv = averaged: \n"
+          "\t v_f = {:.3g} +- {:.1g} \n"
+          "\t T_e = {:.3g} +- {:.1g} \n"
+          "\t I_sat = {:.3g} +- {:.1g} \n"
+          "\t n_e = {:.3g} +- {:.1g} \n"
+          "\t a = {:.3g} +- {:.1g} \n"
+          "\t c_s = {:.3g} +- {:.1g} \n"
+          "\t A_coll = {:.3g} +- {:.1g} \n"
+          .format(v_f_fitted, d_v_f_fitted,
+                  fit_data.get_temp(), fit_data.get_temp(errors_fl=True).error,
+                  fit_data.get_isat(), fit_data.get_isat(errors_fl=True).error,
+                  n_e_fitted, d_n_e_fitted,
+                  fit_data.get_sheath_exp(), fit_data.get_sheath_exp(errors_fl=True).error,
+                  c_s_fitted, d_c_s_fitted,
+                  A_coll_0, d_A_coll))
 
+    I_f = probe_S.get_analytical_iv(fit_data.raw_x, v_f_fitted, theta_perp, fit_data.get_temp(), n_e_fitted,
+                                    print_fl=True)
+    I_ts = probe_S.get_analytical_iv(fit_data.raw_x, v_f_approx_ts, theta_perp, T_e_ts, n_e_ts,
+                                     print_fl=True)
 
-def aia_mapping_wrapper(shot_number):
-    print(f'\n Analysing shot {shot_number}...')
-    
-    try:
-        # print('Try statement')
-        shot_dataarray = shot_dataset.sel(shot_number=shot_number)
-        
-        folder = str(shot_dataarray['adc_folder'].values)
-        adc_file = str(shot_dataarray['adc_filename'].values)
-        output_tag = 'a{:03d}_{:03d}_{}'.format(shot_number,
-                                                int(shot_dataarray['adc_index'].values),
-                                                int(shot_dataarray['adc_timestamp'].values))
-        ts_temp = shot_dataarray['ts_temp_max'].values
-        ts_dens = shot_dataarray['ts_dens_max'].values
-        probe_designations = (str(shot_dataarray['adc_4_probe'].values), str(shot_dataarray['adc_5_probe'].values))
-        shunt_resistance = shot_dataarray['adc_4_shunt_resistance'].values
-        # downsampling_factor = int(shot_dataarray['adc_freqs'].values / DESIRED_DATARATE)
-        downsampling_factor = 1
-        cabling_resistance = (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'].values) - 1] + 1.2
-                              + PROBE_RESISTANCES[probe_designations[0]])
-        sweep_range = get_sweep_range(shot_dataarray['shot_end_time'].values, shot_dataarray['adc_end_time'].values,
-                                      shot_dataarray['acquisition_length'].values,
-                                      shot_dataarray['adc_freqs'].values / downsampling_factor)
+    plt.figure()
+    plt.errorbar(fit_data.raw_x, fit_data.raw_y, yerr=fit_data.sigma,
+                 label='Raw IV', ecolor='silver', color='gray', zorder=-1)
+    # plt.plot(iv_data[c.RAW_X].tolist()[0], I_f, label='Analytical - measured', linestyle='dashed', linewidth=1, color='r')
+    plt.plot(fit_data.raw_x, fit_data.fit_y, color='blue', linewidth=1.2,
+             label='Fit - ({:.2g}eV, {:.2g}m'.format(fit_data.get_temp(), n_e_fitted) + r'$^{-3}$)')
+    plt.plot(fit_data.raw_x, I_ts, linestyle='dashed', color='red',
+             label='Analytical from TS - ({:.2g}eV, {:.2g}m'.format(T_e_ts, n_e_ts) + '$^{-3}$)')
 
-        print(f'Attempting analysis on shot {shot_number}')
-    
-        averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=ts_temp, ts_dens=ts_dens,
-                             probe_designations=probe_designations, shunt_resistance=shunt_resistance,
-                             cabling_resistance=cabling_resistance, sweep_range=sweep_range,
-                             downsampling_factor=downsampling_factor)
-    except:
-        traceback.print_exc()
-    print(f'\n ...Finished shot {shot_number}')
-
-
-def multi_file_analysis(shots):
-    print('\nRunning multi-file analysis. Analysing {} shot(s).\n'.format(len(shots)))
-
-    # Execute fitting and saving of files concurrently
-    with cf.ProcessPoolExecutor() as executor:
-        executor.map(aia_mapping_wrapper, shots)
+    plt.legend()
+    # plt.title('Comparison of analytical to measured IV curves for the small area probe')
+    plt.xlabel(r'$V_p$ / V')
+    plt.ylabel(r'$I$ / A')
+    # plt.ylim([-0.01, 3.2])
+    plt.show()
 
 
 if __name__ == '__main__':
-    multi_file_analysis(shot_numbers)
-    # aia_mapping_wrapper(shot_numbers[0])
-    # aia_mapping_wrapper(157)
+    with open('config.json', 'r') as fp:
+        options = json.load(fp)
+    filename = askopenfilename()
+    print('ADC File: {} \n'
+          'Options: {} \n'
+          .format(filename, options))
+    averaged_iv_analysis(filename, **options)

@@ -7,12 +7,12 @@ from scipy import interpolate
 from scipy.io import loadmat
 from scipy.signal import argrelmax, savgol_filter
 
-from flopter.classes.base import IVAnalyser
-from flopter.classes.ivdata import IVData
-import flopter.classes.spicedata as sd
+from flopter.core.ivanalyser import IVAnalyser
+from flopter.core.ivdata import IVData
+import flopter.spice.spicedata as sd
 from flopter.core import constants as c
 from flopter.core.homogenisation import Spice2Homogeniser
-from flopter.core.inputparser import InputParser
+from flopter.spice.inputparser import InputParser
 from flopter.core.normalisation import Denormaliser
 from flopter.core.fitters import IVFitter, FullIVFitter, GaussianFitter
     

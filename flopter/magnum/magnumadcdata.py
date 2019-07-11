@@ -1,5 +1,5 @@
 import numpy as np
-import flopter.external.readfastadc as radc
+import flopter.magnum.readfastadc as radc
 from flopter.core import constants as c
 
 

@@ -1,7 +1,5 @@
-from flopter.core import constants as c, fitters as f, splopter as spl
+from flopter.spice import splopter as spl
 import matplotlib.pyplot as plt
-import numpy as np
-import flopter.classes.spicedata as sd
 
 if __name__ == '__main__':
     spl_t0_old = spl.Splopter('bin/data_local_m/', 'magnum/', 'fetail_T0_S1/', reduce_fl=True)
