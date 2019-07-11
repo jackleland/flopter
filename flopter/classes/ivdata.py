@@ -154,6 +154,8 @@ class IVData(dict):
         lower_offset = v_f + (self.trim_beg * L)
         upper_offset = v_f + (self.trim_end * L)
         fit_sec = np.where((self[c.POTENTIAL] <= lower_offset) & (self[c.POTENTIAL] >= upper_offset))
+        if print_fl:
+            print('fit_sec is :', fit_sec)
         iv_data_trim = IVData.non_contiguous_trim(self, fit_sec)
 
         # Find and fit straight section

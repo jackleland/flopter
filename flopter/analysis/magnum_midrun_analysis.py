@@ -55,7 +55,7 @@ def averaged_iv_analysis(filename=None, ts_temp=None, ts_dens=None, shunt_resist
 
     mp = lp.MagnumProbes()
     probe_S = mp.probe_s
-    probe_L = mp.probe_l
+    probe_B = mp.probe_b
 
     dsr = downsamplnig_factor
 
