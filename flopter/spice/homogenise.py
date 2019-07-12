@@ -1,8 +1,8 @@
 import os
 import numpy as np
-from flopter.core.homogenisation import Homogeniser
+from flopter.core.homogenise import Homogeniser
 from flopter.core.ivdata import IVData
-from flopter.spice.spicedata import Spice2TData
+from flopter.spice.tdata import Spice2TData
 from flopter.spice.inputparser import InputParser
 from flopter.core import constants as c
 

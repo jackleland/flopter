@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+
 class IVAnalyser(ABC):
     """
     Abstract base class for the analysis of Langmuir Probe data.

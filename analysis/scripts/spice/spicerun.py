@@ -2,7 +2,7 @@ from flopter.core import constants as c, fitters as f
 from flopter.spice import splopter as spl
 import matplotlib.pyplot as plt
 import numpy as np
-import flopter.spice.spicedata as sd
+import flopter.spice.tdata as sd
 from scipy.signal import savgol_filter
 from scipy.io import loadmat
 

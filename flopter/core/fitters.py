@@ -9,7 +9,7 @@ import collections as coll
 from flopter.core.ivdata import IVData
 from flopter.core.fitdata import FitData2, IVFitData
 from flopter.core import constants as c
-from flopter.core.normalisation import BOLTZMANN, ELECTRON_MASS, ELEM_CHARGE, P_E_MASS_RATIO
+from flopter.core.constants import BOLTZMANN, ELEM_CHARGE, ELECTRON_MASS, P_E_MASS_RATIO
 from warnings import warn
 
 # Curve-fit default values and bounds

@@ -1,5 +1,7 @@
 import scipy.io as spio
-from flopter.core import constants as c, normalisation as norm
+
+import flopter.spice.normalise
+from flopter.core import constants as c, normalise as norm
 
 NZ = 'Nz'
 NZMAX = 'Nzmax'
@@ -296,10 +298,10 @@ class SpiceTData(object):
             print('Not ready to be converted, no {} has been specified'.format(converter_type))
 
     def denormalise(self):
-        self._convert(norm.Denormaliser)
+        self._convert(flopter.spice.normalise.Denormaliser)
 
     def normalise(self):
-        self._convert(norm.Normaliser)
+        self._convert(flopter.spice.normalise.Normaliser)
 
 
 class Spice2TData(SpiceTData):

@@ -1,13 +1,15 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+
+import flopter.core.constants
+import flopter.magnum.database
 from flopter.magnum.magopter import Magopter
 from flopter.core.lputils import MagnumProbes
 import glob
-import flopter.magnum.magnumdbutils as ut
 import flopter.magnum.readfastadc as adc
-from flopter.core import constants as c, normalisation as nrm, fitters as f, lputils as lp
-import flopter.magnum.magnum as mag
+from flopter.core import constants as c, normalise as nrm, fitters as f, lputils as lp
+import flopter.magnum.database as mag
 from scipy.interpolate import interp1d
 import scipy.signal as sig
 import concurrent.futures as cf
@@ -43,7 +45,7 @@ def main_magopter_analysis():
     ts_file = files[-1]
     folder = file_folders[-2]
     print(folder, file)
-    print(ut.human_time_str(adc.get_magnumdb_timestamp(ts_file)))
+    print(flopter.magnum.database.human_time_str(adc.get_magnumdb_timestamp(ts_file)))
     print(ts_file)
 
     magopter = Magopter(folder, ts_file)
@@ -163,11 +165,11 @@ def main_magopter_analysis():
     # A_coll_l = (26.25 * 1e-6) * np.sin(theta_perp + theta_p)
     # print('Small area: {}, Large area: {}'.format(A_coll_s, A_coll_l))
 
-    c_s = np.sqrt((nrm.ELEM_CHARGE * (T_e + gamma_i * T_e)) / nrm.PROTON_MASS)
-    n_e_0 = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_s)
-    n_e_1 = fit_df_1[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_c)
-    I_sat_0 = c_s * n_e * nrm.ELEM_CHARGE * A_coll_s
-    I_sat_1 = c_s * n_e * nrm.ELEM_CHARGE * A_coll_c
+    c_s = np.sqrt((flopter.core.constants.ELEM_CHARGE * (T_e + gamma_i * T_e)) / flopter.core.constants.PROTON_MASS)
+    n_e_0 = fit_df_0[c.ION_SAT] / (flopter.core.constants.ELEM_CHARGE * c_s * A_coll_s)
+    n_e_1 = fit_df_1[c.ION_SAT] / (flopter.core.constants.ELEM_CHARGE * c_s * A_coll_c)
+    I_sat_0 = c_s * n_e * flopter.core.constants.ELEM_CHARGE * A_coll_s
+    I_sat_1 = c_s * n_e * flopter.core.constants.ELEM_CHARGE * A_coll_c
 
     J_sat_0 = fit_df_0[c.ION_SAT] / A_coll_s
     J_sat_1 = fit_df_1[c.ION_SAT] / A_coll_c
@@ -250,7 +252,7 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     A_coll_1 = probe_coax_1.get_collection_area(theta_perp)
 
     if magopter.ts_temp is not None:
-        temps = [np.max(temp) / nrm.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]]
+        temps = [np.max(temp) / flopter.core.constants.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]]
         denss = [np.max(dens) for dens in magopter.ts_dens[mag.DATA]]
         T_e = np.mean(temps)
         d_T_e = np.std(temps) / np.sqrt(len(temps))
@@ -276,13 +278,13 @@ def integrated_analysis(probe_coax_0, probe_coax_1, folder, file, ts_file=None):
     deg_freedom = 2
     # gamma_i = (deg_freedom + 2) / 2
     gamma_i = 1
-    c_s_0 = np.sqrt((nrm.ELEM_CHARGE * (fit_df_0[c.ELEC_TEMP] + gamma_i * fit_df_0[c.ELEC_TEMP])) / nrm.PROTON_MASS)
-    c_s_1 = np.sqrt((nrm.ELEM_CHARGE * (fit_df_1[c.ELEC_TEMP] + gamma_i * fit_df_1[c.ELEC_TEMP])) / nrm.PROTON_MASS)
-    n_e_0 = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s_0 * A_coll_0)
-    n_e_1 = fit_df_1[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s_1 * A_coll_1)
+    c_s_0 = np.sqrt((flopter.core.constants.ELEM_CHARGE * (fit_df_0[c.ELEC_TEMP] + gamma_i * fit_df_0[c.ELEC_TEMP])) / flopter.core.constants.PROTON_MASS)
+    c_s_1 = np.sqrt((flopter.core.constants.ELEM_CHARGE * (fit_df_1[c.ELEC_TEMP] + gamma_i * fit_df_1[c.ELEC_TEMP])) / flopter.core.constants.PROTON_MASS)
+    n_e_0 = fit_df_0[c.ION_SAT] / (flopter.core.constants.ELEM_CHARGE * c_s_0 * A_coll_0)
+    n_e_1 = fit_df_1[c.ION_SAT] / (flopter.core.constants.ELEM_CHARGE * c_s_1 * A_coll_1)
 
-    I_sat_0 = c_s_0 * n_e * nrm.ELEM_CHARGE * A_coll_0
-    I_sat_1 = c_s_1 * n_e * nrm.ELEM_CHARGE * A_coll_1
+    I_sat_0 = c_s_0 * n_e * flopter.core.constants.ELEM_CHARGE * A_coll_0
+    I_sat_1 = c_s_1 * n_e * flopter.core.constants.ELEM_CHARGE * A_coll_1
 
     J_sat_0 = fit_df_0[c.ION_SAT] / A_coll_0
     J_sat_1 = fit_df_1[c.ION_SAT] / A_coll_1
@@ -464,7 +466,7 @@ def ts_ir_comparison(probe_0, probe_1, folder, file, ts_file):
     A_coll_0 = probe_0.get_collection_area(theta_perp)
     A_coll_1 = probe_1.get_collection_area(theta_perp)
     if m_ts.ts_temp is not None:
-        T_e = np.mean([np.max(temp) for temp in m_ts.ts_temp[mag.DATA]]) / nrm.ELEM_CHARGE
+        T_e = np.mean([np.max(temp) for temp in m_ts.ts_temp[mag.DATA]]) / flopter.core.constants.ELEM_CHARGE
         n_e = np.mean([np.max(dens) for dens in m_ts.ts_dens[mag.DATA]])
         print('T = {}, n = {}'.format(T_e, n_e))
     else:
@@ -486,9 +488,9 @@ def ts_ir_comparison(probe_0, probe_1, folder, file, ts_file):
 
     deg_freedom = 3
     gamma_i = (deg_freedom + 2) / 2
-    c_s = np.sqrt((nrm.ELEM_CHARGE * (T_e + gamma_i * T_e)) / nrm.PROTON_MASS)
-    n_e_ir = fit_ir_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_0)
-    n_e_ts = fit_ts_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_1)
+    c_s = np.sqrt((flopter.core.constants.ELEM_CHARGE * (T_e + gamma_i * T_e)) / flopter.core.constants.PROTON_MASS)
+    n_e_ir = fit_ir_df_0[c.ION_SAT] / (flopter.core.constants.ELEM_CHARGE * c_s * A_coll_0)
+    n_e_ts = fit_ts_df_0[c.ION_SAT] / (flopter.core.constants.ELEM_CHARGE * c_s * A_coll_1)
 
     ax2 = plt.subplot(212, sharex=ax1)
     plt.title('Electron Density Measurements')
@@ -538,7 +540,7 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
     fit_df_0, fit_df_1 = magopter.fit(print_fl=True)
 
     if magopter.ts_temp is not None:
-        temps = [np.max(temp) / nrm.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]]
+        temps = [np.max(temp) / flopter.core.constants.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]]
         denss = [np.max(dens) for dens in magopter.ts_dens[mag.DATA]]
         T_e_ts = np.mean(temps)
         d_T_e_ts = np.std(temps) / np.sqrt(len(temps))
@@ -565,10 +567,10 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
     # deg_freedom = 2
     # gamma_i = (deg_freedom + 2) / 2
     gamma_i = 1
-    c_s = np.sqrt((nrm.ELEM_CHARGE * (fit_df_0[c.ELEC_TEMP] + gamma_i * fit_df_0[c.ELEC_TEMP])) / nrm.PROTON_MASS)
+    c_s = np.sqrt((flopter.core.constants.ELEM_CHARGE * (fit_df_0[c.ELEC_TEMP] + gamma_i * fit_df_0[c.ELEC_TEMP])) / flopter.core.constants.PROTON_MASS)
     d_c_s = np.abs((c_s * fit_df_0[c.ERROR_STRING.format(c.ELEC_TEMP)]) / (2 * fit_df_0[c.ELEC_TEMP]))
 
-    n_e = fit_df_0[c.ION_SAT] / (nrm.ELEM_CHARGE * c_s * A_coll_0)
+    n_e = fit_df_0[c.ION_SAT] / (flopter.core.constants.ELEM_CHARGE * c_s * A_coll_0)
     d_n_e = np.abs(n_e) * np.sqrt((d_c_s / c_s) ** 2 + (d_A_coll / A_coll_0) ** 2 + (
             fit_df_0[c.ERROR_STRING.format(c.ION_SAT)] / fit_df_0[c.ION_SAT]) ** 2)
 
@@ -697,13 +699,13 @@ def deeper_iv_analysis(probe_0, folder, file, plot_comparison_fl=False, plot_tim
             deg_freedom = 2
             gamma_i = (deg_freedom + 2) / 2
             # gamma_i = 1
-            c_s = np.sqrt((nrm.ELEM_CHARGE * (fit_df_0[c.ELEC_TEMP] + gamma_i * fit_df_0[c.ELEC_TEMP])) / nrm.PROTON_MASS)
+            c_s = np.sqrt((flopter.core.constants.ELEM_CHARGE * (fit_df_0[c.ELEC_TEMP] + gamma_i * fit_df_0[c.ELEC_TEMP])) / flopter.core.constants.PROTON_MASS)
             d_c_s = np.abs((c_s * fit_df_0[c.ERROR_STRING.format(c.ELEC_TEMP)]) / (2 * fit_df_0[c.ELEC_TEMP]))
 
             I_sat = fit_df_0[c.ION_SAT] * I_sat_scale
             d_I_sat = fit_df_0[c.ERROR_STRING.format(c.ION_SAT)] * I_sat_scale
 
-            n_e = I_sat / (nrm.ELEM_CHARGE * c_s * A_coll_0)
+            n_e = I_sat / (flopter.core.constants.ELEM_CHARGE * c_s * A_coll_0)
             d_n_e = np.abs(n_e) * np.sqrt((d_c_s / c_s)**2 + (d_A_coll / A_coll_0)**2 + (d_I_sat / I_sat)**2)
 
             plt.errorbar(fit_df_0.index, n_e, yerr=d_n_e, fmt='x', label=r'$Scale$ = {}'.format(I_sat_scale))
@@ -808,7 +810,7 @@ def multifit_trim_iv_analysis(probe_0, folder, file, trim_upper_fl=False, trim_l
     magopter.iv_arrs[1] = []
 
     if magopter.ts_temp is not None:
-        temps = [np.max(temp) / nrm.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]]
+        temps = [np.max(temp) / flopter.core.constants.ELEM_CHARGE for temp in magopter.ts_temp[mag.DATA]]
         denss = [np.max(dens) for dens in magopter.ts_dens[mag.DATA]]
         T_e_ts = np.mean(temps)
         d_T_e_ts = np.std(temps) / np.sqrt(len(temps))
@@ -1021,7 +1023,7 @@ def fit_and_save(folderfile):
                                 c.REDUCED_CHI2]])
 
     if m.ts_temp is not None:
-        temps = [np.max(temp) / nrm.ELEM_CHARGE for temp in m.ts_temp[mag.DATA]]
+        temps = [np.max(temp) / flopter.core.constants.ELEM_CHARGE for temp in m.ts_temp[mag.DATA]]
         denss = [np.max(dens) for dens in m.ts_dens[mag.DATA]]
         T_e_ts = np.mean(temps)
         d_T_e_ts = np.std(temps) / np.sqrt(len(temps))

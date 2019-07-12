@@ -1,5 +1,7 @@
 import numpy as np
-from flopter.core import normalisation as nrm
+
+import flopter.core.constants
+from flopter.core import normalise as nrm
 from abc import ABC, abstractmethod
 
 
@@ -79,11 +81,11 @@ def analytical_iv_curve(voltage, v_f, temp, dens, alpha, A_coll, c_1=0.9, c_2=0.
                         print_fl=False):
     T_i = temp
     T_e = temp
-    lambda_D = np.sqrt((nrm.EPSILON_0 * T_e)
-                       / (nrm.ELEM_CHARGE * dens))
-    c_s = np.sqrt((nrm.ELEM_CHARGE * (T_e + (gamma_i * T_i)))
-                  / (nrm.PROTON_MASS * mass))
-    I_0 = dens * nrm.ELEM_CHARGE * c_s * A_coll
+    lambda_D = np.sqrt((flopter.core.constants.EPSILON_0 * T_e)
+                       / (flopter.core.constants.ELEM_CHARGE * dens))
+    c_s = np.sqrt((flopter.core.constants.ELEM_CHARGE * (T_e + (gamma_i * T_i)))
+                  / (flopter.core.constants.PROTON_MASS * mass))
+    I_0 = dens * flopter.core.constants.ELEM_CHARGE * c_s * A_coll
     a = ((c_1 + (c_2 / np.tan(alpha))) / np.sqrt(np.sin(alpha))) * (lambda_D / (L + g))
     if print_fl:
         print("a = {}, c_s = {}, lambda_d = {}, I_0 = {}".format(a, c_s, lambda_D, I_0))
@@ -93,13 +95,14 @@ def analytical_iv_curve(voltage, v_f, temp, dens, alpha, A_coll, c_1=0.9, c_2=0.
 
 
 def calc_sheath_expansion_coeff(temp, density, L, g, alpha, c_1=0.9, c_2=0.6):
-    lambda_D = np.sqrt((nrm.EPSILON_0 * temp) / (nrm.ELEM_CHARGE * density))
+    lambda_D = np.sqrt((flopter.core.constants.EPSILON_0 * temp) / (flopter.core.constants.ELEM_CHARGE * density))
     a = ((c_1 + (c_2 / np.tan(alpha))) / np.sqrt(np.sin(alpha))) * (lambda_D / (L + g))
     return a
 
 
 def sound_speed(T_e, gamma_i=1, mass=1):
-    return np.sqrt((nrm.ELEM_CHARGE * (T_e + (gamma_i * T_e))) / (nrm.PROTON_MASS * mass))
+    return np.sqrt((flopter.core.constants.ELEM_CHARGE * (T_e + (gamma_i * T_e))) / (
+                flopter.core.constants.PROTON_MASS * mass))
 
 
 def d_sound_speed(c_s, T_e, d_T_e):
@@ -107,7 +110,7 @@ def d_sound_speed(c_s, T_e, d_T_e):
 
 
 def electron_density(I_sat, c_s, A_coll):
-    return I_sat / (nrm.ELEM_CHARGE * c_s * A_coll)
+    return I_sat / (flopter.core.constants.ELEM_CHARGE * c_s * A_coll)
 
 
 def d_electron_density(n_e, c_s, d_c_s, A_coll, d_A_coll, I_sat, d_I_sat):

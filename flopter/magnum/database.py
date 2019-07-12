@@ -1,30 +1,46 @@
+import datetime as dt
+
 from codac.datastore import client
 import numpy as np
-import flopter.magnum.magnumdbutils as ut
 import flopter.magnum.readfastadc as adc
 import re
 
 TIMES = 0
 DATA = 1
 
+B_FIELD = 'MagnetBFieldActual'
+SOURCE_CURRENT = 'SourceCurrentPs'
+SOURCE_VOLTAGE = 'SourceVoltagePs'
+SOURCE_POS = 'SourceLinCurPos'
+SOURCE_D2 = 'SourceFlowD2'
+PUFFED_D2 = 'TargetFlowD2'
+PUFFED_H2 = 'TargetFlowH2'
+PUFFED_He = 'TargetFlowHe'
+SOURCE_H2 = 'SourceFlowH2'
+SOURCE_He = 'SourceFlowHe'
+
 TARGET_POS = 'TargetLinearCurPos'
 TARGET_ROT = 'TargetRotationCurPos'
 TARGET_TILT = 'TargetTiltingCurPos'
 TARGET_VOLTAGE = 'TargetVoltage'
 TARGET_VOLTAGE_PS = 'TargetVoltagePs'
-PLASMA_STATE = 'PlasmaPlcState'
+TARGET_CHAMBER_PRESSURE = 'TaChPresBara'
+
 SOURCE_PUMP_SPEED = 'Rp1SoChSpeed'
 HEATING_PUMP_SPEED = 'Rp3HeChSpeed'
 TARGET_PUMP_SPEED = 'Rp5TaChSpeed'
+
 TS_DENS_PROF = 'TsProfNe'
 TS_DENS_PROF_D = 'TsProfNe_d'
 TS_TEMP_PROF = 'TsProfTe'
 TS_TEMP_PROF_D = 'TsProfTe_d'
 TS_RAD_COORDS = 'TsRadCoords'
+
+PLASMA_STATE = 'PlasmaPlcState'
+TRIGGER_START = 'MasterTrigStartFt'
 BEAM_DUMP_DOWN = 'BeamDumpDown'
 BEAM_DUMP_UP = 'BeamDumpUp'
-TRIGGER_START = 'MasterTrigStartFt'
-TARGET_CHAMBER_PRESSURE = 'TaChPresBara'
+
 
 DEFAULT_VARS = [
     TARGET_POS,
@@ -65,9 +81,68 @@ SLC_STATES = {
 }
 
 
+# ---------- Magnum Database Utility Functions ---------- #
+
+def get_seconds(seconds):
+    return seconds * (1 << 32)
+
+
+def get_minutes(minutes):
+    return get_seconds(minutes * 60)
+
+
+def get_hours(hours):
+    return get_minutes(hours * 60)
+
+
+def make_time_range(start_str, duration):
+    start_time = client.datetotime(dt.datetime.strptime(start_str, client.DATE_FORMAT))
+    end_time = start_time + duration
+    return client.TimeRange(start_time, end_time)
+
+
+def make_time_range_from_dates(start_str, end_str):
+    start_time = client.datetotime(dt.datetime.strptime(start_str, client.DATE_FORMAT))
+    end_time = client.datetotime(dt.datetime.strptime(end_str, client.DATE_FORMAT))
+    return client.TimeRange(start_time, end_time)
+
+
+def get_data_si(db, search_name, time_range, numpify_fl=True):
+    db_var = db.findNode(search_name)[0] # only take the first in list
+    if numpify_fl:
+        return np.array(db_var.read(time_range, 0, 0, unit=client.SI_UNIT))
+    else:
+        return db_var.read(time_range, 0, 0, unit=client.SI_UNIT)
+    # Return 2 lists: timestamp list, data list
+
+
+def human_time_str(db_time_stamp):
+    return client.timetostring(int(db_time_stamp) & 0xffffffff00000000).split()[1]
+
+
+def human_date_str(db_time_stamp):
+    return client.timetostring(int(db_time_stamp) & 0xffffffff00000000).split()[0]
+
+
+def human_datetime_str(db_time_stamp):
+    return client.timetostring(int(db_time_stamp) & 0xffffffff00000000)
+
+
+def human_time_ms_str(db_time_stamp):
+    # split into date, time
+    # take time part
+    time_string = client.timetostring(db_time_stamp).split()[1]
+    if "." in time_string:
+        # remove "000" at the end
+        return time_string[:-3]
+    else:
+        # add ".000" at the end
+        return time_string + ".000"
+
+
 class MagnumDB(object):
-    TIME_RANGE_TEST = ut.make_time_range('2018-05-01 08:00:00', ut.get_hours(72))
-    TIME_RANGE_MAIN = ut.make_time_range('2018-06-05 08:00:00', ut.get_hours(96))
+    TIME_RANGE_TEST = make_time_range('2018-05-01 08:00:00', get_hours(72))
+    TIME_RANGE_MAIN = make_time_range('2018-06-05 08:00:00', get_hours(96))
     _REDUNDANCY_TIME = 10
     _MAX_DURATION = 30
 
@@ -79,16 +154,16 @@ class MagnumDB(object):
             self.time_stamp = time_range.startTime
         elif time_stamp:
             self.time_stamp = time_stamp
-            ts_start = self.time_stamp - ut.get_seconds(self._REDUNDANCY_TIME)
-            ts_end = self.time_stamp + ut.get_seconds(self._REDUNDANCY_TIME + self._MAX_DURATION)
+            ts_start = self.time_stamp - get_seconds(self._REDUNDANCY_TIME)
+            ts_end = self.time_stamp + get_seconds(self._REDUNDANCY_TIME + self._MAX_DURATION)
             self.time_range = client.TimeRange(ts_start, ts_end)
         else:
             self.time_range = self.TIME_RANGE_MAIN
             self.time_stamp = self.time_range.startTime
 
         if print_fl:
-            print('Start Time: ', ut.human_time_str(self.time_stamp))
-            print('End Time: ', ut.human_time_str(self.time_range.endTime))
+            print('Start Time: ', human_time_str(self.time_stamp))
+            print('End Time: ', human_time_str(self.time_range.endTime))
         self.all_plasma_states = self.get_data(PLASMA_STATE, self.time_range)
 
         self.b_plasma_timeranges = {}
@@ -176,7 +251,7 @@ class MagnumDB(object):
         :return:        Offset MagnumDB data array
         """
         new_times = [client.timetoposix(time - offset) for time in data[0]]
-        return [new_times, data[ut.DATA]]
+        return [new_times, data[DATA]]
 
     def get_shot_duration(self, start_time):
         # if start_time in self.all_plasma_states[TIMES]:
@@ -194,8 +269,8 @@ class MagnumDB(object):
 
         time_stamp = int(shot_number)
 
-        ts_start = time_stamp - ut.get_seconds(cls._REDUNDANCY_TIME)
-        ts_end = time_stamp + ut.get_seconds(cls._REDUNDANCY_TIME + cls._MAX_DURATION)
+        ts_start = time_stamp - get_seconds(cls._REDUNDANCY_TIME)
+        ts_end = time_stamp + get_seconds(cls._REDUNDANCY_TIME + cls._MAX_DURATION)
         time_range = client.TimeRange(ts_start, ts_end)
         return time_range
 

@@ -9,13 +9,13 @@ from scipy.signal import argrelmax, savgol_filter
 
 from flopter.core.ivanalyser import IVAnalyser
 from flopter.core.ivdata import IVData
-import flopter.spice.spicedata as sd
 from flopter.core import constants as c
-from flopter.core.homogenisation import Spice2Homogeniser
-from flopter.spice.inputparser import InputParser
-from flopter.core.normalisation import Denormaliser
 from flopter.core.fitters import IVFitter, FullIVFitter, GaussianFitter
-    
+from flopter.spice.homogenise import Spice2Homogeniser
+from flopter.spice.inputparser import InputParser
+from flopter.spice.normalise import Denormaliser
+import flopter.spice.tdata as sd
+
 
 class Splopter(IVAnalyser):
     """

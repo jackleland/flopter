@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from flopter.core import normalisation as nrm, fitters as f
+
+import flopter.core.constants
+from flopter.core import normalise as nrm, fitters as f
 
 # Estimated parameters
 # v_f = 8        # V
@@ -25,8 +27,8 @@ alphas = np.arange(0.5, 11, 0.5)
 plot_fl = False
 
 # Constants
-m_i = nrm.PROTON_MASS
-m_e = nrm.ELECTRON_MASS
+m_i = flopter.core.constants.PROTON_MASS
+m_e = flopter.core.constants.ELECTRON_MASS
 deg_freedom = 3
 gamma_i = (deg_freedom + 2) / 2
 c_1 = 0.9
@@ -56,10 +58,10 @@ for v_max in [100]:
         A_coll = (d * np.sin(np.abs(theta_perp) + np.abs(theta_p)) *
                   ((L / np.cos(theta_p)) - ((d_perp - (g * np.tan(theta_perp)))
                                             / (np.sin(theta_p) + (np.tan(theta_perp) * np.cos(theta_p))))))
-        lambda_D = np.sqrt((nrm.EPSILON_0 * T_e) / (nrm.ELEM_CHARGE * n_e))
-        c_s = np.sqrt((nrm.ELEM_CHARGE * (T_e + gamma_i * T_i)) / m_i)
+        lambda_D = np.sqrt((flopter.core.constants.EPSILON_0 * T_e) / (flopter.core.constants.ELEM_CHARGE * n_e))
+        c_s = np.sqrt((flopter.core.constants.ELEM_CHARGE * (T_e + gamma_i * T_i)) / m_i)
         a = ((c_1 + (c_2 / np.tan(np.radians(alpha)))) / np.sqrt(np.sin(np.radians(alpha)))) * (lambda_D / (L + g))
-        I_0 = n_e * nrm.ELEM_CHARGE * c_s * A_coll
+        I_0 = n_e * flopter.core.constants.ELEM_CHARGE * c_s * A_coll
         J_0 = I_0 / A_coll
         q_par = 8 * T_e * J_0
         print('Heat flux: {}'.format(q_par))

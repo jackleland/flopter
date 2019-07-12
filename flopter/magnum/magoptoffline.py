@@ -2,7 +2,7 @@ from flopter.core.ivanalyser import IVAnalyser
 import numpy as np
 import pathlib as pth
 import matplotlib.pyplot as plt
-import flopter.magnum.magnumadcdata as md
+import flopter.magnum.adcdata as md
 import flopter.core.ivdata as iv
 import pandas as pd
 import scipy.signal as sig

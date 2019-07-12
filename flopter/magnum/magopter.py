@@ -1,16 +1,17 @@
+import flopter.core.constants
 from flopter.core.ivanalyser import IVAnalyser
 import numpy as np
 import pathlib as pth
 import matplotlib.pyplot as plt
-import flopter.magnum.magnumadcdata as md
+import flopter.magnum.adcdata as md
 import flopter.core.ivdata as iv
 import pandas as pd
 import scipy.signal as sig
-import flopter.magnum.magnum as mag
+import flopter.magnum.database as mag
 import flopter.magnum.readfastadc as adc
 from codac.datastore import client
 import Ice
-from flopter.core import filtering as filt, constants as c, normalisation as nrm, fitters as f
+from flopter.core import filtering as filt, constants as c, normalise as nrm, fitters as f
 import glob
 import os
 
@@ -311,9 +312,9 @@ class Magopter(IVAnalyser):
 
             plt.subplot(212)
             for i in range(len(self.ts_temp[0])):
-                plt.errorbar(self.ts_coords[mag.DATA][i], self.ts_temp[mag.DATA][i] / nrm.ELEM_CHARGE, fmt='x-',
+                plt.errorbar(self.ts_coords[mag.DATA][i], self.ts_temp[mag.DATA][i] / flopter.core.constants.ELEM_CHARGE, fmt='x-',
                              label='t = {:.1f}'.format(self.ts_temp[mag.TIMES][i]),
-                             yerr=self.ts_temp_d[mag.DATA][i] / nrm.ELEM_CHARGE)
+                             yerr=self.ts_temp_d[mag.DATA][i] / flopter.core.constants.ELEM_CHARGE)
             plt.xlabel('Radial position (mm)')
             plt.ylabel(r'Temperature (eV)')
             plt.legend()
