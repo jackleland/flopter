@@ -26,14 +26,15 @@ class InputParser(ConfigParser):
     COMMENT_PARAMS_SECTNAME = 'commented_params'
 
     def __init__(self, *args, comment_prefixes=('!', '$end'), expected_dupes=EXPECTED_DUPES, input_filename=None,
-                 **kwargs):
+                 read_comments_fl=True, **kwargs):
         self._duplicate_sects = defaultdict(int)
         for dupe in expected_dupes:
             self._duplicate_sects[dupe] = 0
         ConfigParser.__init__(self, *args, comment_prefixes=comment_prefixes, strict=False, **kwargs)
+        self.end_comments = None
         if input_filename:
             file = open(input_filename, 'r')
-            self.read_file(file, read_comments=True)
+            self.read_file(file, read_comments=read_comments_fl)
             file.close()
 
     def _read(self, fp, fpname):
@@ -179,12 +180,59 @@ class InputParser(ConfigParser):
             raise e
         self._join_multiline_values()
 
+    def write(self, fp, space_around_delimiters=True):
+        """Write an .ini-format representation of the configuration state.
+
+        If `space_around_delimiters' is True (the default), delimiters
+        between keys and values are surrounded by spaces.
+        """
+        super().write(fp, space_around_delimiters=space_around_delimiters)
+
+    def _write_section(self, fp, section_name, section_items, delimiter):
+        """Write a single section to the specified `fp'."""
+        # Treat comment section specially: write out either the saved raw
+        # comments or write out the parameters with the comment prefix prepended
+        if section_name == self.COMMENT_PARAMS_SECTNAME:
+            if self.end_comments is not None:
+                for comment in self.end_comments:
+                    print(comment)
+                    if len(comment) > 0 and comment[0] == self._comment_prefixes[0]:
+                        fp.write(f'{comment} \n')
+            else:
+                fp.write('! Plasma Parameters:')
+                for key, value in section_items:
+                    value = self._interpolation.before_write(self, section_name, key, value)
+                    if value is not None or not self._allow_no_value:
+                        value = delimiter + str(value).replace('\n', '\n\t')
+                    else:
+                        value = ""
+                    fp.write("! {}{}\n".format(key, value))
+            return
+
+        # Remove trailing numbers appended for getting duplicate section names into a configparser.
+        if section_name[:-1] in self.EXPECTED_DUPES:
+            section_name = section_name[:-1]
+
+        # Write section header and parameters
+        fp.write("${}\n".format(section_name))
+        for key, value in section_items:
+            value = self._interpolation.before_write(self, section_name, key,
+                                                     value)
+            if value is not None or not self._allow_no_value:
+                value = delimiter + str(value).replace('\n', '\n\t')
+            else:
+                value = ""
+            fp.write("\t{}{}\n".format(key, value))
+        fp.write("$end\n"
+                 "\n")
+
     def read_file(self, f, source=None, read_comments=False):
         super().read_file(f, source)
         if read_comments:
             # get last 10 lines of file
             f.seek(0)
             comments = f.read().split('\n')[-10:]
+            self.end_comments = comments
             params = self.read_commented_params(comments)
             self._sections[self.COMMENT_PARAMS_SECTNAME] = params
             self._proxies[self.COMMENT_PARAMS_SECTNAME] = SectionProxy(self, self.COMMENT_PARAMS_SECTNAME)
@@ -192,7 +240,9 @@ class InputParser(ConfigParser):
     def has_commented_params(self):
         """
         Method to check if parser has read in commented parameters by checking if the 'commented params' section exists
+
         :return: Boolean stating if parameters have been read successfully
+
         """
         return self.COMMENT_PARAMS_SECTNAME in self._sections
 
@@ -207,6 +257,46 @@ class InputParser(ConfigParser):
             return self._sections[self.COMMENT_PARAMS_SECTNAME]
         else:
             raise NoSectionError(self.COMMENT_PARAMS_SECTNAME)
+
+    def has_scanning_params(self):
+        """
+        Method for checking if config file is being used to initiate a parameter
+        scan. If any parameter is specified with a python list (i.e.
+        [scan_param_1, scan_param_2, ...]) it is counted as a scanning
+        parameter.
+
+        :return:    True if there are any parameters specified as scanning
+                    parameters, False otherwise.
+
+        """
+        return len(self.get_scanning_params()) > 0
+
+    def get_scanning_params(self):
+        """
+        Method for returning information about the parameters specified to be
+        scanned. Returns a list of dictionaries with four entries for each
+        scanning parameter, of the form:
+        {
+            'section':      [string] name of section where parameter is
+            'parameter':    [string] name of parameter being scanned
+            'values':       [list] parameter values to be scanned
+            'length':       [int] length of the parameter scan, i.e. how many
+                            values in the list of parameters
+        }
+
+        :return:    list of dicts containing the above data for each parameter
+
+        """
+        scan_params = []
+        for section, parameters in self._sections.items():
+            for param, value in parameters.items():
+                # Convert commented params to strings to avoid an error
+                if section == self.COMMENT_PARAMS_SECTNAME:
+                    value = str(value)
+                if '[' in value and ']' in value:
+                    value = value.strip('[]').split(', ')
+                    scan_params.append({'section': section, 'parameter': param, 'values': value, 'length': len(value)})
+        return scan_params
 
     def read_commented_params(self, comments):
         """
