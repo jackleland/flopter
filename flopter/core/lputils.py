@@ -19,6 +19,16 @@ class LangmuirProbe(ABC):
         A_coll = self.get_collection_area(alpha)
         return electron_density(sat_current, c_s, A_coll)
 
+    def get_d_density(self, sat_current, d_sat_current, temperature, d_temperature, alpha, gamma_i=1, mass=1):
+        c_s = sound_speed(temperature, gamma_i=gamma_i, mass=mass)
+        A_coll = self.get_collection_area(alpha)
+        n_e = electron_density(sat_current, c_s, A_coll)
+
+        d_c_s = d_sound_speed(c_s, temperature, d_temperature)
+        d_A_coll = np.abs(self.get_collection_area(alpha + np.radians(0.8)) - A_coll)
+
+        return d_electron_density(n_e, c_s, d_c_s, A_coll, d_A_coll, sat_current, d_sat_current)
+
 
 class AngledTipProbe(LangmuirProbe):
     def __init__(self, a, b, L, g, d_perp, theta_f, theta_p):
