@@ -1,6 +1,8 @@
 import functools as ft
 import matplotlib.pyplot as plt
 import collections as coll
+import contextlib
+import os
 
 
 def plotmethod(func):  # the decorator
@@ -9,25 +11,33 @@ def plotmethod(func):  # the decorator
     :param func:    Function to be decorated.
     :return:        Decorated function
     """
-    def wrapper(*args, style=None, show_fl=False, fig=None, ax_labels=None, ax_range=None, legend_fl=True, **kwargs):
+    @ft.wraps(func)
+    def wrapper(*args, style=None, show_fl=False, ax=None, ax_labels=None, ax_range=None, legend_fl=True, **kwargs):
         """
-        Wrapper for function which adds minimal plotting functionality of selecting a figure to plot on and then whether
-        to plt.show() or not.
-        :param style        (string) String of matplotlib style to be switched to for the duration of plotting. Default
-                            is no change.
-        :param fig:         The figure to be plotted - useful for when multiple plot functions need to be mixed together
-                            onto the same figure. Default is None, which will create a blank figure to plot onto.
-        :param ax_labels    (list - str) List of two strings, to be used as the x- and y-axis labels respectively.
-                            Default is not applied.
-        :param ax_range     (list - list - float) List of two float pairs, which are unpacked into the x- and y-axis
-                            limits (plt.xlim() etc.). Default is not applied.
-        :param legend_fl    (boolean) Flag to control whether the legend is shown. Default is True.
-        :param show_fl:     (boolean) Flag to control whether to run plt.show() after plotting. Default is False.
+        Wrapper for function which adds minimal plotting functionality of
+        selecting a figure to plot on and then whether to plt.show() or not.
+        :param style        (string) String of matplotlib style to be switched
+                            to for the duration of plotting. Default is no
+                            change.
+        :param ax:          The matplotlib axis object to be plotted on - useful
+                            for when multiple plot functions need to be mixed
+                            together onto the same figure. Default is None,
+                            which will create a blank figure to plot onto.
+        :param ax_labels    (list - str) List of two strings, to be used as
+                            the x- and y-axis labels respectively. Default is
+                            not applied.
+        :param ax_range     (list - float) List of two float pairs, which are
+                            unpacked into the x- and y-axis limits
+                            (plt.xlim() etc.). Default is not applied.
+        :param legend_fl    (boolean) Flag to control whether the legend is
+                            shown. Default is True.
+        :param show_fl:     (boolean) Flag to control whether to run plt.show()
+                            after plotting. Default is False.
         """
         if style is not None:
             plt.style.use(style)
 
-        if not fig:
+        if not ax:
             plt.figure()
 
         return_var = func(*args, **kwargs)
@@ -57,13 +67,17 @@ def printmethod(func):
     :param func:    Function to be decorated.
     :return:        Decorated function
     """
-    def wrapper(*args, print_fl=False, **kwargs):
+    def wrapper(*args, print_fl=True, **kwargs):
         """
         Wrapper for function which adds printing functionality.
-        :param print_fl:    (boolean) Flag to control whether to run print statement in function is executed. Default is
-                            False.
+        :param print_fl:    (boolean) Flag to control whether to run print
+                            statement in function is executed. Default is False.
         """
-        return_var = func(*args, **kwargs)
+        if not print_fl:
+            with open(os.devnull, "w") as f, contextlib.redirect_stdout(f):
+                return_var = func(*args, **kwargs)
+        else:
+            return_var = func(*args, **kwargs)
         return return_var
 
     return wrapper
