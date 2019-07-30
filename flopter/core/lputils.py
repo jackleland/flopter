@@ -6,12 +6,32 @@ from abc import ABC, abstractmethod
 
 
 class LangmuirProbe(ABC):
+    def __init__(self, g, d_perp):
+        self.g = g
+        self.d_perp = d_perp,
+
+    @abstractmethod
+    def is_angled(self):
+        pass
+
     @abstractmethod
     def get_collection_area(self, alpha):
         pass
 
     @abstractmethod
     def get_analytical_iv(self, voltage, v_f, alpha, temp, dens):
+        pass
+
+    @abstractmethod
+    def get_2d_probe_length(self):
+        pass
+
+    @abstractmethod
+    def get_2d_probe_height(self):
+        pass
+
+    @abstractmethod
+    def calc_exposed_lengths(self, alpha):
         pass
 
     def get_density(self, sat_current, temperature, alpha, gamma_i=1, mass=1):
@@ -32,13 +52,15 @@ class LangmuirProbe(ABC):
 
 class AngledTipProbe(LangmuirProbe):
     def __init__(self, a, b, L, g, d_perp, theta_f, theta_p):
+        super().__init__(g, d_perp)
         self.a = a
         self.b = b
         self.L = L
-        self.g = g
-        self.d_perp = d_perp
         self.theta_f = theta_f
         self.theta_p = theta_p
+
+    def is_angled(self):
+        return self.theta_p > 0
 
     def get_collection_area(self, alpha):
         return calc_probe_collection_area(self.a, self.b, self.L, self.g, self.d_perp, alpha, self.theta_p, self.theta_f)
@@ -47,12 +69,25 @@ class AngledTipProbe(LangmuirProbe):
         return analytical_iv_curve(voltage, v_f, temp, dens, alpha, self.get_collection_area(alpha), c_1=c_1, c_2=c_2,
                                    gamma_i=gamma_i, mass=mass, L=self.L, g=self.g, print_fl=print_fl)
 
+    def get_2d_probe_length(self):
+        return self.L
+
+    def get_2d_probe_height(self):
+        return self.L * np.tan(self.theta_p)
+
+    def calc_exposed_lengths(self, alpha):
+        return calc_probe_exposed_lengths(self.g, self.d_perp, alpha, self.theta_p)
+
 
 class FlushCylindricalProbe(LangmuirProbe):
     def __init__(self, radius, g, d_perp):
+        super().__init__(g, d_perp)
         self.radius = radius
         self.d_perp = d_perp
         self.g = g
+
+    def is_angled(self):
+        return False
 
     def get_collection_area(self, alpha):
         d = (self.d_perp / np.sin(alpha)) - self.g
@@ -63,6 +98,15 @@ class FlushCylindricalProbe(LangmuirProbe):
     def get_analytical_iv(self, voltage, v_f, alpha, temp, dens, mass=1, gamma_i=1.0, c_1=0.9, c_2=0.6, print_fl=False):
         analytical_iv_curve(voltage, v_f, temp, dens, alpha, self.get_collection_area(alpha), c_1=c_1, c_2=c_2,
                             gamma_i=gamma_i, mass=mass, L=(2 * self.radius), g=self.g, print_fl=print_fl)
+
+    def get_2d_probe_length(self):
+        return 2 * self.radius
+
+    def get_2d_probe_height(self):
+        return 0
+
+    def calc_exposed_lengths(self, alpha):
+        return calc_probe_exposed_lengths(self.g, self.d_perp, alpha, 0.0)
 
 
 def calc_probe_collection_area(a, b, L, g, d_perp, theta_perp, theta_p, theta_f, print_fl=False):
