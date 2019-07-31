@@ -143,11 +143,20 @@ class IVFitData(FitData2):
     def get_temp(self, errors_fl=False):
         return self.get_param(c.ELEC_TEMP, errors_fl)
 
+    def get_temp_err(self):
+        return self.get_param(c.ELEC_TEMP, True).error
+
     def get_isat(self, errors_fl=False):
         return self.get_param(c.ION_SAT, errors_fl)
 
+    def get_isat_err(self):
+        return self.get_param(c.ION_SAT, True).error
+
     def get_sheath_exp(self, errors_fl=False):
         return self.get_param(c.SHEATH_EXP, errors_fl)
+
+    def get_sheath_exp_err(self):
+        return self.get_param(c.SHEATH_EXP, True).error
 
     def get_floating_pot(self):
         return self.fitter.v_f
