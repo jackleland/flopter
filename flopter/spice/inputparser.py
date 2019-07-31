@@ -7,14 +7,16 @@ from flopter.core import constants as c
 
 class InputParser(ConfigParser):
     """
-    Subclass of ConfigParser, edited to parse SPICE input files which are sectioned by dollar signed headings.
+    Subclass of ConfigParser, edited to parse SPICE input files which are
+    sectioned by dollar signed headings.
 
     Also changes the default comment_prefixes to:
      - the exclamation mark (!) used in Spice input files
      - the '$end' marker used by Spice to denote the end of a section.
 
-    Supports reading in the commented parameters at the end of SPICE2 input files.
-    Can also read in a file upon initialisation, with the optional kwarg 'input_filename'
+    Supports reading in the commented parameters at the end of SPICE2 input
+    files. Can also read in a file upon initialisation, with the optional kwarg
+    'input_filename'
 
     Functions the same way as a config parser in all other ways.
     """
@@ -39,10 +41,11 @@ class InputParser(ConfigParser):
 
     def _read(self, fp, fpname):
         """
-        Override of the _read class. Changes how duplicate section headers are treated.
-        Expected duplicates are passed and the first section encountered is renamed to
-        itself with an appended 0 (e.g. rectangle0). All subsequent duplicates are appended
-        increasing numbers (e.g. rectangle1, rectangle2 etc.)
+        Override of the _read class. Changes how duplicate section headers are
+        treated. Expected duplicates are passed and the first section
+        encountered is renamed to itself with an appended 0 (e.g. rectangle0).
+        All subsequent duplicates are appended increasing numbers (e.g.
+        rectangle1, rectangle2 etc.)
 
 
         *** Original Documentation ***
@@ -195,7 +198,6 @@ class InputParser(ConfigParser):
         if section_name == self.COMMENT_PARAMS_SECTNAME:
             if self.end_comments is not None:
                 for comment in self.end_comments:
-                    print(comment)
                     if len(comment) > 0 and comment[0] == self._comment_prefixes[0]:
                         fp.write(f'{comment} \n')
             else:
@@ -239,7 +241,8 @@ class InputParser(ConfigParser):
 
     def has_commented_params(self):
         """
-        Method to check if parser has read in commented parameters by checking if the 'commented params' section exists
+        Method to check if parser has read in commented parameters by checking
+        if the 'commented params' section exists
 
         :return: Boolean stating if parameters have been read successfully
 
@@ -248,7 +251,8 @@ class InputParser(ConfigParser):
 
     def get_commented_params(self):
         """
-        Returns commented parameters if they have been read into the object, throws exception if not.
+        Returns commented parameters if they have been read into the object,
+        throws exception if not.
 
         :return: Dictionary containing commented parameters
 
@@ -300,9 +304,11 @@ class InputParser(ConfigParser):
 
     def read_commented_params(self, comments):
         """
-        Reads out the parameters from the end of a SPICE2 input file if they are embedded within comments.
+        Reads out the parameters from the end of a SPICE2 input file if they are
+        embedded within comments.
 
-        :param comments:    List of strings containing the commented parameters (in form '! T_e = 5.2e2 eV')
+        :param comments:    List of strings containing the commented parameters
+                            (in form '! T_e = 5.2e2 eV')
 
         :return:            Dictionary containing commented parameters
 
@@ -346,11 +352,12 @@ class InputParser(ConfigParser):
 
     def get_hist_diag_regions(self, species=2):
         """
-        Find the simulation coordinates of each diagnostic which is a histogram and return them as a dictionary of
-        lists.
+        Find the simulation coordinates of each diagnostic which is a histogram
+        and return them as a dictionary of lists.
 
-        :return: [list]     Dictionary of lists containing the coordinates of the diagnostic region. In the format
-                            {diag_name: [z_low, z_high, y_low, y_high], ... }
+        :return:    [list] Dictionary of lists containing the coordinates of
+                    the diagnostic region. In the format {diag_name: [z_low,
+                    z_high, y_low, y_high], ... }
         """
         diag_regions = {}
         species_diag_name = 'i' if species == 1 else 'e' if species == 2 else '' + c.DIAG_DIST_FUNCTION_HIST
@@ -372,11 +379,13 @@ class InputParser(ConfigParser):
 
     def get_probe_obj_indices(self):
         """
-        Returns the index (or indices if the probe is a compound shape) of the object within the simulation which is
-        acting as a probe i.e. has 'param1' set to 3. The indices can be used to reference the correct array in
-        objectscurrent, for example.
+        Returns the index (or indices if the probe is a compound shape) of the
+        object within the simulation which is acting as a probe i.e. has
+        'param1' set to 3. The indices can be used to reference the correct
+        array in objectscurrent, for example.
 
-        :return: [int]    Indices of probes in simulation object array, returned as a list.
+        :return: [int]  Indices of probes in simulation object array, returned
+                        as a list.
 
         """
         num_blocks_section = self[c.INF_SEC_SHAPES]
@@ -399,11 +408,13 @@ class InputParser(ConfigParser):
 
     def get_wall_obj_indices(self):
         """
-        Returns the index (or indices if using a compound shape) of the object within the simulation which is acting set
-        to have a floating potential i.e. has 'param1' set to 2. The indices can be used to reference the correct array
-        in objectscurrent, for example.
+        Returns the index (or indices if using a compound shape) of the object
+        within the simulation which is acting set to have a floating potential
+        i.e. has 'param1' set to 2. The indices can be used to reference the
+        correct array in objectscurrent, for example.
 
-        :return: [int]    Indices of floating potential walls in simulation object array, returned as a list.
+        :return: [int]  Indices of floating potential walls in simulation object
+                        array, returned as a list.
 
         """
         num_blocks_section = self[c.INF_SEC_SHAPES]
@@ -426,13 +437,15 @@ class InputParser(ConfigParser):
 
     def get_scaling_values(self, len_diag, len_builtin):
         """
-        Calculates the scaling values (n' and r) which are needed to extend the diagnostic outputs to the right length
-        and downsample them for homogenisation of SPICE IV sweeps
+        Calculates the scaling values (n' and r) which are needed to extend the
+        diagnostic outputs to the right length and downsample them for
+        homogenisation of SPICE IV sweeps
 
         :param len_diag:    length of raw diagnostic output array   (n)
         :param len_builtin: length of builtin output array          (M)
         :return n_leading:  size of array to prepend onto the diagnostic array
-        :return ratio:      ratio of extended diagnostic output array to builtin output array (e.g. objectscurrent):
+        :return ratio:      ratio of extended diagnostic output array to builtin
+                            output array (e.g. objectscurrent):
 
         """
         t_c = self.getfloat(c.INF_SEC_GEOMETRY, c.INF_TIME_SWEEP)
