@@ -6,6 +6,7 @@ import flopter.magnum.adcdata as md
 import flopter.core.ivdata as iv
 import pandas as pd
 import scipy.signal as sig
+import xarray as xr
 # import flopter.databases.magnum as mag
 import flopter.magnum.readfastadc as adc
 # from flopter.core.magopter import Magopter
@@ -114,9 +115,9 @@ class Magoptoffline(IVAnalyser):
 
         # Account for offset in ADC channels at lower sensitivity
         if self.shunt_resistance < 1.1:
-            adc_voltage_offset = 0.12
+            adc_voltage_offset = 0.116111
             adc_voltage_multiplier = 100
-            adc_current_offset = [0.06, 0.05]
+            adc_current_offset = [0.064491972847753478, 0.0496745709740604]
         else:
             adc_voltage_offset = 0.0
             adc_voltage_multiplier = 10
@@ -140,41 +141,41 @@ class Magoptoffline(IVAnalyser):
 
         self.filter(crit_ampl=crit_ampl, crit_freq=crit_freq, plot_fl=plot_fl)
 
+        # Use fourier decomposition from get_frequency method in triangle fitter to get frequency
+        triangle = f.TriangleWaveFitter()
+        frequency = triangle.get_frequency(self.raw_time, self.voltage[0], accepted_freqs=self._ACCEPTED_FREQS)
+
+        # Smooth the voltage to get a first read of the peaks on the triangle wave
+        smoothed_voltage = sig.savgol_filter(self.voltage[0], 21, 2)
+        top = sig.argrelmax(smoothed_voltage, order=100)[0]
+        bottom = sig.argrelmin(smoothed_voltage, order=100)[0]
+        _peaks = self.raw_time[np.concatenate([top, bottom])]
+        _peaks.sort()
+
+        # Get distances between the peaks and filter based on the found frequency
+        _peak_distances = np.diff(_peaks)
+        threshold = (1 / (2 * frequency)) - 0.001
+        _peaks_ind = np.where(_peak_distances > threshold)[0]
+
+        # Starting from the first filtered peak, arrange a period-spaced array
+        peaks_refined = np.arange(_peaks[_peaks_ind[0]], self.raw_time[-1], 1 / (2 * frequency))
+        self.peaks = peaks_refined
+
+        if plot_fl:
+            plt.figure()
+            plt.plot(self.raw_time, self.voltage[0])
+            plt.plot(self.raw_time, triangle.fit(self.raw_time, self.voltage[i]).fit_y)
+            for peak in self.peaks:
+                plt.axvline(x=peak, linestyle='dashed', linewidth=1, color='r')
+
+        if self.combine_sweeps_fl:
+            skip = 2
+            sweep_fitter = triangle
+        else:
+            skip = 1
+            sweep_fitter = f.StraightLineFitter()
+
         for i in range(self.coaxes):
-            # Use fourier decomposition from get_frequency method in triangle fitter to get frequency
-            triangle = f.TriangleWaveFitter()
-            frequency = triangle.get_frequency(self.raw_time, self.voltage[i], accepted_freqs=self._ACCEPTED_FREQS)
-
-            # Smooth the voltage to get a first read of the peaks on the triangle wave
-            smoothed_voltage = sig.savgol_filter(self.voltage[i], 21, 2)
-            top = sig.argrelmax(smoothed_voltage, order=100)[0]
-            bottom = sig.argrelmin(smoothed_voltage, order=100)[0]
-            _peaks = self.raw_time[np.concatenate([top, bottom])]
-            _peaks.sort()
-
-            # Get distances between the peaks and filter based on the found frequency
-            _peak_distances = np.diff(_peaks)
-            threshold = (1 / (2 * frequency)) - 0.001
-            _peaks_ind = np.where(_peak_distances > threshold)[0]
-
-            # Starting from the first filtered peak, arrange a period-spaced array
-            peaks_refined = np.arange(_peaks[_peaks_ind[0]], self.raw_time[-1], 1 / (2 * frequency))
-            self.peaks = peaks_refined
-
-            if plot_fl:
-                plt.figure()
-                plt.plot(self.raw_time, self.voltage[i])
-                plt.plot(self.raw_time, triangle.fit(self.raw_time, self.voltage[i]).fit_y)
-                for peak in self.peaks:
-                    plt.axvline(x=peak, linestyle='dashed', linewidth=1, color='r')
-
-            if self.combine_sweeps_fl:
-                skip = 2
-                sweep_fitter = triangle
-            else:
-                skip = 1
-                sweep_fitter = f.StraightLineFitter()
-
             # print('peaks_len = {}'.format(len(self.peaks) - skip))
             for j in range(len(self.peaks) - skip):
                 sweep_start = np.abs(self.raw_time - self.peaks[j]).argmin()
@@ -320,6 +321,73 @@ class Magoptoffline(IVAnalyser):
 
         if show_fl:
             plt.show()
+
+    def to_xarray(self, probe_designations):
+        return Magoptoffline.magopter_to_xarray(self, probe_designations)
+
+    @staticmethod
+    def magopter_to_xarray(magopter, probe_designations, print_fl=False):
+        # Create relative t array by subtracting the first timestep value from the first time array
+        first_time_arr = magopter.iv_arrs[1][0]['t']
+        second_time_arr = magopter.iv_arrs[0][0]['t']
+        if len(first_time_arr) > len(second_time_arr):
+            first_time_arr = second_time_arr
+
+        relative_t = np.zeros(len(first_time_arr))
+
+        sweep_length = np.shape(relative_t)[0] // 2
+        if print_fl:
+            print('Sweep length is {}'.format(sweep_length))
+
+        relative_t = first_time_arr - first_time_arr[0]
+
+        # create a list of datasets for each sweep
+        ds_probes = []
+
+        for i in range(len(magopter.iv_arrs)):
+            ds_list = []
+            for j, iv in enumerate(magopter.iv_arrs[i]):
+                if j % 2 == 0:
+                    ds = xr.Dataset({'voltage': (['time'], iv['V'][:sweep_length]),
+                                     'current': (['time'], iv['I'][:sweep_length]),
+                                     'shot_time': (['time'], iv['t'][:sweep_length]),
+                                     'start_time': iv['t'][0]},
+                                    coords={'time': relative_t[:sweep_length], 'direction': 'up',
+                                            'probe': probe_designations[i]})
+                else:
+                    ds = xr.Dataset({'voltage': (['time'], np.flip(iv['V'][:sweep_length])),
+                                     'current': (['time'], np.flip(iv['I'][:sweep_length])),
+                                     'shot_time': (['time'], np.flip(iv['t'][:sweep_length])),
+                                     'start_time': iv['t'][0]},
+                                    coords={'time': relative_t[:sweep_length], 'direction': 'down',
+                                            'probe': probe_designations[i]})
+                ds_list.append(ds)
+
+            # Separate into up and down sweeps then concat along sweep direction as an axis
+            if print_fl:
+                print('Before equalisation: ', len(ds_list), len(ds_list[::2]), len(ds_list[1::2]))
+
+            if len(ds_list[::2]) == len(ds_list[1::2]) + 1:
+                ds_ups = xr.concat(ds_list[:-2:2], 'sweep')
+            else:
+                ds_ups = xr.concat(ds_list[::2], 'sweep')
+            ds_downs = xr.concat(ds_list[1::2], 'sweep')
+
+            if print_fl:
+                print('After equalisation: ', len(ds_ups['sweep']), len(ds_downs['sweep']))
+
+            direction = xr.DataArray(np.array(['up', 'down']), dims=['direction'], name='direction')
+            ds_probes.append(xr.concat([ds_ups, ds_downs], dim=direction))
+
+        probe = xr.DataArray(np.array(probe_designations), dims=['probe'], name='probe')
+        min_sweep_number = np.min([len(ds_probes[0]['sweep']), len(ds_probes[1]['sweep'])])
+
+        ds_probes[0] = ds_probes[0].sel(sweep=slice(0, min_sweep_number))
+        ds_probes[1] = ds_probes[1].sel(sweep=slice(0, min_sweep_number))
+
+        ds_full = xr.concat(ds_probes, dim=probe)
+
+        return ds_full
 
     def filter(self, crit_freq=None, plot_fl=None, crit_ampl=None):
         """
