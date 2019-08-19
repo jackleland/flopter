@@ -24,8 +24,8 @@ SWEEP_RANGE = (0, 750)
 def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=None, probe_designations=PROBE_DESIGNATIONS,
                          shunt_resistance=10, cabling_resistance=2.0, sweep_range=SWEEP_RANGE, downsampling_factor=1):
 
-    # mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/external/magnum/'
-    mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/Magnum/adc_files/'
+    mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/external/magnum/'
+    # mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/Magnum/adc_files/'
     print('"{}" \t\t "{}"'.format(folder, adc_file))
 
     dsr = downsampling_factor
@@ -51,66 +51,10 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
         n_e_ts = 4.44e20
         d_n_e_ts = 0.01e20
 
-    # print length of the 0th probe's (probe S) number of sweeps
-    print(len(magopter.iv_arrs[1]))
-
-    # Create relative t array by subtracting the first timestep value from the first time array
-    first_time_arr = magopter.iv_arrs[1][0]['t']
-    second_time_arr = magopter.iv_arrs[0][0]['t']
-    if len(first_time_arr) > len(second_time_arr):
-        first_time_arr = second_time_arr
-
-    relative_t = np.zeros(len(first_time_arr))
-
-    sweep_length = np.shape(relative_t)[0] // 2
-    print('Sweep length is {}'.format(sweep_length))
-
-    relative_t = first_time_arr - first_time_arr[0]
-
-    # create a list of datasets for each sweep
-    ds_probes = []
-
-    for i in range(len(magopter.iv_arrs)):
-        ds_list = []
-        for j, iv in enumerate(magopter.iv_arrs[i]):
-            if j % 2 == 0:
-                ds = xr.Dataset({'voltage': (['time'], iv['V'][:sweep_length]),
-                                 'current': (['time'], iv['I'][:sweep_length]),
-                                 'shot_time': (['time'], iv['t'][:sweep_length]),
-                                 'start_time': iv['t'][0]},
-                                coords={'time': relative_t[:sweep_length], 'direction': 'up',
-                                        'probe': probe_designations[i]})
-            else:
-                ds = xr.Dataset({'voltage': (['time'], np.flip(iv['V'][:sweep_length])),
-                                 'current': (['time'], np.flip(iv['I'][:sweep_length])),
-                                 'shot_time': (['time'], np.flip(iv['t'][:sweep_length])),
-                                 'start_time': iv['t'][0]},
-                                coords={'time': relative_t[:sweep_length], 'direction': 'down',
-                                        'probe': probe_designations[i]})
-            ds_list.append(ds)
-
-        # Separate into up and down sweeps then concat along sweep direction as an axis
-        print('Before equalisation: ', len(ds_list), len(ds_list[::2]), len(ds_list[1::2]))
-        if len(ds_list[::2]) == len(ds_list[1::2]) + 1:
-            ds_ups = xr.concat(ds_list[:-2:2], 'sweep')
-        else:
-            ds_ups = xr.concat(ds_list[::2], 'sweep')
-        ds_downs = xr.concat(ds_list[1::2], 'sweep')
-        print('After equalisation: ', len(ds_ups['sweep']), len(ds_downs['sweep']))
-
-        direction = xr.DataArray(np.array(['up', 'down']), dims=['direction'], name='direction')
-        ds_probes.append(xr.concat([ds_ups, ds_downs], dim=direction))
-
-    probe = xr.DataArray(np.array(probe_designations), dims=['probe'], name='probe')
-    min_sweep_number = np.min([len(ds_probes[0]['sweep']), len(ds_probes[1]['sweep'])])
-
-    ds_probes[0] = ds_probes[0].sel(sweep=slice(0, min_sweep_number))
-    ds_probes[1] = ds_probes[1].sel(sweep=slice(0, min_sweep_number))
-
-    ds_full = xr.concat(ds_probes, dim=probe)
+    ds_full = magopter.to_xarray(probe_designations)
 
     cwd = os.getcwd()
-    os.chdir(mg.Magoptoffline.get_data_path() + 'analysed_1/')
+    os.chdir(mg.Magoptoffline.get_data_path() + 'analysed_3/')
     ds_full.to_netcdf(f'{output_tag}.nc')
 
     # Select the small probe
@@ -168,13 +112,13 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
 
     os.chdir(cwd)
 
-    del magopter, ds_full, ds_downs, ds_ups, ds_probes, ds_list, sweep_avg_up, sweep_avg_dn, sweep_avg_updn
+    del magopter, ds_full, sweep_avg_up, sweep_avg_dn, sweep_avg_updn
     import gc
     gc.collect()
 
 
-# os.chdir('/home/jleland/Data/external/magnum/')
-os.chdir('/home/jleland/Data/Magnum/adc_files/')
+os.chdir('/home/jleland/Data/external/magnum/')
+# os.chdir('/home/jleland/Data/Magnum/adc_files/')
 all_dataset = xr.open_dataset('all_meta_data.nc').max('ts_radial_pos')
 shot_numbers = all_dataset.where(np.isfinite(all_dataset['adc_index']), drop=True)['shot_number'].values
 shot_dataset = all_dataset.sel(shot_number=shot_numbers)
@@ -186,6 +130,8 @@ PROBE_RESISTANCES = {
     'B': 1.0,
     'R': 1.8
 }
+FEEDTHROUGH_RESISTANCE = 1.25
+INTERNAL_RESISTANCE = 6.09
 DESIRED_DATARATE = 10000
 COMMONLY_USED_SWEEP_TIME = 0.01
 
@@ -216,8 +162,9 @@ def aia_mapping_wrapper(shot_number):
         shunt_resistance = shot_dataarray['adc_4_shunt_resistance'].values
         # downsampling_factor = int(shot_dataarray['adc_freqs'].values / DESIRED_DATARATE)
         downsampling_factor = 1
-        cabling_resistance = (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'].values) - 1] + 1.2
-                              + PROBE_RESISTANCES[probe_designations[0]])
+        cabling_resistance = (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'].values) - 1] + FEEDTHROUGH_RESISTANCE
+                              + INTERNAL_RESISTANCE + PROBE_RESISTANCES[probe_designations[0]])
+
         sweep_range = get_sweep_range(shot_dataarray['shot_end_time'].values, shot_dataarray['adc_end_time'].values,
                                       shot_dataarray['acquisition_length'].values,
                                       shot_dataarray['adc_freqs'].values / downsampling_factor)
@@ -242,6 +189,6 @@ def multi_file_analysis(shots):
 
 
 if __name__ == '__main__':
-    multi_file_analysis(shot_numbers)
+    # multi_file_analysis(shot_numbers)
     # aia_mapping_wrapper(shot_numbers[0])
-    # aia_mapping_wrapper(157)
+    aia_mapping_wrapper(157)
