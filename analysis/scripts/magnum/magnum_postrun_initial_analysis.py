@@ -24,8 +24,8 @@ SWEEP_RANGE = (0, 750)
 def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=None, probe_designations=PROBE_DESIGNATIONS,
                          shunt_resistance=10, cabling_resistance=2.0, sweep_range=SWEEP_RANGE, downsampling_factor=1):
 
-    mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/external/magnum/'
-    # mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/Magnum/adc_files/'
+    # mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/external/magnum/'
+    mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/Magnum/adc_files/'
     print('"{}" \t\t "{}"'.format(folder, adc_file))
 
     dsr = downsampling_factor
@@ -54,7 +54,7 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
     ds_full = magopter.to_xarray(probe_designations)
 
     cwd = os.getcwd()
-    os.chdir(mg.Magoptoffline.get_data_path() + 'analysed_3/')
+    os.chdir(mg.Magoptoffline.get_data_path() + 'analysed_3_downsampled/')
     ds_full.to_netcdf(f'{output_tag}.nc')
 
     # Select the small probe
@@ -117,8 +117,8 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
     gc.collect()
 
 
-os.chdir('/home/jleland/Data/external/magnum/')
-# os.chdir('/home/jleland/Data/Magnum/adc_files/')
+# os.chdir('/home/jleland/Data/external/magnum/')
+os.chdir('/home/jleland/Data/Magnum/adc_files/')
 all_dataset = xr.open_dataset('all_meta_data.nc').max('ts_radial_pos')
 shot_numbers = all_dataset.where(np.isfinite(all_dataset['adc_index']), drop=True)['shot_number'].values
 shot_dataset = all_dataset.sel(shot_number=shot_numbers)
@@ -160,8 +160,8 @@ def aia_mapping_wrapper(shot_number):
         ts_dens = shot_dataarray['ts_dens_max'].values
         probe_designations = (str(shot_dataarray['adc_4_probe'].values), str(shot_dataarray['adc_5_probe'].values))
         shunt_resistance = shot_dataarray['adc_4_shunt_resistance'].values
-        # downsampling_factor = int(shot_dataarray['adc_freqs'].values / DESIRED_DATARATE)
-        downsampling_factor = 1
+        downsampling_factor = int(shot_dataarray['adc_freqs'].values / DESIRED_DATARATE)
+        # downsampling_factor = 1
         cabling_resistance = (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'].values) - 1] + FEEDTHROUGH_RESISTANCE
                               + INTERNAL_RESISTANCE + PROBE_RESISTANCES[probe_designations[0]])
 
@@ -189,6 +189,6 @@ def multi_file_analysis(shots):
 
 
 if __name__ == '__main__':
-    # multi_file_analysis(shot_numbers)
+    multi_file_analysis(shot_numbers)
     # aia_mapping_wrapper(shot_numbers[0])
-    aia_mapping_wrapper(157)
+    # aia_mapping_wrapper(157)
