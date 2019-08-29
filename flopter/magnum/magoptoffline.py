@@ -141,42 +141,41 @@ class Magoptoffline(IVAnalyser):
 
         self.filter(crit_ampl=crit_ampl, crit_freq=crit_freq, plot_fl=plot_fl)
 
-        # Use fourier decomposition from get_frequency method in triangle fitter to get frequency
-        triangle = f.TriangleWaveFitter()
-        frequency = triangle.get_frequency(self.raw_time, self.voltage[0], accepted_freqs=self._ACCEPTED_FREQS)
-
-        # Smooth the voltage to get a first read of the peaks on the triangle wave
-        smoothed_voltage = sig.savgol_filter(self.voltage[0], 21, 2)
-        top = sig.argrelmax(smoothed_voltage, order=100)[0]
-        bottom = sig.argrelmin(smoothed_voltage, order=100)[0]
-        _peaks = self.raw_time[np.concatenate([top, bottom])]
-        _peaks.sort()
-
-        # Get distances between the peaks and filter based on the found frequency
-        _peak_distances = np.diff(_peaks)
-        threshold = (1 / (2 * frequency)) - 0.001
-        _peaks_ind = np.where(_peak_distances > threshold)[0]
-
-        # Starting from the first filtered peak, arrange a period-spaced array
-        peaks_refined = np.arange(_peaks[_peaks_ind[0]], self.raw_time[-1], 1 / (2 * frequency))
-        self.peaks = peaks_refined
-
-        if plot_fl:
-            plt.figure()
-            plt.plot(self.raw_time, self.voltage[0])
-            plt.plot(self.raw_time, triangle.fit(self.raw_time, self.voltage[i]).fit_y)
-            for peak in self.peaks:
-                plt.axvline(x=peak, linestyle='dashed', linewidth=1, color='r')
-
-        if self.combine_sweeps_fl:
-            skip = 2
-            sweep_fitter = triangle
-        else:
-            skip = 1
-            sweep_fitter = f.StraightLineFitter()
-
         for i in range(self.coaxes):
-            # print('peaks_len = {}'.format(len(self.peaks) - skip))
+            # Use fourier decomposition from get_frequency method in triangle fitter to get frequency
+            triangle = f.TriangleWaveFitter()
+            frequency = triangle.get_frequency(self.raw_time, self.voltage[0], accepted_freqs=self._ACCEPTED_FREQS)
+
+            # Smooth the voltage to get a first read of the peaks on the triangle wave
+            smoothed_voltage = sig.savgol_filter(self.voltage[i], 21, 2)
+            top = sig.argrelmax(smoothed_voltage, order=100)[0]
+            bottom = sig.argrelmin(smoothed_voltage, order=100)[0]
+            _peaks = self.raw_time[np.concatenate([top, bottom])]
+            _peaks.sort()
+
+            # Get distances between the peaks and filter based on the found frequency
+            _peak_distances = np.diff(_peaks)
+            threshold = (1 / (2 * frequency)) - 0.001
+            _peaks_ind = np.where(_peak_distances > threshold)[0]
+
+            # Starting from the first filtered peak, arrange a period-spaced array
+            peaks_refined = np.arange(_peaks[_peaks_ind[0]], self.raw_time[-1], 1 / (2 * frequency))
+            self.peaks = peaks_refined
+
+            if plot_fl:
+                plt.figure()
+                plt.plot(self.raw_time, self.voltage[i])
+                plt.plot(self.raw_time, triangle.fit(self.raw_time, self.voltage[i]).fit_y)
+                for peak in self.peaks:
+                    plt.axvline(x=peak, linestyle='dashed', linewidth=1, color='r')
+
+            if self.combine_sweeps_fl:
+                skip = 2
+                sweep_fitter = triangle
+            else:
+                skip = 1
+                sweep_fitter = f.StraightLineFitter()
+
             for j in range(len(self.peaks) - skip):
                 sweep_start = np.abs(self.raw_time - self.peaks[j]).argmin()
                 sweep_stop = np.abs(self.raw_time - self.peaks[j + skip]).argmin()
