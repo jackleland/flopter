@@ -1,0 +1,158 @@
+$plasma
+	ksi = 60.93515
+	tau = 1
+	mu = 900
+	p0 = 0
+	pl = 0
+	alpha_xz = 90.0d0
+	alpha_yz = 0
+$end
+
+$geom
+	ly = 1000
+	lz = 500
+	dy = 1
+	dz = 1
+	lz_low = 0
+	lz_high = 500
+	ta = 2.5
+	tc = 2.0
+	tp = 3
+	npc = 20
+	npts_ratio = 1
+	scenario = 1
+	automatic_ta = 0
+$end
+
+$control
+	time_diag = .true.
+	relax = .false.
+	psolver = 2
+	diag_ntimes = 10000
+	dump_period = 500
+	pot_smoothing = 0
+	history_ntimes = 1000
+	ang_diag = .false.
+	ang_bin = 10
+	potdebug = 0
+	pert_pot_file = ''
+$end
+
+$optional
+	param1 = 0
+	param2 = 0
+	param3 = 2
+	param4 = 100
+	param5 = ''
+$end
+
+$mks
+	mks_n0 = 6.85395e+18
+	mks_te = 6
+	mks_b = 0.4134223
+	mks_main_ion_q = 1
+	mks_main_ion_m = 1
+	mks_par1 = 0
+	mks_par2 = 0
+	mks_par3 = 0
+$end
+
+$domaindecomp
+	no_slices_z = 2
+	no_slices_y = 4
+$end
+
+$num_blocks
+	rectangles = 2
+	triangles = 0
+	circles = 0
+	shape1 = 0
+	shape2 = 0
+	shape3 = 0
+$end
+
+$rectangle
+	name = 'left-bulk'
+	group = 1
+	ylow = 0
+	zlow = 0
+	yhigh = 40
+	zhigh = 40
+	pot = -3
+	enable_erosion = 0
+	negative = .false.
+	param1 = 0
+	param2 = 0
+	param3 = 0
+$end
+
+$rectangle
+	name = 'right-bulk'
+	group = 0
+	ylow = 60
+	zlow = 0
+	yhigh = 100
+	zhigh = 40
+	pot = -3
+	enable_erosion = 0
+	negative = .false.
+	param1 = 0
+	param2 = 0
+	param3 = 0
+$end
+
+$num_spec
+	no_species = 2
+$end
+
+$specie
+	name = 'hydrogen'
+	t = 1
+	m = 1
+	q = 1
+	w = 1
+	mpi_rank = 0
+	motion_method = 0
+	mono = .false.
+	umono = 0
+	injection_file = 'DF/fu_iz_TAU10.dat'
+	injection_method = 0
+	injection_rate_relative = .true.
+	injection_rate = 1.0
+	flow_diag = .true.
+	track_positions = .false.
+	track_velocity = .false.
+	erode_prob = 0
+	se_prob = 0
+$end
+
+$specie
+	name = 'electrons-top'
+	t = 1
+	m = 0.0005555556
+	q = -1
+	w = 1
+	mpi_rank = 0
+	motion_method = 0
+	mono = .false.
+	umono = 0
+	injection_file = 'fu_ez.dat'
+	injection_method = 0
+	injection_rate_relative = .true.
+	injection_rate = 0.5
+	flow_diag = .true.
+	track_positions = .false.
+	track_velocity = .false.
+	erode_prob = 0
+	se_prob = 0
+$end
+
+$num_diag_regions
+	no_diag_reg = 0
+$end
+
+! Plasma Parameters: 
+! n_e       = 6.85395e18    m^-3 
+! T_e       = 6             eV 
+! B         = 0.4134223     T 
+! L_probe   = 2.379524      mm 
