@@ -27,7 +27,7 @@ def preprocess_average(ds):
 
 
 # Create analysed dataset metadata
-path_to_datasets = '/home/jleland/Data/adc_files/'
+path_to_datasets = '/home/jleland/Data/Magnum/adc_files/'
 # path_to_analysed_datasets = 'analysed_2'
 path_to_analysed_datasets = 'analysed_3'
 # path_to_analysed_datasets = 'analysed_3_downsampled'
