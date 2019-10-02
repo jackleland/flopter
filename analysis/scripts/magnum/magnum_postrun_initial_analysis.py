@@ -20,12 +20,17 @@ FOLDERS = ('2019-05-28_Leland/',
 PROBE_DESIGNATIONS = ('S', 'L')
 SWEEP_RANGE = (0, 750)
 
+# OUTPUT_DIRECTORY = 'analysed_3_downsampled/'
+OUTPUT_DIRECTORY = 'test/'
+DATA_DIRECTORY = '/Data/Magnum/adc_files/'
+if not os.path.exists(DATA_DIRECTORY):
+    DATA_DIRECTORY = '/Data/external/magnum/'
+
 
 def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=None, probe_designations=PROBE_DESIGNATIONS,
                          shunt_resistance=10, cabling_resistance=2.0, sweep_range=SWEEP_RANGE, downsampling_factor=1):
 
-    # mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/external/magnum/'
-    mg.Magoptoffline._FOLDER_STRUCTURE = '/Data/Magnum/adc_files/'
+    mg.Magoptoffline._FOLDER_STRUCTURE = DATA_DIRECTORY
     print('"{}" \t\t "{}"'.format(folder, adc_file))
 
     dsr = downsampling_factor
@@ -40,21 +45,10 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
 
     print('0: {}, 1: {}'.format(len(magopter.iv_arrs[0]), len(magopter.iv_arrs[1])))
 
-    if ts_dens is not None and ts_temp is not None:
-        T_e_ts = ts_temp
-        d_T_e_ts = ts_temp * 0.01
-        n_e_ts = ts_dens
-        d_n_e_ts = ts_dens * 0.01
-    else:
-        T_e_ts = 1.12
-        d_T_e_ts = 0.01
-        n_e_ts = 4.44e20
-        d_n_e_ts = 0.01e20
-
     ds_full = magopter.to_xarray(probe_designations)
 
     cwd = os.getcwd()
-    os.chdir(mg.Magoptoffline.get_data_path() + 'analysed_3_downsampled/')
+    os.chdir(mg.Magoptoffline.get_data_path() + OUTPUT_DIRECTORY)
     ds_full.to_netcdf(f'{output_tag}.nc')
 
     # Select the small probe
@@ -117,8 +111,7 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
     gc.collect()
 
 
-# os.chdir('/home/jleland/Data/external/magnum/')
-os.chdir('/home/jleland/Data/Magnum/adc_files/')
+os.chdir('/home/jleland/' + DATA_DIRECTORY)
 all_dataset = xr.open_dataset('all_meta_data.nc').max('ts_radial_pos')
 shot_numbers = all_dataset.where(np.isfinite(all_dataset['adc_index']), drop=True)['shot_number'].values
 shot_dataset = all_dataset.sel(shot_number=shot_numbers)
@@ -160,8 +153,8 @@ def aia_mapping_wrapper(shot_number):
         ts_dens = shot_dataarray['ts_dens_max'].values
         probe_designations = (str(shot_dataarray['adc_4_probe'].values), str(shot_dataarray['adc_5_probe'].values))
         shunt_resistance = shot_dataarray['adc_4_shunt_resistance'].values
-        downsampling_factor = int(shot_dataarray['adc_freqs'].values / DESIRED_DATARATE)
-        # downsampling_factor = 1
+        # downsampling_factor = int(shot_dataarray['adc_freqs'].values / DESIRED_DATARATE)
+        downsampling_factor = 1
         cabling_resistance = (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'].values) - 1] + FEEDTHROUGH_RESISTANCE
                               + INTERNAL_RESISTANCE + PROBE_RESISTANCES[probe_designations[0]])
 
@@ -184,11 +177,13 @@ def multi_file_analysis(shots):
     print('\nRunning multi-file analysis. Analysing {} shot(s).\n'.format(len(shots)))
 
     # Execute fitting and saving of files concurrently
-    with cf.ProcessPoolExecutor() as executor:
+    with cf.ProcessPoolExecutor(max_workers=2) as executor:
         executor.map(aia_mapping_wrapper, shots)
 
 
 if __name__ == '__main__':
-    multi_file_analysis(shot_numbers)
+    test_shots = [215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 370, 371, 395, 399, 400, 401, 402, 404, 405, 406, 407, 409, 410, 411, 412, 413, 414, 415, 416, 423, 424, 432, 433, 434, 435, 436, 438, 439, 440, 441, 442, 443, 444, 445, 446, 447, 448, 449, 450, 451]
+    multi_file_analysis(test_shots)
+    # multi_file_analysis(shot_numbers)
     # aia_mapping_wrapper(shot_numbers[0])
     # aia_mapping_wrapper(157)
