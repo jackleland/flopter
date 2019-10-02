@@ -158,8 +158,11 @@ class IVFitData(FitData2):
     def get_sheath_exp_err(self):
         return self.get_param(c.SHEATH_EXP, True).error
 
-    def get_floating_pot(self):
-        return self.fitter.v_f
+    def get_floating_pot(self, errors_fl=False):
+        return self.get_param(c.FLOAT_POT, errors_fl)
+
+    def get_floating_pot_err(self):
+        return self.get_param(c.FLOAT_POT, True).error
 
     @classmethod
     def from_fit_data(cls, fit_data_instance):
