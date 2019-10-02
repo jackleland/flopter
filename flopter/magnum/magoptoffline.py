@@ -321,8 +321,8 @@ class Magoptoffline(IVAnalyser):
         if show_fl:
             plt.show()
 
-    def to_xarray(self, probe_designations):
-        return Magoptoffline.magopter_to_xarray(self, probe_designations)
+    def to_xarray(self, probe_designations, print_fl=False):
+        return Magoptoffline.magopter_to_xarray(self, probe_designations, print_fl=print_fl)
 
     @staticmethod
     def magopter_to_xarray(magopter, probe_designations, print_fl=False):
