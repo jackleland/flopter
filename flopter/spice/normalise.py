@@ -42,7 +42,7 @@ class Denormaliser(Converter):
         else:
             raise ValueError('Number of dimensions should be 2 or 3')
 
-        self.dt = dt
+        self.dt = np.squeeze(dt)
 
         # Save parameters from commented params
         self.simulation_params = parser.get_commented_params()
@@ -112,13 +112,13 @@ class Denormaliser(Converter):
         return self.simulation_params[c.ELEC_DENS] * self.debye_length * self.omega_i * flux
 
     def _convert_iv_data(self, iv_data):
-        time = self._convert_time(iv_data[c.TIME])
-        potential = self._convert_potential(iv_data[c.POTENTIAL])
-        current = self._convert_current(iv_data[c.CURRENT])
-        current_e = self._convert_current(iv_data[c.ELEC_CURRENT])
-        current_i = self._convert_current(iv_data[c.ION_CURRENT])
+        iv_data[c.TIME] = self._convert_time(iv_data[c.TIME])
+        iv_data[c.POTENTIAL] = self._convert_potential(iv_data[c.POTENTIAL])
+        iv_data[c.CURRENT] = self._convert_current(iv_data[c.CURRENT])
+        iv_data[c.ELEC_CURRENT] = self._convert_current(iv_data[c.ELEC_CURRENT])
+        iv_data[c.ION_CURRENT] = self._convert_current(iv_data[c.ION_CURRENT])
 
-        return IVData(potential, current, time, i_current=current_i, e_current=current_e)
+        return iv_data
 
     def _convert_distribution_function(self, dist_function):
         conversion_factor = np.sqrt(self.temperature / DEUTERIUM_MASS) / self.ksi * np.sqrt(200 / self.mu)
