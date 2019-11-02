@@ -49,8 +49,8 @@ def run_gap_nogap_comparison():
     splopter_gap = spl.Splopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullgap/', prepare=False)
     splopter_nogap = spl.Splopter('bin/data/', 'benchmarking_sam/', 'prebprobe_fullnogap/', prepare=False)
 
-    splopter_gap.prepare(make_denormaliser=False)
-    splopter_nogap.prepare(make_denormaliser=False)
+    splopter_gap.prepare(denormaliser_fl=False)
+    splopter_nogap.prepare(denormaliser_fl=False)
 
     ivdata_g = splopter_gap.trim()
     ivdata_ng = splopter_nogap.trim()
@@ -306,7 +306,7 @@ def get_hist_index(hist_name, parser):
 def run_spice_df_analysis(splopter, fig=None, show=False):
     assert isinstance(splopter, spl.Splopter)
 
-    splopter.prepare(homogenise=False, make_denormaliser=True)
+    splopter.prepare(homogenise_fl=False, denormaliser_fl=True)
 
     tdata = splopter.tdata
     print(splopter.tdata.diagnostics.keys())
@@ -531,7 +531,7 @@ def run_multi_hist_analysis(splopter=None, species=2, fitter=None, show_fl=False
 def injection_dist_function(gauss_fl=True, show_fl=True):
     splopter = spl.Splopter('bin/data_local/', 'tests/', 'injtestperp_halfnogap2/')
     # splopter = spl.Flopter('bin/data_local/', 'tests/', 'injtest_halfnogap1/')
-    splopter.prepare(homogenise=False)
+    splopter.prepare(homogenise_fl=False)
     v_scale = 1000
 
     i_inj_path = splopter.afile_path.replace('.mat', '.i_inj')
@@ -730,7 +730,7 @@ if __name__ == '__main__':
     # splopter.plot_1d_variable(variable_label=sd.NZ)
 
     # extract_density(splopter)
-    splopter.prepare(homogenise=True, make_denormaliser=False)
+    splopter.prepare(homogenise_fl=True, denormaliser_fl=False)
     regions = splopter.parser.get_hist_diag_regions(2)
     # run_multi_hist_analysis(regions=regions, splopter=splopter, show_fl=True, species=2)
     # run_gap_nogap_comparison()

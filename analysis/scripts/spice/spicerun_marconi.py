@@ -9,7 +9,7 @@ if __name__ == '__main__':
 
     splopters = [spl_t0_old, spl_t0, spl_t2, spl_t10]
     for splopter in splopters:
-        splopter.prepare(homogenise=True, make_denormaliser=False)
+        splopter.prepare(homogenise_fl=True, denormaliser_fl=False)
         plt.figure()
         splopter.plot_raw()
 

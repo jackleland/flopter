@@ -1,5 +1,6 @@
 import glob
 import os
+import pathlib as pth
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,85 +15,83 @@ from flopter.core.fitters import IVFitter, FullIVFitter, GaussianFitter
 from flopter.spice.homogenise import Spice2Homogeniser
 from flopter.spice.inputparser import InputParser
 from flopter.spice.normalise import Denormaliser
+import flopter.spice.utils as ut
 import flopter.spice.tdata as sd
 
 
 class Splopter(IVAnalyser):
     """
-        Implementation of IVAnalyser for the analysis of probe data from SPICE
+    Implementation of IVAnalyser for the analysis of probe data from SPICE.
+    Works on the same workflow of create, prepare, fit, plot, save.
     """
-    _tfile_prefix = 't-'
-    _file_suffix = '.mat'
-    _dump_suffix = '.2d.'
+    TFILE_PREFIX = 't-'
+    SPICE_EXTENSION = '.mat'
+    DUMP_SUFFIX = '.2d.'
 
-    def __init__(self, data_mount_dir, group_name, folder_name, run_name=None, prepare=False, reduce_fl=False):
-        ##################################
-        #             Extract            #
-        ##################################
+    DEFAULT_SPICE_REPO = pth.Path.home() / 'Spice' / 'spice2'
 
-        # Constants(ish)
-        spice_dir = '/home/jleland/Spice/spice2/'
-        input_dir = spice_dir + 'bin/inputs/'
-        script_dir = spice_dir + 'bin/scripts/'
+    def __init__(self, spice_data_dir, run_name=None, reduce=False):
+        self.data_dir = pth.Path(spice_data_dir)
 
-        # # Run specific data
-        # data_mount_dir = 'bin/data/'
-        # group_name = 'benchmarking_sam/'
-        # folder_name = 'gapless_fullgrid/'
-        # data_dir = spice_dir + data_mount_dir + group_name + folder_name
+        if not self.is_code_output_dir(self.data_dir):
+            print('Spice data directory is not valid, attempting to auto-fix.')
+            self.data_dir = self.DEFAULT_SPICE_REPO / self.data_dir
+            if not self.is_code_output_dir(self.data_dir):
+                raise ValueError(f'Passed Spice directory ({spice_data_dir}) is not valid.')
 
-        # ------------------- Run specific data ------------------- #
+        # Make list of backup folders made for this simulation, if any
+        self.backup_folders = [] + list(self.data_dir.glob('backup_*'))
+        self.backup_folders.sort()
 
-        # Cumulus
-        # data_mount_dir = 'bin/data/'
-        # group_name = 'tests/'
-        # folder_name = 'fullgridtest/'         # gapped fullgrid
-        # folder_name = 'reversed_charge/'
-        # folder_name = 'prebiased_probe/'
+        self.input_filename = self.data_dir / 'input.inp'
+        if not self.input_filename.exists():
+            self.input_filename = list(self.data_dir.glob('*.inp'))[0]
 
-        # group_name = 'benchmarking_sam/'
-        # folder_name = 'gapless_fullgrid/'
-        # folder_name = 'gapless_halfgrid1/'
-        # folder_name = 'gapless_halfgrid2/'
-        # folder_name = 'nogaphalfgrid_tlong1/'
-        # folder_name = 'prebprobe_fullgap/'
-        # folder_name = 'prebprobe_fullnogap/'
-
-        # Freia
-        # data_mount_dir = 'bin/data_f/'
-        # group_name = 'rundata'
-        # folder/name '6-s-halfgrid'
-
-        self.data_dir = spice_dir + data_mount_dir + group_name + folder_name
-
-        # input_filename = input_dir + 'jleland.3.inp'
-        # input_filename = input_dir + 'jleland.2.inp'
-        # input_filename = data_dir + 's_benchmarking_nogap.inp'
-        # input_filename = data_dir + 'reversede_ng_hg_sbm.inp'
-        # input_filename = data_dir + 'prebiasprobe_ng_hg_sbm.inp'
-        self.input_filename = self.data_dir + 'input.inp'
-
-        # This appears to be in mostly for backwards compatibility with older SPICE runs
+        # This is still in mostly for backwards compatibility with older SPICE runs
         if not run_name:
             self.tfile_path, self.afile_path = self.get_ta_filenames(self.data_dir)
         else:
             run_name_short = run_name[:-2]
-            trun_name = '{a}{b}'.format(a=self._tfile_prefix, b=run_name_short)
-            self.tfile_path = self.data_dir + trun_name + self._file_suffix
-            self.afile_path = self.data_dir + run_name + self._file_suffix
+            trun_name = '{a}{b}'.format(a=self.TFILE_PREFIX, b=run_name_short)
+            self.tfile_path = trun_name + self.SPICE_EXTENSION
+            self.afile_path = run_name + self.SPICE_EXTENSION
 
         if self.tfile_path:
-            if not run_name:
-                self.tfile_path = self.data_dir + self.tfile_path
-            self.tdata = sd.Spice2TData(self.tfile_path, deallocate=reduce_fl)
-            if reduce_fl:
+            tfile_path = self.data_dir / self.tfile_path
+            t = loadmat(tfile_path, variable_names=[sd.T])[sd.T]
+            if np.mean(t) == 0.0:
+                print(f'WARNING: Encountered t-zeroing in {tfile_path}')
+                if len(self.backup_folders) > 0:
+                    print('Looking for a suitable backup to use instead.')
+                    found_backup_fl = False
+                    for backup_data_dir in self.backup_folders:
+                        assert self.is_code_output_dir(backup_data_dir)
+                        backup_tfile_path, backup_afile_path = self.get_ta_filenames(backup_data_dir)
+                        tfile_path = backup_data_dir / backup_tfile_path
+                        t = loadmat(tfile_path, variable_names=[sd.T])[sd.T]
+                        if np.mean(t) != 0.0:
+                            found_backup_fl = True
+                            break
+                    if found_backup_fl:
+                        print(f'Useable backup found at {tfile_path}')
+                    else:
+                        print(f'No usable backups found, reverting to t-zeroing parent folder... \n'
+                              f'Carrying on but expect erroneous results.')
+                        tfile_path = self.data_dir / self.tfile_path
+                else:
+                    print('There are no backups to utilise. Carrying on, but expect erroneous results.')
+
+            self.tfile_path = tfile_path
+            if reduce is True:
+                self.tdata = sd.Spice2TData(self.tfile_path, deallocate=reduce)
                 self.tdata.reduce(sd.DEFAULT_REDUCED_DATASET)
+            else:
+                self.tdata = sd.Spice2TData(self.tfile_path, variable_names=reduce)
         else:
-            raise ValueError('No t-file given')
+            raise ValueError('No t-file found in directory')
 
         if self.afile_path:
-            if not run_name:
-                self.afile_path = self.data_dir + self.afile_path
+            self.afile_path = self.data_dir / self.afile_path
             self.afile = loadmat(self.afile_path)
         else:
             print('No a-file given, continuing without')
@@ -104,51 +103,62 @@ class Splopter(IVAnalyser):
         self.iv_data = None
         self.raw_data = None
 
-        if prepare:
-            self.prepare()
-
-    def prepare(self, homogenise=True, make_denormaliser=True):
+    def prepare(self, homogenise_fl=True, denormaliser_fl=True, find_se_temp_fl=True):
         """
-            Check existence of, and then populate, the main flopter objects: inputparser, denormaliser and homogeniser.
+            Check existence of, and then populate, the main flopter objects:
+            inputparser, denormaliser and homogeniser.
 
-            Default behaviour is to populate all, mandatory behaviour is only to create input parser. Homogeniser and
-            Denormaliser creation is controlled through the boolean input flags. Note that specifying the
-            make_denormaliser flag does not automatically denormalise all data, it merely populates the denormaliser
-            object.
+            Default behaviour is to populate all, mandatory behaviour is only to
+            create input parser. Homogeniser and Denormaliser creation is
+            controlled through the appropriate boolean kwargs. Specifying
+            denormaliser_fl does not automatically denormalise all data,
+            it merely initialises the denormaliser object.
+
         """
         if not self.parser:
             self.parser = InputParser(input_filename=self.input_filename)
 
-        if make_denormaliser and not self.denormaliser:
+        if denormaliser_fl and not self.denormaliser:
             self.denormaliser = Denormaliser(dt=self.tdata.dt, input_parser=self.parser)
-            ratio = self.find_se_temp_ratio()
+            if find_se_temp_fl:
+                ratio = self.find_se_temp_ratio()
+            else:
+                ratio = 1.0
             self.denormaliser.set_se_temperature(ratio)
             self.tdata.converter = self.denormaliser
-        elif make_denormaliser and self.denormaliser is not None:
+        elif denormaliser_fl and self.denormaliser is not None:
             print('Cannot make_denormaliser, data has already been denormalised!')
 
-        if homogenise and not self.homogeniser:
+        if homogenise_fl and not self.homogeniser:
             self.homogeniser = Spice2Homogeniser(data=self.tdata, input_parser=self.parser)
             self.iv_data, self.raw_data = self.homogeniser.homogenise()
-        elif homogenise and self.homogeniser is not None:
+        elif homogenise_fl and self.homogeniser is not None and self.iv_data is not None and self.raw_data is not None:
             print('Cannot homogenise, data has already been homogenised!')
 
     @classmethod
     def get_ta_filenames(cls, directory):
-        # TODO: Update this to work with Paths
+        if not isinstance(directory, pth.Path) and isinstance(directory, str):
+            directory = pth.Path(directory)
+        elif not isinstance(directory, pth.Path):
+            raise ValueError(f'Argument directory ({directory}) is not valid for this operation.')
+
         cwd = os.getcwd()
-        if os.path.exists(directory):
+        if directory.exists():
             os.chdir(directory)
         else:
             raise OSError('Directory \'{}\' invlaid.'.format(directory))
-        tfile_all_glob_str = '{}*{}'.format(cls._tfile_prefix, cls._file_suffix)
-        tfile_num_glob_str = '{}*[0-9][0-9]{}'.format(cls._tfile_prefix, cls._file_suffix)
+        tfile_all_glob_str = '{}*{}'.format(cls.TFILE_PREFIX, cls.SPICE_EXTENSION)
+        tfile_num_glob_str = '{}*[0-9][0-9]{}'.format(cls.TFILE_PREFIX, cls.SPICE_EXTENSION)
         all_tfiles = glob.glob(tfile_all_glob_str)
         numbered_tfiles = glob.glob(tfile_num_glob_str)
         tfile_name = [tfile for tfile in all_tfiles if tfile not in numbered_tfiles]
-        afile_name = glob.glob('[!{}]*[!0-9][!{}]{}'.format(cls._tfile_prefix, cls._dump_suffix, cls._file_suffix))
+        afile_name = glob.glob('[!{}]*[!0-9][!{}]{}'.format(cls.TFILE_PREFIX, cls.DUMP_SUFFIX, cls.SPICE_EXTENSION))
         os.chdir(cwd)
         return next(iter(tfile_name), None), next(iter(afile_name), None)
+
+    @staticmethod
+    def is_code_output_dir(directory):
+        return ut.is_code_output_dir(directory)
 
 ##################################
 #            Trimming            #
@@ -158,7 +168,7 @@ class Splopter(IVAnalyser):
             iv_data = self.iv_data
         elif not self.iv_data:
             print('self.iv_data not set, running homogenise now...')
-            self.prepare(make_denormaliser=False)
+            self.prepare(denormaliser_fl=False)
             iv_data = self.iv_data
 
         # Cut off the noise in the electron saturation region
@@ -311,9 +321,9 @@ class Splopter(IVAnalyser):
 
     def extract_histograms(self, regions, denormalise=False, v_scale=1, species=2, deallocate_fl=True):
         if denormalise and not self.denormaliser:
-            self.prepare(homogenise=False)
+            self.prepare(homogenise_fl=False)
         elif not self.parser:
-            self.prepare(homogenise=False, make_denormaliser=False)
+            self.prepare(homogenise_fl=False, denormaliser_fl=False)
 
         nproc = int(np.squeeze(self.tdata.nproc))
         region_vels = [np.array([])] * len(regions)
@@ -322,7 +332,7 @@ class Splopter(IVAnalyser):
 
         for i in range(nproc):
             num = str(i).zfill(2)
-            filename = self.tfile_path.replace('.mat', '{}.mat'.format(num))
+            filename = str(self.tfile_path).replace('.mat', '{}.mat'.format(num))
             p_file = loadmat(filename)
 
             for j, region in enumerate(regions):
