@@ -1,4 +1,5 @@
-import scipy.io as spio
+import scipy.io as sio
+import numpy as np
 
 import flopter.spice.normalise
 from flopter.core import constants as c, normalise as norm
@@ -96,15 +97,15 @@ VERSION_SPICE = 'version'  # used by SPICE
 
 
 # Lists of labels specific to each version, those not in these lists are assumed to be diagnostic outputs.
-_MATLAB_LABELS = (HEADER, VERSION, GLOBALS, VERSION_SPICE)
-_GENERAL_LABELS = (NZ, NZMAX, NY, COUNT, HPOS, DELTAH, NPC, DT, DZ, NPROC, Q, M, TEMP, ZG, YG, RHO, ESCZ, ESCY,
+_MATLAB_LABELS = {HEADER, VERSION, GLOBALS}
+_GENERAL_LABELS = {VERSION_SPICE, NZ, NZMAX, NY, COUNT, HPOS, DELTAH, NPC, DT, DZ, NPROC, Q, M, TEMP, ZG, YG, RHO, ESCZ, ESCY,
                    SURFACEMATRIX, POT, POTVAC, SLICEPROC, EDGECHARGE, T, SNUMBER, TOTALENERGY, ESCT, DPHIQN, PCHI, BX,
                    BY, BZ, NPARTPROC, NODIAGREG, DIAGHISTORIES, FVARRAYS, FVBIN, FVPERARRAYCOUNT, FVLIMITS, HISTLIMITS,
                    TIMEHISTORY_UPPER, TIMEHISTORY_LOWER, FLAGM, EQUIPOTM, FLAG, ITERTIME_UPPER, ITERTIME_LOWER, INJRATE,
                    OBJECTS, EDGES, DIAGM, OBJECTSENUM, OBJECTSCURRENTI, OBJECTSCURRENTE, OBJECTSCURRENTFLUXI,
                    OBJECTSCURRENTFLUXE, RHO1, SOLW01, SOLNS01, RHO2, SOLW02, SOLNS02, KSI, TAU, MU, ALPHAYZ, ALPHAXZ,
-                   NC, NA, NP, IREL, FLOATCONSTANT)
-_SPICE2_LABELS = (MKSN0, MKSTE, MKSB, MKSMAINIONM, MKSMAINIONQ, MKSPAR1, MKSPAR2, MKSPAR3)
+                   NC, NA, NP, IREL, FLOATCONSTANT}
+_SPICE2_LABELS = {MKSN0, MKSTE, MKSB, MKSMAINIONM, MKSMAINIONQ, MKSPAR1, MKSPAR2, MKSPAR3}
 _SPICE3_LABELS = ()
 
 _GENERAL_CONV_TYPES = {
@@ -131,7 +132,8 @@ DIAGNOSTIC_CONV_TYPES = {
     'Pot': c.CONV_POTENTIAL,
     'Hist': c.CONV_DIST_FUNCTION
 }
-DEFAULT_REDUCED_DATASET = [label.lower() for label in _GENERAL_CONV_TYPES.keys()]
+DEFAULT_REDUCED_DATASET = set(_GENERAL_CONV_TYPES.keys()) | {c.DIAG_PROBE_POT, ALPHAXZ, ALPHAYZ, OBJECTSENUM, NPC, NZ,
+                                                             NY}
 
 
 class MatlabData(object):
@@ -145,14 +147,35 @@ class SpiceTData(object):
     _ALL_LABELS = _GENERAL_LABELS
     _ALL_CONV_TYPES = _GENERAL_CONV_TYPES
 
-    def __init__(self, t_filename, deallocate=False, converter=None, convert=False):
+    def __init__(self, t_filename, deallocate=False, converter=None, convert=False, variable_names=None, reduce=True):
         # TODO: (2019-04-11) This would be better implemented by storing everything in a dictionary, leaving all the
         #  member variables None, and overriding the __get_attribute__() method to read from the dictionary instead.
         # Read matlab filename into dictionary and then distribute contents into named variables
         self.t_filename = t_filename
         self.converter = converter
         self.has_converted = {label: False for label in self._ALL_CONV_TYPES}
-        self.t_dict = spio.loadmat(t_filename)
+
+        self.t_file_sizes = {label: size for label, size, dtype in sio.whosmat(t_filename)}
+        self.t_file_labels = set(self.t_file_sizes.keys())
+
+        self.diagnostic_labels = self.t_file_labels - self._ALL_LABELS - _MATLAB_LABELS
+
+        self.t_dict = sio.loadmat(t_filename, variable_names=variable_names)
+
+        # Fill in all variables in the file but not read allow member variables to be populated
+        for label in self.t_file_labels:
+            if label not in self.t_dict:
+                self.t_dict[label] = None
+
+        # Fill in all variables expected to be in the file but that weren't found (this can happen with different
+        # versions of spice)
+        for label in self._ALL_LABELS:
+            if label not in self.t_dict:
+                self.t_dict[label] = 'Not found in t-file'
+
+        if self.t_dict[T] is not None and self.t_dict[DT] is not None and np.mean(self.t_dict[T]) == 0.0:
+            print('WARNING: Encountered t-zeroing, creating an approximate t array')
+            self.t_dict[T] = np.arange(1, len(self.t_dict[T]) + 1) * 2048.0 * self.t_dict[DT]
 
         self.matlab_data = MatlabData(self.t_dict)
         self.version = self.t_dict[VERSION_SPICE]
@@ -233,13 +256,19 @@ class SpiceTData(object):
         self.irel = self.t_dict[IREL]
         self.floatconstant = self.t_dict[FLOATCONSTANT]
 
-        self.diagnostics = {key: value for key, value in self.t_dict.items() if key not in self._ALL_LABELS}
+        # Fix for if t has been zeroed
+
+
+        self.diagnostics = {key: value for key, value in self.t_dict.items() if key in self.diagnostic_labels}
         for label in self.diagnostics:
             if any(marker in label for marker in DIAGNOSTIC_CONV_TYPES.keys()):
                 self.has_converted[label] = False
 
         if deallocate:
             self.deallocate()
+
+        if variable_names is not None and reduce:
+            self.reduce(variable_names)
 
         if convert:
             self._convert(self.converter.__class__)
@@ -263,15 +292,20 @@ class SpiceTData(object):
                                     member variable names that must be kept.
 
         """
-        if not set(reduced_dataset).issubset({label.lower() for label in self._ALL_LABELS}):
+        reduced_dataset = set(reduced_dataset)
+        available_labels = self._ALL_LABELS | self.diagnostic_labels
+        if not reduced_dataset.issubset(available_labels):
+            unavailable_labels = reduced_dataset - available_labels
             raise ValueError('The reduced_dataset provided is not a list of labels which can be removed to reduce the '
-                             'size of the TData object. List must be a subet of _ALL_LABELS when converted to '
-                             'lowercase.')
-        print(type(self))
-        print(dir(self))
+                             'size of the TData object. List must be a subset of the available labels in the t-file.\n'
+                             f'The following requested labels are not available: ({unavailable_labels})')
+
         for label in self._ALL_LABELS:
-            if label.lower() not in reduced_dataset:
+            if label not in reduced_dataset:
                 delattr(self, label.lower())
+        for diag_label in self.diagnostic_labels:
+            if diag_label in self.diagnostics and diag_label not in reduced_dataset:
+                self.diagnostics.pop(diag_label)
 
         import gc
         gc.collect()
@@ -305,11 +339,11 @@ class SpiceTData(object):
 
 
 class Spice2TData(SpiceTData):
-    _ALL_LABELS = _GENERAL_LABELS + _SPICE2_LABELS
+    _ALL_LABELS = _GENERAL_LABELS | _SPICE2_LABELS
     _ALL_CONV_TYPES = {**_GENERAL_CONV_TYPES, **_SPICE2_CONV_TYPES}
 
-    def __init__(self, t_filename, deallocate=False):
-        super().__init__(t_filename, deallocate=False)
+    def __init__(self, t_filename, deallocate=False, variable_names=None):
+        super().__init__(t_filename, deallocate=False, variable_names=variable_names, reduce=False)
 
         self.mksn0 = self.t_dict[MKSN0]
         self.mkste = self.t_dict[MKSTE]
@@ -322,3 +356,7 @@ class Spice2TData(SpiceTData):
 
         if deallocate:
             self.deallocate()
+
+        if variable_names is not None:
+            self.reduce(variable_names)
+
