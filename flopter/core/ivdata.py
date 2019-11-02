@@ -1,5 +1,6 @@
 from flopter.core import constants as c
 import numpy as np
+import matplotlib.pyplot as plt
 import collections as coll
 import pandas as pd
 
@@ -95,6 +96,51 @@ class IVData(dict):
         df = pd.DataFrame(data={column: self[column] for column in columns})
         df.to_csv(filename)
 
+    def get_below_floating(self, v_f=None, print_fl=False):
+        if v_f is None:
+            import flopter.core.fitters as f
+            # find floating potential and max potential
+            v_f = f.IVFitter.find_floating_pot_iv_data(self)
+        v_min = np.min(self[c.POTENTIAL])
+        L = v_min - v_f
+
+        # Define lower and upper bounds depending on set trim parameters.
+        lower_offset = v_f + (self.trim_beg * L)
+        upper_offset = v_f + (self.trim_end * L)
+        fit_sec = np.where((self[c.POTENTIAL] <= lower_offset) & (self[c.POTENTIAL] >= upper_offset))
+        if print_fl:
+            print('fit_sec is :', fit_sec)
+
+        return IVData.non_contiguous_trim(self, fit_sec)
+
+    def plot(self, ax=None, trim_lines_fl=True, axes_labels=True, **kwargs):
+        if ax is None:
+            fig, ax = plt.subplots()
+
+        if c.SIGMA in self.keys():
+            plot_func = ax.errorbar
+            kwargs['yerr'] = self[c.SIGMA]
+        else:
+            plot_func = ax.plot
+
+        plot_func(self[c.POTENTIAL], self[c.CURRENT], **kwargs)
+        ax.axhline(y=0.0, **c.AX_LINE_DEFAULTS)
+
+        if trim_lines_fl:
+            full_length = len(self[c.CURRENT])
+            start = int(full_length * self.trim_beg)
+            stop = int(full_length * self.trim_end) - 1
+            ax.axvline(x=self[c.POTENTIAL][start], label='trim start', **c.AX_LINE_DEFAULTS)
+            ax.axvline(x=self[c.POTENTIAL][stop], label='trim stop', **c.AX_LINE_DEFAULTS)
+
+        if axes_labels is True:
+            ax.set_xlabel(r'$I_P$ (A)')
+            ax.set_ylabel(r'$V_P$ (V)')
+        elif axes_labels is not None:
+            xlabel, ylabel = axes_labels
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+
     def copy(self):
         """
         Deep copy of IVData object, including conditional copying for electron and ion current, set trim values, sigma
@@ -136,7 +182,6 @@ class IVData(dict):
         :return:            (IVFitData) Full 4-param IVFit data
 
         """
-        import matplotlib.pyplot as plt
         import flopter.core.fitters as f
 
         if fitter is None or not isinstance(fitter, f.IVFitter):
@@ -147,16 +192,8 @@ class IVData(dict):
 
         # find floating potential and max potential
         v_f = f.IVFitter.find_floating_pot_iv_data(self)
-        v_min = np.min(self[c.POTENTIAL])
-        L = v_min - v_f
 
-        # Define lower and upper bounds depending on set trim parameters.
-        lower_offset = v_f + (self.trim_beg * L)
-        upper_offset = v_f + (self.trim_end * L)
-        fit_sec = np.where((self[c.POTENTIAL] <= lower_offset) & (self[c.POTENTIAL] >= upper_offset))
-        if print_fl:
-            print('fit_sec is :', fit_sec)
-        iv_data_trim = IVData.non_contiguous_trim(self, fit_sec)
+        iv_data_trim = self.get_below_floating(v_f=v_f, print_fl=print_fl)
 
         # Find and fit straight section
         str_sec = np.where(iv_data_trim[c.POTENTIAL] <= sat_region)
