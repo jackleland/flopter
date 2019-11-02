@@ -116,6 +116,10 @@ MAGADC_HSIZE = 'hsize'
 MAGADC_CH_OFFSET = 'offset'
 MAGADC_CH_SENS = 'sensitivity'
 MAGADC_CH_NAME = 'name'
+
+
+# Physical Constants
+# TODO: Replace with scipy
 BOLTZMANN = 1.38064852e-23  # m^2 kg s^-2 K^-1
 EPSILON_0 = 8.85418782e-12  # m^-3 kg^-1 s^4 A^2
 ELEM_CHARGE = 1.60217662e-19 # C
@@ -125,3 +129,11 @@ ELECTRON_MASS = 9.10938356e-31 # kg
 ATOMIC_MASS_UNIT = ELECTRON_MASS * 1822.888486
 P_E_MASS_RATIO = PROTON_MASS / ELECTRON_MASS
 I_E_MASS_RATIO = DEUTERIUM_MASS / ELECTRON_MASS
+
+
+# Default plotting settings for matplotlib.pyplot
+AX_LINE_DEFAULTS = {
+    'color': 'grey',
+    'linewidth': .9,
+    'linestyle': '--'
+}
