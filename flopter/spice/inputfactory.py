@@ -240,22 +240,26 @@ def test_printing_function():
 
 
 if __name__ == "__main__":
-    flush_probe = lpu.AngledTipProbe(5e-3, 5e-3, 5e-3, 1e-3, 0., 0., np.radians(10.0))
+    flush_probe = lpu.AngledTipProbe(a=5e-3, b=5e-3, L=5e-3, g=1e-3, d_perp=0.0, theta_f=0., theta_p=np.radians(0.0))
+    angled_probe = lpu.AngledTipProbe(a=5e-3, b=5e-3, L=5e-3, g=1e-3, d_perp=0.0, theta_f=0., theta_p=np.radians(10.0))
+    # flush_probe = lpu.AngledTipProbe(a=5e-3, b=5e-3, L=5e-3, g=1e-3, d_perp=3e-4, theta_f=0., theta_p=np.radians(0.0))
     # flush_probe = lpu.MagnumProbes().probe_r
+    # flush_probe = lpu.MagnumProbes().probe_s
+    l_probe = lpu.MagnumProbes().probe_l
 
-    fig, ax = plt.subplots()
-    generate_2d_input(flush_probe, 1e18, 5, 1836, 1, 0.8, np.radians(1), padded_fl=False, ax=ax, print_fl=True,
-                      rearwall=0.0, rearwall_shadow_fl=False)
-    ax.autoscale()
+    # fig, ax = plt.subplots()
+    # generate_2d_input(flush_probe, 1e19, 5, 1836, 1, 0.8, np.radians(1), padded_fl=False, ax=ax, print_fl=True,
+    #                   rearwall=False, rearwall_shadow_fl=False)
+    # ax.autoscale()
 
-    # fig, ax = plt.subplots(1, 2, sharex=True, sharey=True)
-    # generate_2d_input(flush_probe, 1e18, 5, 1836, 1, 0.8, np.radians(2), padded_fl=False,
-    #                   ax=ax[0], print_fl=True, rearwall=1e-3, rearwall_shadow_fl=True)
-    # generate_2d_input(flush_probe, 1e18, 5, 1836, 1, 0.8, np.radians(2), padded_fl=True,
-    #                   ax=ax[1], print_fl=True, rearwall=1e-3)
+    fig, ax = plt.subplots(1, 2, sharex=True, sharey=True)
+    generate_2d_input(flush_probe, 1e19, 5, 1836, 1, 0.8, np.radians(1), padded_fl=False,
+                      ax=ax[0], print_fl=True, rearwall=False)
+    generate_2d_input(angled_probe, 1e19, 5, 1836, 1, 0.8, np.radians(1), padded_fl=False,
+                      ax=ax[1], print_fl=True, rearwall=False)
 
-    # ax[0].autoscale()
-    # ax[1].autoscale()
+    ax[0].autoscale()
+    ax[1].autoscale()
 
     plt.show()
 
