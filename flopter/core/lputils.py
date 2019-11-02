@@ -31,6 +31,10 @@ class LangmuirProbe(ABC):
         pass
 
     @abstractmethod
+    def get_2d_collection_length(self, alpha):
+        pass
+
+    @abstractmethod
     def calc_exposed_lengths(self, alpha):
         pass
 
@@ -59,11 +63,17 @@ class AngledTipProbe(LangmuirProbe):
         self.theta_f = theta_f
         self.theta_p = theta_p
 
-    def is_angled(self):
-        return self.theta_p > 0
-
     def get_collection_area(self, alpha):
         return calc_probe_collection_area(self.a, self.b, self.L, self.g, self.d_perp, alpha, self.theta_p, self.theta_f)
+
+    def get_2d_collection_length(self, alpha):
+        d, h_coll = self.calc_exposed_lengths(alpha)
+        L_tip = self.L / np.cos(self.theta_p)
+        L_coll = ((L_tip - d) * np.sin(alpha + self.theta_p)) + (h_coll * np.cos(alpha))
+        return L_coll
+
+    def is_angled(self):
+        return self.theta_p > 0
 
     def get_analytical_iv(self, voltage, v_f, alpha, temp, dens, mass=1, gamma_i=1.0, c_1=0.9, c_2=0.6, print_fl=False):
         return analytical_iv_curve(voltage, v_f, temp, dens, alpha, self.get_collection_area(alpha), c_1=c_1, c_2=c_2,
@@ -94,6 +104,11 @@ class FlushCylindricalProbe(LangmuirProbe):
         theta_c = 2 * np.arccos((self.radius - d) / self.radius)
         A_coll = np.sin(alpha) * ((np.pi * self.radius**2) - (self.radius**2 / 2)) * (theta_c - 2 * np.sin(theta_c))
         return A_coll
+
+    def get_2d_collection_length(self, alpha):
+        d, h_coll = self.calc_exposed_lengths(alpha)
+        L_coll = ((self.get_2d_probe_length() - d) * np.sin(alpha)) + (h_coll * np.cos(alpha))
+        return L_coll
 
     def get_analytical_iv(self, voltage, v_f, alpha, temp, dens, mass=1, gamma_i=1.0, c_1=0.9, c_2=0.6, print_fl=False):
         analytical_iv_curve(voltage, v_f, temp, dens, alpha, self.get_collection_area(alpha), c_1=c_1, c_2=c_2,
