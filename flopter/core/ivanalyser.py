@@ -18,6 +18,10 @@ class IVAnalyser(ABC):
         pass
 
     @abstractmethod
+    def homogenise(self):
+        pass
+
+    @abstractmethod
     def fit(self, *args, **kwargs):
         pass
 

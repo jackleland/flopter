@@ -26,7 +26,7 @@ class Spice2Homogeniser(Homogeniser):
 
     def homogenise(self):
         """
-        Homogenise function for creaiton of IVData objects for use in SPICE simulation analysis. Uses specified
+        Homogenise function for creation of IVData objects for use in SPICE simulation analysis. Uses specified
         inputfile or inputparser to get relevant simulation timing data and then slices up the current and voltage
         traces accordingly. Also uses InputParser methods to evaluate probe collection objects.
         :param data:

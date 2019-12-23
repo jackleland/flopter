@@ -58,6 +58,9 @@ class Splopter(IVAnalyser):
 
         if self.tfile_path:
             tfile_path = self.data_dir / self.tfile_path
+
+            # TODO: (2019-12-12) This should probably be replaced with a concatenation of backup folders seeing as the
+            # TODO: restarts definitely won't be working any time soon
             t = loadmat(tfile_path, variable_names=[sd.T])[sd.T]
             if np.mean(t) == 0.0:
                 print(f'WARNING: Encountered t-zeroing in {tfile_path}')
@@ -103,7 +106,7 @@ class Splopter(IVAnalyser):
         self.iv_data = None
         self.raw_data = None
 
-    def prepare(self, homogenise_fl=True, denormaliser_fl=True, find_se_temp_fl=True):
+    def prepare(self, homogenise_fl=True, denormaliser_fl=True, find_se_temp_fl=True, backup_concat_fl=True):
         """
             Check existence of, and then populate, the main flopter objects:
             inputparser, denormaliser and homogeniser.
@@ -129,11 +132,114 @@ class Splopter(IVAnalyser):
         elif denormaliser_fl and self.denormaliser is not None:
             print('Cannot make_denormaliser, data has already been denormalised!')
 
-        if homogenise_fl and not self.homogeniser:
-            self.homogeniser = Spice2Homogeniser(data=self.tdata, input_parser=self.parser)
-            self.iv_data, self.raw_data = self.homogeniser.homogenise()
-        elif homogenise_fl and self.homogeniser is not None and self.iv_data is not None and self.raw_data is not None:
+        if homogenise_fl and self.iv_data is None:
+            if backup_concat_fl:
+                self.iv_data, self.raw_data = self.homogenise(backups=self.backup_folders)
+            else:
+                self.iv_data, self.raw_data = self.homogenise()
+        elif homogenise_fl and self.iv_data is not None:
             print('Cannot homogenise, data has already been homogenised!')
+
+    def get_tdata_raw_iv(self, tdata):
+        # Extract relevant arrays from the matlab file
+        probe_indices = self.parser.get_probe_obj_indices()
+        probe_current_e = 0.0
+        probe_current_i = 0.0
+
+        time = np.squeeze(tdata.t)[:-1]
+        for index in probe_indices:
+            probe_current_e += np.squeeze(tdata.objectscurrente)[index]
+            probe_current_i += np.squeeze(tdata.objectscurrenti)[index]
+        probe_bias = np.squeeze(tdata.diagnostics[c.DIAG_PROBE_POT])
+        return time, probe_bias, probe_current_e, probe_current_i
+
+    def homogenise(self, backups=None):
+        """
+        Homogenise function for creation of IVData objects for use in SPICE simulation analysis. Uses stored
+        tdata and inputparser to get relevant simulation timing data and then slices up the current and voltage
+        traces accordingly. Also uses InputParser methods to evaluate probe collection objects.
+        """
+        if backups is None or len(backups) <= 1:
+            # If no backup directory, or only a single backup directory, exists then carry on as normal
+            time, probe_bias, probe_current_e, probe_current_i = self.get_tdata_raw_iv(self.tdata)
+            probe_current_tot = probe_current_e + probe_current_i
+        else:
+            # If multiple backup t-files need to be stitched together then create concatenated current/time/bias arrays
+            concatted_time = np.array([])
+            concatted_current = np.array([])
+            concatted_current_i = np.array([])
+            concatted_current_e = np.array([])
+            concatted_bias = np.array([])
+
+            # Loop through backups and stitch them together
+            for i, bu_folder in enumerate(backups):
+                print(f'Loading backup {bu_folder} ({i + 1} of {len(backups)}) for current and bias concatenation')
+                bu_tfile_path, _ = self.get_ta_filenames(bu_folder)
+                bu_tdata = sd.Spice2TData(bu_folder / bu_tfile_path, variable_names=[sd.T,
+                                                                                     c.DIAG_PROBE_POT,
+                                                                                     sd.OBJECTSCURRENTE,
+                                                                                     sd.OBJECTSCURRENTI,
+                                                                                     sd.OBJECTSENUM,
+                                                                                     sd.OBJECTS])
+                bu_time, bu_probe_bias, bu_probe_current_e, bu_probe_current_i = self.get_tdata_raw_iv(bu_tdata)
+                bu_probe_current_tot = bu_probe_current_e + bu_probe_current_i
+
+                if len(concatted_time) > 0:
+                    offset = concatted_time[-1]
+                else:
+                    offset = 0
+
+                # filter out spice current artifacts
+                # TODO: this should be refined and maybe put in a separate function
+                indices_oi = np.where(
+                    (bu_probe_current_tot != 0.0) & (bu_probe_current_tot <= 100.0) & (bu_probe_current_tot >= -500.0))
+
+                concatted_current = np.concatenate([concatted_current, bu_probe_current_tot[indices_oi]])
+                concatted_current_e = np.concatenate([concatted_current_e, bu_probe_current_e[indices_oi]])
+                concatted_current_i = np.concatenate([concatted_current_i, bu_probe_current_i[indices_oi]])
+                concatted_time = np.concatenate([concatted_time, offset + np.arange(len(bu_time[indices_oi]))])
+
+                # Voltage can be plainly concatenated together
+                # TODO: this should also be refined to get rid of spikes upon switch between backups
+                concatted_bias = np.concatenate([concatted_bias, bu_probe_bias[len(concatted_bias):]])
+
+            probe_current_tot = concatted_current
+            probe_current_e = concatted_current_e
+            probe_current_i = concatted_current_i
+            probe_bias = concatted_bias
+            time = concatted_time
+
+        # Prepend missing elements to make array cover the same timespan as the builtin diagnostics and then
+        # down-sample to get an array the same size as probe_current
+        try:
+            n = len(probe_bias)
+            M = len(probe_current_tot)
+        except TypeError as e:
+            print('WARNING: Was not able to homogenise as the probe current or bias data is malformed.')
+            return None, None
+
+        N, r = self.parser.get_scaling_values(n, M)
+
+        leading_values = np.zeros(N, dtype=np.int) + probe_bias[0]
+        probe_bias_extended = np.concatenate([leading_values, probe_bias])[0:-r:r]
+
+        n_particles = np.squeeze(self.tdata.nz * self.tdata.ny * self.tdata.npc)
+        poisson_err = np.sqrt(n_particles) / n_particles
+
+        # Extract the voltage and current for the sweeping region.
+        sweep_length = self.parser.get_sweep_length(M, probe_bias_extended)
+        t_sweep = time[sweep_length:]
+        V_sweep = probe_bias_extended[sweep_length:]
+        I_i_sweep = probe_current_i[sweep_length:]
+        I_e_sweep = probe_current_e[sweep_length:]
+        I_sweep = probe_current_tot[sweep_length:]
+        sigma = I_sweep * poisson_err
+
+        sweep_data = IVData(V_sweep, I_sweep, t_sweep, sigma=sigma, e_current=I_e_sweep, i_current=I_i_sweep)
+        raw_data = IVData(probe_bias_extended, probe_current_tot, time, sigma=poisson_err*probe_current_tot,
+                          e_current=probe_current_e, i_current=probe_current_i)
+
+        return sweep_data, raw_data
 
     @classmethod
     def get_ta_filenames(cls, directory):
