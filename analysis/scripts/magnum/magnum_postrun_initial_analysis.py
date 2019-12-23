@@ -21,14 +21,14 @@ PROBE_DESIGNATIONS = ('S', 'L')
 SWEEP_RANGE = (0, 750)
 
 # OUTPUT_DIRECTORY = 'analysed_3_downsampled/'
-OUTPUT_DIRECTORY = 'test/'
+OUTPUT_DIRECTORY = 'phobos_test/'
 DATA_DIRECTORY = '/Data/Magnum/adc_files/'
 if not os.path.exists(DATA_DIRECTORY):
-    DATA_DIRECTORY = '/Data/external/magnum/'
+    DATA_DIRECTORY = '/data/external/magnum/'
 
 
-def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=None, probe_designations=PROBE_DESIGNATIONS,
-                         shunt_resistance=10, cabling_resistance=2.0, sweep_range=SWEEP_RANGE, downsampling_factor=1):
+def averaged_iv_analysis(folder, adc_file, output_tag, probe_designations=PROBE_DESIGNATIONS, shunt_resistance=10,
+                         cabling_resistance=2.0, downsampling_factor=1, dealloc=True):
 
     mg.Magoptoffline._FOLDER_STRUCTURE = DATA_DIRECTORY
     print('"{}" \t\t "{}"'.format(folder, adc_file))
@@ -51,8 +51,19 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
     os.chdir(mg.Magoptoffline.get_data_path() + OUTPUT_DIRECTORY)
     ds_full.to_netcdf(f'{output_tag}.nc')
 
+    os.chdir(cwd)
+
+    if dealloc:
+        del magopter, ds_full
+        import gc
+        gc.collect()
+    else:
+        return magopter, ds_full
+
+
+def analyse_small_probe(ds_full, probe_designation, output_tag, sweep_range):
     # Select the small probe
-    ds_full = ds_full.sel(probe=probe_designations[0])
+    ds_full = ds_full.sel(probe=probe_designation)
 
     manual_start = sweep_range[0]
     manual_end = sweep_range[1]
@@ -104,9 +115,7 @@ def averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=None, ts_dens=Non
     plt.tight_layout()
     plt.savefig(f'{output_tag}_fit.png', bbox_inches='tight')
 
-    os.chdir(cwd)
-
-    del magopter, ds_full, sweep_avg_up, sweep_avg_dn, sweep_avg_updn
+    del sweep_avg_up, sweep_avg_dn, sweep_avg_updn
     import gc
     gc.collect()
 
@@ -125,7 +134,7 @@ PROBE_RESISTANCES = {
 }
 FEEDTHROUGH_RESISTANCE = 1.25
 INTERNAL_RESISTANCE = 6.09
-DESIRED_DATARATE = 10000
+DESIRED_DATARATE = 1000000
 COMMONLY_USED_SWEEP_TIME = 0.01
 
 
@@ -137,36 +146,46 @@ def get_sweep_range(shot_end_time, adc_end_time, acq_length, adc_freq):
     return 1, end_index
 
 
-def aia_mapping_wrapper(shot_number):
+def get_shot_info_for_analysis(shot_number):
+    shot_dataarray = shot_dataset.sel(shot_number=shot_number)
+
+    folder = str(shot_dataarray['adc_folder'].values)
+    adc_file = str(shot_dataarray['adc_filename'].values)
+    output_tag = 'a{:03d}_{:03d}_{}'.format(shot_number,
+                                            int(shot_dataarray['adc_index'].values),
+                                            int(shot_dataarray['adc_timestamp'].values))
+    ts_temp = shot_dataarray['ts_temp_max'].values
+    ts_dens = shot_dataarray['ts_dens_max'].values
+    probe_designations = (str(shot_dataarray['adc_4_probe'].values), str(shot_dataarray['adc_5_probe'].values))
+    shunt_resistance = shot_dataarray['adc_4_shunt_resistance'].values
+    downsampling_factor = int(shot_dataarray['adc_freqs'].values / DESIRED_DATARATE)
+    # downsampling_factor = 1
+    cabling_resistance = (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'].values) - 1] + FEEDTHROUGH_RESISTANCE
+                          + INTERNAL_RESISTANCE + PROBE_RESISTANCES[probe_designations[0]])
+
+    sweep_range = get_sweep_range(shot_dataarray['shot_end_time'].values, shot_dataarray['adc_end_time'].values,
+                                  shot_dataarray['acquisition_length'].values,
+                                  shot_dataarray['adc_freqs'].values / downsampling_factor)
+    return folder, adc_file, output_tag, ts_temp, ts_dens, probe_designations, shunt_resistance, downsampling_factor, \
+           cabling_resistance, sweep_range
+
+
+def aia_mapping_wrapper(shot_number, dsr=None):
     print(f'\n Analysing shot {shot_number}...')
     
     try:
         # print('Try statement')
-        shot_dataarray = shot_dataset.sel(shot_number=shot_number)
-        
-        folder = str(shot_dataarray['adc_folder'].values)
-        adc_file = str(shot_dataarray['adc_filename'].values)
-        output_tag = 'a{:03d}_{:03d}_{}'.format(shot_number,
-                                                int(shot_dataarray['adc_index'].values),
-                                                int(shot_dataarray['adc_timestamp'].values))
-        ts_temp = shot_dataarray['ts_temp_max'].values
-        ts_dens = shot_dataarray['ts_dens_max'].values
-        probe_designations = (str(shot_dataarray['adc_4_probe'].values), str(shot_dataarray['adc_5_probe'].values))
-        shunt_resistance = shot_dataarray['adc_4_shunt_resistance'].values
-        # downsampling_factor = int(shot_dataarray['adc_freqs'].values / DESIRED_DATARATE)
-        downsampling_factor = 1
-        cabling_resistance = (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'].values) - 1] + FEEDTHROUGH_RESISTANCE
-                              + INTERNAL_RESISTANCE + PROBE_RESISTANCES[probe_designations[0]])
-
-        sweep_range = get_sweep_range(shot_dataarray['shot_end_time'].values, shot_dataarray['adc_end_time'].values,
-                                      shot_dataarray['acquisition_length'].values,
-                                      shot_dataarray['adc_freqs'].values / downsampling_factor)
 
         print(f'Attempting analysis on shot {shot_number}')
+
+        folder, adc_file, output_tag, ts_temp, ts_dens, probe_designations, shunt_resistance, downsampling_factor, \
+        cabling_resistance, sweep_range = get_shot_info_for_analysis(shot_number)
+
+        if dsr is not None:
+            downsampling_factor = dsr
     
-        averaged_iv_analysis(folder, adc_file, output_tag, ts_temp=ts_temp, ts_dens=ts_dens,
-                             probe_designations=probe_designations, shunt_resistance=shunt_resistance,
-                             cabling_resistance=cabling_resistance, sweep_range=sweep_range,
+        averaged_iv_analysis(folder, adc_file, output_tag, probe_designations=probe_designations,
+                             shunt_resistance=shunt_resistance, cabling_resistance=cabling_resistance,
                              downsampling_factor=downsampling_factor)
     except:
         traceback.print_exc()
