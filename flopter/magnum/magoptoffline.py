@@ -92,10 +92,16 @@ class Magoptoffline(IVAnalyser):
         self.magnum_data = None
 
     def prepare(self, down_sampling_rate=5, plot_fl=False, filter_arcs_fl=False, roi_b_plasma=False, crit_freq=640,
-                crit_ampl=1.1e-3):
+                crit_ampl=1.1e-3, homogenise_fl=True):
         """
-        Preparation consists of downsampling (if necessary), choosing the region of interest and putting each sweep
-        into a numpy array of iv_datas
+        Preparation consists of downsampling (if necessary) and applying the
+        correct calibration to the raw voltages to convert properly into
+        current and voltage
+
+        Optionally also homogenises, which chooses the region of interest and
+        sections the time trace into individual sweeps, populating the member
+        variable 'iv_arrs' with an IVData object for each sweep before combining
+        them all into a separate numpy array for each coax
 
         """
         # This whole function should probably be put into a homogeniser implementation
@@ -141,6 +147,24 @@ class Magoptoffline(IVAnalyser):
 
         self.filter(crit_ampl=crit_ampl, crit_freq=crit_freq, plot_fl=plot_fl)
 
+        if homogenise_fl:
+            self.homogenise(filter_arcs_fl=filter_arcs_fl, plot_fl=plot_fl)
+
+    def homogenise(self, filter_arcs_fl=False, plot_fl=True):
+        """
+        Chooses the region of interest and sections the time trace into
+        individual sweeps, populating the member variable 'iv_arrs' with an
+        IVData object for each sweep and combining these into a numpy array for
+        each coax
+
+        :param filter_arcs_fl:  (bool) Boolean flag, if true will attempt to
+                                automatically filter out arcs by excluding
+                                sweeps which have abnormally high max/min
+                                voltages
+        :param plot_fl:         (bool) Boolean flag, controls whether the method
+                                plots various useful figures
+
+        """
         for i in range(self.coaxes):
             # Use fourier decomposition from get_frequency method in triangle fitter to get frequency
             triangle = f.TriangleWaveFitter()
@@ -263,7 +287,7 @@ class Magoptoffline(IVAnalyser):
                     continue
                 if all(param.error >= (param.value * 0.5) for param in fit_data.fit_params):
                     if print_fl:
-                        print('All fit parameters exceeded good fit threshold, skipping time step {}'
+                        print('All fit parameters exceeded good fit voltage_threshold, skipping time step {}'
                               .format(np.mean(iv_data[c.TIME])))
                     continue
                 fit_arrs[i].append(fit_data)
