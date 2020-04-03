@@ -435,6 +435,39 @@ class InputParser(ConfigParser):
         else:
             raise ValueError('Could not find a shape set to sweep voltage')
 
+    def has_sufficient_sweep(self, percentage, voltage_threshold=2):
+        """
+        Boolean assessment of whether, given a percentage of progress through
+        the simulation (taken from the logfile or otherwise), a sufficient
+        portion of the sweep has been executed for the simulation to be analysed
+
+        :param percentage:          fraction of completion of a simulation
+        :param voltage_threshold:   Absolute value of voltage required to have
+                                    been reached to warrant analysis
+        :return:                    Returns True if sufficient percentage has
+                                    been simulated
+        """
+        return percentage >= self.get_threshold_fraction(voltage_threshold=voltage_threshold)
+
+    def get_threshold_fraction(self, voltage_threshold=2):
+        """
+        Returns the fraction of total simulation time required (given a passed
+        voltage_threshold) for the simulation to be sufficiently far through as
+        to be analysed for ion saturation and temperature.
+
+        :param voltage_threshold:   Absolute value of voltage required to have
+                                    been reached to warrant analysis
+        """
+        if voltage_threshold < c.SWEEP_LOWER or voltage_threshold > c.SWEEP_UPPER:
+            raise ValueError('Passed voltage voltage_threshold is outside of sweep range')
+
+        threshold_fraction = (voltage_threshold - c.SWEEP_LOWER) / (c.SWEEP_UPPER - c.SWEEP_LOWER)
+
+        t_a = self.getfloat(c.INF_SEC_GEOMETRY, c.INF_TIME_AV)
+        t_p = self.getfloat(c.INF_SEC_GEOMETRY, c.INF_TIME_END)
+
+        return (t_a + (threshold_fraction * (t_p - t_a))) / t_p
+
     def get_scaling_values(self, len_diag, len_builtin):
         """
         Calculates the scaling values (n' and r) which are needed to extend the
