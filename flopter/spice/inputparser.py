@@ -218,13 +218,12 @@ class InputParser(ConfigParser):
         # Write section header and parameters
         fp.write("${}\n".format(section_name))
         for key, value in section_items:
-            value = self._interpolation.before_write(self, section_name, key,
-                                                     value)
+            value = self._interpolation.before_write(self, section_name, key, value)
             if value is not None or not self._allow_no_value:
                 value = delimiter + str(value).replace('\n', '\n\t')
             else:
                 value = ""
-            fp.write("\t{}{}\n".format(key, value))
+            fp.write("\t{}{},\n".format(key, value))
         fp.write("$end\n"
                  "\n")
 
