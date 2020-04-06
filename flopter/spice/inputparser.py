@@ -24,7 +24,8 @@ class InputParser(ConfigParser):
     SECTCRE = re.compile(SECT_TMPL_OVERRIDE, re.VERBOSE)
     BOOLEAN_STATES = {'1': True, 'yes': True, 'true': True, 'on': True, ".true.": True,
                       '0': False, 'no': False, 'false': False, 'off': False, ".false.": False}
-    EXPECTED_DUPES = ('rectangle', 'triangle', 'circle', 'diag_reg', 'specie')
+    EXPECTED_DUPES = ('rectangle', 'triangle', 'circle', 'diag_reg', 'specie',
+                      'cuboid', 'spheroid', 'cylindroid', 'conoid', 'triangloid', 'diag')
     COMMENT_PARAMS_SECTNAME = 'commented_params'
 
     def __init__(self, *args, comment_prefixes=('!', '$end'), expected_dupes=EXPECTED_DUPES, input_filename=None,
