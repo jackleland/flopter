@@ -24,13 +24,13 @@ SWEEP_RANGE = (0, 750)
 OUTPUT_DIRECTORY = 'analysed_4/'
 DOWNSAMPLING_FL = False
 
-DATA_DIRECTORY = '/Data/Magnum/adc_files/'
+DATA_DIRECTORY = 'Data/Magnum/adc_files/'
 ON_FREIA_FLAG = True
 MAX_CPUS = 32
 if not os.path.exists(DATA_DIRECTORY):
     MAX_CPUS = 2
     ON_FREIA_FLAG = False
-    DATA_DIRECTORY = '/data/external/magnum/'
+    DATA_DIRECTORY = 'data/external/magnum/'
     OUTPUT_DIRECTORY = 'test'
     DOWNSAMPLING_FL = True
 
