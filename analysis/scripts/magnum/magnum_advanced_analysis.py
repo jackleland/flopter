@@ -4,7 +4,9 @@ import xarray as xr
 import os
 import concurrent.futures as cf
 import flopter.magnum.magoptoffline as mg
+from pathlib import Path
 
+os.chdir(str(Path.home()))
 
 FOLDERS = (
     '2019-05-28_Leland/',
@@ -70,7 +72,7 @@ def averaged_iv_analysis(folder, adc_file, output_tag, probe_designations=PROBE_
         return magopter, ds_full
 
 
-os.chdir('/home/jleland/' + DATA_DIRECTORY)
+os.chdir(DATA_DIRECTORY)
 all_dataset = xr.open_dataset('all_meta_data.nc').max('ts_radial_pos')
 shot_numbers = all_dataset.where(np.isfinite(all_dataset['adc_index']), drop=True)['shot_number'].values
 shot_dataset = all_dataset.sel(shot_number=shot_numbers)
