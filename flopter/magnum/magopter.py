@@ -284,7 +284,7 @@ class Magopter(IVAnalyser):
                     continue
                 if all(param.error >= (param.value * 0.5) for param in fit_data.fit_params):
                     if print_fl:
-                        print('All fit parameters exceeded good fit threshold, skipping time step {}'
+                        print('All fit parameters exceeded good fit voltage_threshold, skipping time step {}'
                               .format(np.mean(iv_data[c.TIME])))
                     continue
                 fit_arrs[i].append(fit_data)

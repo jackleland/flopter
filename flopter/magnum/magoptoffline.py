@@ -104,8 +104,6 @@ class Magoptoffline(IVAnalyser):
         them all into a separate numpy array for each coax
 
         """
-        # This whole function should probably be put into a homogeniser implementation
-
         # Downsample by factor given
         arr_size = len(self.m_data.data[self.m_data.channels[0]])
         downsample = np.arange(0, arr_size, down_sampling_rate, dtype=np.int64)
@@ -143,20 +141,23 @@ class Magoptoffline(IVAnalyser):
             self.current.append((self.raw_current[i]) / self.shunt_resistance)
 
             # Separate volages are applied to each probe depending on the current they draw
-            self.voltage.append(self.raw_voltage - self.current[i] - (self.cabling_resistance * self.current[i]))
+            self.voltage.append(self.raw_voltage - self.current[i] - (self.cabling_resistance[i] * self.current[i]))
 
         self.filter(crit_ampl=crit_ampl, crit_freq=crit_freq, plot_fl=plot_fl)
 
         if homogenise_fl:
             self.homogenise(filter_arcs_fl=filter_arcs_fl, plot_fl=plot_fl)
 
-    def homogenise(self, filter_arcs_fl=False, plot_fl=True):
+    def homogenise(self, frequency=None, filter_arcs_fl=False, plot_fl=True):
         """
         Chooses the region of interest and sections the time trace into
         individual sweeps, populating the member variable 'iv_arrs' with an
         IVData object for each sweep and combining these into a numpy array for
         each coax
 
+        :param frequency:       (float) The frequency of sweeps used in the shot
+                                If not specified it will be calculated from the
+                                raw voltage trace using FFT (which may be slow).
         :param filter_arcs_fl:  (bool) Boolean flag, if true will attempt to
                                 automatically filter out arcs by excluding
                                 sweeps which have abnormally high max/min
@@ -165,41 +166,46 @@ class Magoptoffline(IVAnalyser):
                                 plots various useful figures
 
         """
+        triangle = f.TriangleWaveFitter()
+
+        if frequency is None:
+            # Use fourier decomposition to get frequency if none given
+            frequency = triangle.get_frequency(self.raw_time, self.raw_voltage, accepted_freqs=self._ACCEPTED_FREQS)
+
+        # Take the first 5% of data to run the sweep partitioning algorithm on
+        slc_oi = slice(0, int(0.05 * len(self.raw_time)))
+
+        # Smooth the voltage to get a first read of the peaks on the triangle wave
+        smoothed_voltage = sig.savgol_filter(self.raw_voltage, 21, 2)
+        top = sig.argrelmax(smoothed_voltage[slc_oi], order=100)[0]
+        bottom = sig.argrelmin(smoothed_voltage[slc_oi], order=100)[0]
+        _peaks = self.raw_time[np.concatenate([top, bottom])]
+        _peaks.sort()
+
+        # Get distances between the peaks and filter based on the found frequency
+        _peak_distances = np.diff(_peaks)
+        threshold = (1 / (2 * frequency)) - 0.001
+        _peaks_ind = np.where(_peak_distances > threshold)[0]
+
+        # Starting from the first filtered peak, arrange a period-spaced array
+        peaks_refined = np.arange(_peaks[_peaks_ind[0]], self.raw_time[-1], 1 / (2 * frequency))
+        self.peaks = peaks_refined
+
+        if plot_fl:
+            plt.figure()
+            plt.plot(self.raw_time, self.raw_voltage)
+            plt.plot(self.raw_time, triangle.fit(self.raw_time, self.raw_voltage).fit_y)
+            for peak in self.peaks:
+                plt.axvline(x=peak, linestyle='dashed', linewidth=1, color='r')
+
+        if self.combine_sweeps_fl:
+            skip = 2
+            sweep_fitter = triangle
+        else:
+            skip = 1
+            sweep_fitter = f.StraightLineFitter()
+
         for i in range(self.coaxes):
-            # Use fourier decomposition from get_frequency method in triangle fitter to get frequency
-            triangle = f.TriangleWaveFitter()
-            frequency = triangle.get_frequency(self.raw_time, self.voltage[0], accepted_freqs=self._ACCEPTED_FREQS)
-
-            # Smooth the voltage to get a first read of the peaks on the triangle wave
-            smoothed_voltage = sig.savgol_filter(self.voltage[i], 21, 2)
-            top = sig.argrelmax(smoothed_voltage, order=100)[0]
-            bottom = sig.argrelmin(smoothed_voltage, order=100)[0]
-            _peaks = self.raw_time[np.concatenate([top, bottom])]
-            _peaks.sort()
-
-            # Get distances between the peaks and filter based on the found frequency
-            _peak_distances = np.diff(_peaks)
-            threshold = (1 / (2 * frequency)) - 0.001
-            _peaks_ind = np.where(_peak_distances > threshold)[0]
-
-            # Starting from the first filtered peak, arrange a period-spaced array
-            peaks_refined = np.arange(_peaks[_peaks_ind[0]], self.raw_time[-1], 1 / (2 * frequency))
-            self.peaks = peaks_refined
-
-            if plot_fl:
-                plt.figure()
-                plt.plot(self.raw_time, self.voltage[i])
-                plt.plot(self.raw_time, triangle.fit(self.raw_time, self.voltage[i]).fit_y)
-                for peak in self.peaks:
-                    plt.axvline(x=peak, linestyle='dashed', linewidth=1, color='r')
-
-            if self.combine_sweeps_fl:
-                skip = 2
-                sweep_fitter = triangle
-            else:
-                skip = 1
-                sweep_fitter = f.StraightLineFitter()
-
             for j in range(len(self.peaks) - skip):
                 sweep_start = np.abs(self.raw_time - self.peaks[j]).argmin()
                 sweep_stop = np.abs(self.raw_time - self.peaks[j + skip]).argmin()
@@ -451,6 +457,7 @@ class Magoptoffline(IVAnalyser):
             # Apply filter to raw_current signals.
             for i in range(self.coaxes):
                 self.voltage[i] = low_pass.apply(self.raw_time, self.voltage[i])
+                self.current[i] = low_pass.apply(self.raw_time, self.current[i])
 
             if plot_fl:
                 fig = plt.figure()
