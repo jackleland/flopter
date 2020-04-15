@@ -44,7 +44,7 @@ class Magoptoffline(IVAnalyser):
         self.directory = directory
         self.file = filename
         self.ts_file = ts_filename
-        self.full_path = '{}{}{}{}'.format(pth.Path.home(), self._FOLDER_STRUCTURE, directory, filename)
+        self.full_path = str(pth.Path.home() / self._FOLDER_STRUCTURE / directory / filename)
         self.coaxes = coaxes
         self.combine_sweeps_fl = combine_sweeps_fl
 
