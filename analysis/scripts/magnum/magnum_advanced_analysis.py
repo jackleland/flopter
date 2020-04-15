@@ -1,6 +1,7 @@
 import numpy as np
 import traceback
 import matplotlib.pyplot as plt
+import pandas as pd
 import xarray as xr
 import os
 import concurrent.futures as cf
@@ -9,26 +10,37 @@ import flopter.core.ivdata as ivd
 import flopter.core.fitters as fts
 
 
-FOLDERS = ('2019-05-28_Leland/',
-           '2019-05-29_Leland/',
-           '2019-06-03_Leland/',
-           '2019-06-04_Leland/',
-           '2019-06-05_Leland/',
-           '2019-06-06_Leland/',
-           '2019-06-07_Leland/',
-           )
+FOLDERS = (
+    '2019-05-28_Leland/',
+    '2019-05-29_Leland/',
+    '2019-06-03_Leland/',
+    '2019-06-04_Leland/',
+    '2019-06-05_Leland/',
+    '2019-06-06_Leland/',
+    '2019-06-07_Leland/',
+)
 PROBE_DESIGNATIONS = ('S', 'L')
 SWEEP_RANGE = (0, 750)
 
-# OUTPUT_DIRECTORY = 'analysed_3_downsampled/'
-OUTPUT_DIRECTORY = 'phobos_test/'
+# OUTPUT_DIRECTORY = 'analysed_4_downsampled/'
+# DOWNSAMPLING_FL = True
+
+OUTPUT_DIRECTORY = 'analysed_4/'
+DOWNSAMPLING_FL = False
+
 DATA_DIRECTORY = '/Data/Magnum/adc_files/'
+ON_FREIA_FLAG = True
+MAX_CPUS = 32
 if not os.path.exists(DATA_DIRECTORY):
+    MAX_CPUS = 2
+    ON_FREIA_FLAG = False
     DATA_DIRECTORY = '/data/external/magnum/'
+    OUTPUT_DIRECTORY = 'test'
+    DOWNSAMPLING_FL = True
 
 
 def averaged_iv_analysis(folder, adc_file, output_tag, probe_designations=PROBE_DESIGNATIONS, shunt_resistance=10,
-                         cabling_resistance=2.0, downsampling_factor=1, dealloc=True):
+                         cabling_resistance=(2.0, 2.0), downsampling_factor=1, dealloc=True):
 
     mg.Magoptoffline._FOLDER_STRUCTURE = DATA_DIRECTORY
     print('"{}" \t\t "{}"'.format(folder, adc_file))
@@ -37,11 +49,12 @@ def averaged_iv_analysis(folder, adc_file, output_tag, probe_designations=PROBE_
 
     # Create magopter object
     print('Creating magopter object')
-    magopter = mg.Magoptoffline(folder, adc_file, shunt_resistor=shunt_resistance, cabling_resistance=cabling_resistance)
+    magopter = mg.Magoptoffline(folder, adc_file, shunt_resistor=shunt_resistance,
+                                cabling_resistance=cabling_resistance)
     magopter._VOLTAGE_CHANNEL = 3
     magopter._PROBE_CHANNEL_3 = 4
     magopter._PROBE_CHANNEL_4 = 5
-    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, filter_arcs_fl=False, crit_freq=None, crit_ampl=None)
+    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, filter_arcs_fl=False, crit_freq=45000, crit_ampl=None)
 
     print('0: {}, 1: {}'.format(len(magopter.iv_arrs[0]), len(magopter.iv_arrs[1])))
 
@@ -158,16 +171,24 @@ def get_shot_info_for_analysis(shot_number):
     ts_dens = shot_dataarray['ts_dens_max'].values
     probe_designations = (str(shot_dataarray['adc_4_probe'].values), str(shot_dataarray['adc_5_probe'].values))
     shunt_resistance = shot_dataarray['adc_4_shunt_resistance'].values
-    downsampling_factor = int(shot_dataarray['adc_freqs'].values / DESIRED_DATARATE)
-    # downsampling_factor = 1
-    cabling_resistance = (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'].values) - 1] + FEEDTHROUGH_RESISTANCE
-                          + INTERNAL_RESISTANCE + PROBE_RESISTANCES[probe_designations[0]])
+
+    if DOWNSAMPLING_FL:
+        downsampling_factor = int(shot_dataarray['adc_freqs'].values / DESIRED_DATARATE)
+    else:
+        downsampling_factor = 1
+
+    cabling_resistance = (
+        (CABLE_RESISTANCES[int(shot_dataarray['adc_4_coax'].values) - 1] + FEEDTHROUGH_RESISTANCE
+         + INTERNAL_RESISTANCE + PROBE_RESISTANCES[probe_designations[0]]),
+        (CABLE_RESISTANCES[int(shot_dataarray['adc_5_coax'].values) - 1] + FEEDTHROUGH_RESISTANCE
+         + INTERNAL_RESISTANCE + PROBE_RESISTANCES[probe_designations[1]])
+    )
 
     sweep_range = get_sweep_range(shot_dataarray['shot_end_time'].values, shot_dataarray['adc_end_time'].values,
                                   shot_dataarray['acquisition_length'].values,
                                   shot_dataarray['adc_freqs'].values / downsampling_factor)
-    return folder, adc_file, output_tag, ts_temp, ts_dens, probe_designations, shunt_resistance, downsampling_factor, \
-           cabling_resistance, sweep_range
+    return (folder, adc_file, output_tag, ts_temp, ts_dens, probe_designations, shunt_resistance, downsampling_factor,
+            cabling_resistance, sweep_range)
 
 
 def aia_mapping_wrapper(shot_number, dsr=None):
@@ -188,6 +209,7 @@ def aia_mapping_wrapper(shot_number, dsr=None):
                              shunt_resistance=shunt_resistance, cabling_resistance=cabling_resistance,
                              downsampling_factor=downsampling_factor)
     except:
+        print(f' *** SHOT {shot_number} FAILED *** ')
         traceback.print_exc()
     print(f'\n ...Finished shot {shot_number}')
 
@@ -196,7 +218,7 @@ def multi_file_analysis(shots):
     print('\nRunning multi-file analysis. Analysing {} shot(s).\n'.format(len(shots)))
 
     # Execute fitting and saving of files concurrently
-    with cf.ProcessPoolExecutor(max_workers=2) as executor:
+    with cf.ProcessPoolExecutor(max_workers=MAX_CPUS) as executor:
         executor.map(aia_mapping_wrapper, shots)
 
 
