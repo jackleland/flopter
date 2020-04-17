@@ -1,5 +1,6 @@
 import numpy as np
 import traceback
+from datetime import datetime
 import xarray as xr
 import os
 import concurrent.futures as cf
@@ -41,35 +42,47 @@ def averaged_iv_analysis(folder, adc_file, output_tag, probe_designations=PROBE_
                          cabling_resistance=(2.0, 2.0), downsampling_factor=1, dealloc=True):
 
     mg.Magoptoffline._FOLDER_STRUCTURE = DATA_DIRECTORY
-    print('"{}" \t\t "{}"'.format(folder, adc_file))
 
     dsr = downsampling_factor
+    print_with_log(output_tag, f'Running with a downsampling factor of {dsr}')
+    if dsr == 1:
+        filter_freq = 45000
+    else:
+        filter_freq = None
 
     # Create magopter object
-    print('Creating magopter object')
+    print_with_log(output_tag, f'Creating magopter object')
     magopter = mg.Magoptoffline(folder, adc_file, shunt_resistor=shunt_resistance,
                                 cabling_resistance=cabling_resistance)
     magopter._VOLTAGE_CHANNEL = 3
     magopter._PROBE_CHANNEL_3 = 4
     magopter._PROBE_CHANNEL_4 = 5
-    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, filter_arcs_fl=False, crit_freq=45000, crit_ampl=None)
+    magopter.prepare(down_sampling_rate=dsr, roi_b_plasma=True, filter_arcs_fl=False, crit_freq=filter_freq, crit_ampl=None)
 
-    print('0: {}, 1: {}'.format(len(magopter.iv_arrs[0]), len(magopter.iv_arrs[1])))
-
+    print_with_log(output_tag, f'Finished creating magopter object, now converting to an xarray dataset')
     ds_full = magopter.to_xarray(probe_designations)
 
     cwd = os.getcwd()
+    print_with_log(output_tag, f'Changing directory to {mg.Magoptoffline.get_data_path() / OUTPUT_DIRECTORY}')
     os.chdir(mg.Magoptoffline.get_data_path() / OUTPUT_DIRECTORY)
+
+    print_with_log(output_tag, f'Writing to file {output_tag}.nc')
     ds_full.to_netcdf(f'{output_tag}.nc')
 
+    print_with_log(output_tag, f'Changing directory back to {cwd}')
     os.chdir(cwd)
 
+    print_with_log(output_tag, f'Deallocating')
     if dealloc:
         del magopter, ds_full
         import gc
         gc.collect()
     else:
         return magopter, ds_full
+
+
+def print_with_log(output_tag, log_str):
+    print(f'[{datetime.now():%Y-%m-%d_%H:%M:%S} - {output_tag.split("_")[0]}] - {log_str}')
 
 
 os.chdir(DATA_DIRECTORY)
@@ -86,7 +99,7 @@ PROBE_RESISTANCES = {
 }
 FEEDTHROUGH_RESISTANCE = 1.25
 INTERNAL_RESISTANCE = 6.09
-DESIRED_DATARATE = 1000000
+DESIRED_DATARATE = 10000
 COMMONLY_USED_SWEEP_TIME = 0.01
 
 
@@ -134,8 +147,6 @@ def aia_mapping_wrapper(shot_number, dsr=None):
     print(f'\n Analysing shot {shot_number}...')
     
     try:
-        # print('Try statement')
-
         print(f'Attempting analysis on shot {shot_number}')
 
         folder, adc_file, output_tag, ts_temp, ts_dens, probe_designations, shunt_resistance, downsampling_factor, \
