@@ -59,7 +59,7 @@ def averaged_iv_analysis(folder, adc_file, output_tag, probe_designations=PROBE_
     ds_full = magopter.to_xarray(probe_designations)
 
     cwd = os.getcwd()
-    os.chdir(mg.Magoptoffline.get_data_path() + OUTPUT_DIRECTORY)
+    os.chdir(mg.Magoptoffline.get_data_path() / OUTPUT_DIRECTORY)
     ds_full.to_netcdf(f'{output_tag}.nc')
 
     os.chdir(cwd)
