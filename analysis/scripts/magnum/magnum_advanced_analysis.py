@@ -20,11 +20,11 @@ FOLDERS = (
 PROBE_DESIGNATIONS = ('S', 'L')
 SWEEP_RANGE = (0, 750)
 
-# OUTPUT_DIRECTORY = 'analysed_4_downsampled/'
-# DOWNSAMPLING_FL = True
+OUTPUT_DIRECTORY = 'analysed_4_downsampled/'
+DOWNSAMPLING_FL = True
 
-OUTPUT_DIRECTORY = 'analysed_4/'
-DOWNSAMPLING_FL = False
+# OUTPUT_DIRECTORY = 'analysed_4/'
+# DOWNSAMPLING_FL = False
 
 DATA_DIRECTORY = 'Data/Magnum/adc_files/'
 ON_FREIA_FLAG = True
@@ -157,7 +157,8 @@ def multi_file_analysis(shots):
     print('\nRunning multi-file analysis. Analysing {} shot(s).\n'.format(len(shots)))
 
     # Execute fitting and saving of files concurrently
-    with cf.ProcessPoolExecutor(max_workers=MAX_CPUS) as executor:
+    with cf.ProcessPoolExecutor() as executor:
+        print(f'Running with {executor._max_workers} processes')
         executor.map(aia_mapping_wrapper, shots)
 
 
