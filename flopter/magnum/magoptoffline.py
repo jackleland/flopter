@@ -568,7 +568,7 @@ class Magoptoffline(IVAnalyser):
 
     @classmethod
     def get_data_path(cls):
-        return str(pth.Path.home() / cls._FOLDER_STRUCTURE)
+        return pth.Path.home() / cls._FOLDER_STRUCTURE
 
     @classmethod
     def create_from_file(cls, filename):
