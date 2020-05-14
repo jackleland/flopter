@@ -17,9 +17,10 @@ CF_DEFAULT_VALUES = None
 CF_DEFAULT_BOUNDS = (-np.inf, np.inf)
 
 
-class GenericFitter(ABC):
+class GenericCurveFitter(ABC):
     """
-    Semi-abstract base class for a Fitter object, which describes a model for fitting an IV curve.
+    Semi-abstract base class for a Fitter object, which describes a model for
+    fitting an IV curve using scipy's curve_fit().
 
     :param: fixed_values
     """
@@ -142,7 +143,7 @@ class GenericFitter(ABC):
 
 # --- IV Fitters --- #
 
-class IVFitter(GenericFitter, ABC):
+class IVFitter(GenericCurveFitter, ABC):
     _DEFAULT_V_F = -1.0
 
     def fit(self, x_data, y_data, initial_vals=None, bounds=None, print_fl=False, sigma=None):
@@ -450,7 +451,7 @@ class SEEIVFitter(IVFitter):
 
 # --- Maxwellian Fitters --- #
 
-class MaxwellianVelFitter(GenericFitter):
+class MaxwellianVelFitter(GenericCurveFitter):
     def __init__(self, si_units=False, mu=P_E_MASS_RATIO):
         super().__init__()
         self._param_labels = {
@@ -482,7 +483,7 @@ class MaxwellianVelFitter(GenericFitter):
         return self._param_labels[c.FLOW_VEL]
 
 
-class GenericGaussianFitter(GenericFitter):
+class GenericGaussianFitter(GenericCurveFitter):
     """
     More generic gaussian function fitter. Variables are the amplitude (A), width (s - optionally able to be defined as
     the fwhm) and mean (x_0). Function is of the form:
@@ -506,7 +507,7 @@ class GenericGaussianFitter(GenericFitter):
         self.fwhm_fl = fwhm_fl
         self.name = 'Gaussian Function Fit'
 
-    def fit_function(self, v, parameters):
+    def fit_function(self, v, *parameters):
         amplitude = parameters[self._param_labels[c.AMPLITUDE]]
         if self.fwhm_fl:
             sigma = parameters[self._param_labels[c.ST_DEV]] / 2.35482
@@ -516,7 +517,7 @@ class GenericGaussianFitter(GenericFitter):
         return amplitude * np.exp(-0.5 * np.power((v - mu) / sigma, 2))
 
 
-class NormalisedGaussianFitter(GenericFitter):
+class NormalisedGaussianFitter(GenericCurveFitter):
     """
     Normalised gaussian function fitter class. Implements a generic gaussian function with normalised area, i.e. the
     amplitude is controlled solely by the standard deviation.
@@ -535,7 +536,7 @@ class NormalisedGaussianFitter(GenericFitter):
         self.fwhm_fl = fwhm_fl
         self.name = 'Gaussian Function Fit'
 
-    def fit_function(self, v, parameters):
+    def fit_function(self, v, *parameters):
         sigma = parameters[self._param_labels[c.ST_DEV]]
         if self.fwhm_fl:
             sigma = sigma / 2.35482
@@ -544,7 +545,7 @@ class NormalisedGaussianFitter(GenericFitter):
         return amplitude * np.exp(-0.5 * np.power((v - mu) / sigma, 2))
 
 
-class GaussianFitter(GenericFitter):
+class GaussianFitter(GenericCurveFitter):
     def __init__(self, si_units=False, mu=P_E_MASS_RATIO, v_scale=1):
         super().__init__()
         self._param_labels = {
@@ -711,7 +712,7 @@ class ScalableGaussianFitter(GaussianFitter):
         return self._param_labels[c.DIST_SCALER]
 
 
-class StraightLineFitter(GenericFitter):
+class StraightLineFitter(GenericCurveFitter):
     def __init__(self):
         super().__init__()
         self._param_labels = {
@@ -731,7 +732,7 @@ class StraightLineFitter(GenericFitter):
         return (m * v) + y_0
 
 
-class ExponentialFitter(GenericFitter):
+class ExponentialFitter(GenericCurveFitter):
     def __init__(self):
         super().__init__()
         self._param_labels = {
@@ -755,7 +756,7 @@ class ExponentialFitter(GenericFitter):
         return A * np.exp(b * (v + x_0)) + y_0
 
 
-class TriangleWaveFitter(GenericFitter):
+class TriangleWaveFitter(GenericCurveFitter):
     def __init__(self, frequency=None):
         super().__init__()
         self._param_labels = {
