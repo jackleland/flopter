@@ -51,14 +51,19 @@ class FitData2(object):
         self.chi2 = chi2
         self.reduced_chi2 = reduced_chi2
 
-    def plot(self, fig=None, show_fl=True):
-        if not fig:
-            plt.figure()
-        plt.plot(*self.get_raw_plottables(), 'x')
-        plt.plot(*self.get_fit_plottables(), label=self.get_param_str())
-        plt.xlabel(c.RAW_X)
-        plt.ylabel(self.fitter.name)
-        plt.legend()
+    def plot(self, ax=None, show_fl=False, x_label=c.RAW_X, y_label=None):
+        if ax is None:
+            fig, ax = plt.subplots()
+
+        if y_label is None:
+            y_label = self.fitter.name
+
+        ax.plot(*self.get_raw_plottables(), 'x')
+        ax.plot(*self.get_fit_plottables(), label=self.get_param_str())
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+        ax.legend()
+
         if show_fl:
             plt.show()
 

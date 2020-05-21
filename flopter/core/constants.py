@@ -6,6 +6,13 @@ CURRENT = 'I'
 ELEC_CURRENT = 'I_e'
 ION_CURRENT = 'I_i'
 
+# Xarray Dataset Labels
+XCURRENT = 'current'
+XVOLTAGE = 'voltage'
+XTIME = 'time'
+XSIGMA = 'd_current'
+
+
 # Fit Variable Labels
 ION_SAT = 'I_sat'       # Ion saturation current label
 SHEATH_EXP = 'a'        # Sheath expansion parameter label

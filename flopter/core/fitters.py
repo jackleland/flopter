@@ -203,8 +203,8 @@ class FullIVFitter(IVFitter):
         }
         self.default_values = (30.0, 0.0204, 1, -1)
         self.default_bounds = (
-            (-np.inf,       0,       0, -np.inf),
-            ( np.inf,  np.inf,  np.inf,  np.inf)
+            (-np.inf,    0,       0, -np.inf),
+            ( np.inf,  1.5,  np.inf,  np.inf)
         )
         self.name = '4 Parameter Fit'
 
