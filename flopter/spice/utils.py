@@ -1,6 +1,8 @@
 import flopter.core.constants
 import numpy as np
 import pathlib as pth
+import flopter.spice.inputparser as inp
+import matplotlib.pyplot as plt
 
 
 def get_ksi(density, temp, q, m_i, B):
@@ -37,3 +39,52 @@ def is_code_output_dir(directory):
     else:
         print(f'{directory} is not a directory')
         return False
+
+
+def plot_2d_sim_window(input_file, ax=None, colour='red'):
+    return_ax = False
+    if ax is None:
+        fig, ax = plt.subplots()
+        return_ax = True
+
+    inputparser = inp.InputParser()
+    with open(input_file, 'r') as inpf:
+        inputparser.read_file(inpf)
+
+    shape_section_labels = {'rectangle', 'triangle', 'circle'}
+    shape_sections = {}
+    for shape in shape_section_labels:
+        shape_section = [inputparser[section] for section in inputparser.sections() if shape in section]
+        shape_sections[shape] = shape_section
+    print(shape_sections)
+
+    geometry = inputparser['geom']
+    sim_objects = [plt.Rectangle((0, 0), int(geometry['Ly']), int(geometry['Lz']), fc='w', ec='gray', zorder=-2)]
+
+    for shape_sec in shape_sections['rectangle']:
+        rect_colour = colour if 'probe' in shape_sec['name'].lower() else 'gray'
+        rect_width = int(shape_sec['yhigh']) - int(shape_sec['ylow'])
+        rect_height = int(shape_sec['zhigh']) - int(shape_sec['zlow'])
+
+        sim_objects.append(
+            plt.Rectangle((int(shape_sec['ylow']), int(shape_sec['zlow'])), rect_width, rect_height, fc=rect_colour,
+                          ec='k'))
+
+    for shape_sec in shape_sections['triangle']:
+        triangle_colour = colour if 'probe' in shape_sec['name'].lower() else 'gray'
+        triangle_points = [[shape_sec['ya'], shape_sec['za']], [shape_sec['yb'], shape_sec['zb']],
+                           [shape_sec['yc'], shape_sec['zc']]]
+        triangle_points = [(int(tp[0]), int(tp[1])) for tp in triangle_points]
+
+        sim_objects.append(plt.Polygon(triangle_points, fc=triangle_colour, ec='k'))
+
+    for so in sim_objects:
+        ax.add_patch(so)
+
+    ax.axis('scaled')
+    ax.set_xlabel(r'z ($\lambda_D$)')
+    ax.set_ylabel(r'y ($\lambda_D$)')
+    ax.autoscale()
+
+    if return_ax:
+        return ax
