@@ -8,7 +8,7 @@ import flopter.core.lputils as lpu
 import numpy as np
 import matplotlib.pyplot as plt
 
-DEFAULT_REARWALL_RECESSION = 1e-3   # mm
+DEFAULT_REARWALL_RECESSION = 1e-3   # in m (1 mm)
 
 
 class InputParserFactory:
@@ -274,17 +274,17 @@ class Simulation2DGeometry:
         print(f'Sim height: {self.sim_height}\n')
 
         print(f'Forewall y: [{0},{self.wall_width}]')
-        print(f'Forewall x: [{0},{self.wall_height}]\n')
+        print(f'Forewall z: [{0},{self.wall_height}]\n')
 
         print(f'Rearwall y: [{self.sim_width - self.rearwall_w},{self.sim_width}]')
-        print(f'Rearwall x: [{0},{self.rearwall_h}]\n')
+        print(f'Rearwall z: [{0},{self.rearwall_h}]\n')
 
         print(f'Probe body y: [{self.wall_width + self.g_hat},{self.wall_width + self.g_hat + self.L_hat}]')
-        print(f'Probe body x: [{0},{self.leading_edge_height}]\n')
+        print(f'Probe body z: [{0},{self.leading_edge_height}]\n')
 
         if self.angled_fl:
             print(f'Probe tip y: [{self.tip_points[0][0]},{self.tip_points[1][0]},{self.tip_points[2][0]}]')
-            print(f'Probe tip x: [{self.tip_points[0][1]},{self.tip_points[1][1]},{self.tip_points[2][1]}]\n')
+            print(f'Probe tip z: [{self.tip_points[0][1]},{self.tip_points[1][1]},{self.tip_points[2][1]}]\n')
         print('\n')
 
     def print(self):
@@ -387,8 +387,10 @@ if __name__ == "__main__":
     s_probe = lpu.MagnumProbes().probe_s
     l_probe = lpu.MagnumProbes().probe_l    # rearwall probe
 
-    # simulation_parameters = SimulationParameters(5e17, 5, 1836, 1, 0.8, np.radians(1))
-    simulation_parameters = SimulationParameters(1e18, 7.5, 1836, 1, 0.8, np.radians(10))
+    # simulation_parameters = SimulationParameters(1e17, 5, 1836, 1, 0.8, np.radians(1))
+    simulation_parameters = SimulationParameters(1e17, 5, 1836, 1, 0.8, np.radians(1))
+    pad = True
+    # simulation_parameters = SimulationParameters(1e18, 7.5, 1836, 1, 0.8, np.radians(10))
     simulation_parameters.calculate_plasma_params(flush_probe, print_fl=True)
 
     # simulation_parameters = SimulationParameters(5e18, 5, 1836, 1, 0.8, np.radians(3))
@@ -403,22 +405,22 @@ if __name__ == "__main__":
     # noinspection PyTypeChecker
     fig, ax = plt.subplots(2, 2, sharex=True, sharey=True)
 
-    flush_probe_sim = Simulation2DGeometry(flush_probe, simulation_parameters, padded_fl=True, rearwall=False)
+    flush_probe_sim = Simulation2DGeometry(flush_probe, simulation_parameters, padded_fl=pad, rearwall=False)
     flush_probe_sim.plot(ax[0][0])
     print('Flush Probe: ')
     flush_probe_sim.print_objects_sizes()
 
-    angled_probe_sim = Simulation2DGeometry(angled_probe, simulation_parameters, padded_fl=True, rearwall=False)
+    angled_probe_sim = Simulation2DGeometry(angled_probe, simulation_parameters, padded_fl=pad, rearwall=False)
     print('Angled Probe: ')
     angled_probe_sim.plot(ax[0][1])
     angled_probe_sim.print_objects_sizes()
 
-    recessed_probe_sim = Simulation2DGeometry(recessed_probe, simulation_parameters, padded_fl=True, rearwall=True)
+    recessed_probe_sim = Simulation2DGeometry(recessed_probe, simulation_parameters, padded_fl=pad, rearwall=True)
     recessed_probe_sim.plot(ax[1][0])
     print('Recessed Probe: ')
     recessed_probe_sim.print_objects_sizes()
 
-    sprobe_probe_sim = Simulation2DGeometry(s_probe, simulation_parameters, padded_fl=False, rearwall=True)
+    sprobe_probe_sim = Simulation2DGeometry(s_probe, simulation_parameters, padded_fl=pad, rearwall=True)
     sprobe_probe_sim.plot(ax[1][1])
     print('S Probe: ')
     sprobe_probe_sim.print_objects_sizes()
