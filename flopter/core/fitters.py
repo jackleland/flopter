@@ -545,6 +545,42 @@ class NormalisedGaussianFitter(GenericCurveFitter):
         return amplitude * np.exp(-0.5 * np.power((v - mu) / sigma, 2))
 
 
+class NormalisedBimodalGaussianFitter(GenericCurveFitter):
+    """
+    A bimodal gaussian function made from two normalised gaussians combined.
+    Implements 2 generic gaussian function with normalised area, i.e. the
+    amplitude is controlled solely by the standard deviation.
+    """
+    def __init__(self, fwhm_fl=False):
+        super().__init__()
+        self._param_labels = {
+            f'{c.ST_DEV}_0': 0,
+            f'{c.OFFSET_X}_0': 1,
+            f'{c.ST_DEV}_1': 2,
+            f'{c.OFFSET_X}_1': 3,
+        }
+        self.default_values = (1.0, 0.0, 1.0, 0.0)
+        self.default_bounds = (
+            (0, -np.inf, 0, -np.inf),
+            (np.inf, np.inf, np.inf, np.inf)
+        )
+        self.fwhm_fl = fwhm_fl
+        self.name = 'Bimodal Gaussian Function Fit'
+
+    def fit_function(self, v, *parameters):
+        sigma_0 = parameters[self._param_labels[f'{c.ST_DEV}_0']]
+        sigma_1 = parameters[self._param_labels[f'{c.ST_DEV}_1']]
+        if self.fwhm_fl:
+            sigma_0 = sigma_0 / 2.35482
+            sigma_1 = sigma_1 / 2.35482
+        amplitude_0 = 1 / (np.sqrt(2 * np.pi) * sigma_0)
+        amplitude_1 = 1 / (np.sqrt(2 * np.pi) * sigma_1)
+        mu_0 = parameters[self._param_labels[f'{c.OFFSET_X}_0']]
+        mu_1 = parameters[self._param_labels[f'{c.OFFSET_X}_1']]
+        return (amplitude_0 * np.exp(-0.5 * np.power((v - mu_0) / sigma_0, 2))
+                + amplitude_1 * np.exp(-0.5 * np.power((v - mu_1) / sigma_1, 2)))
+
+
 class GaussianFitter(GenericCurveFitter):
     def __init__(self, si_units=False, mu=P_E_MASS_RATIO, v_scale=1):
         super().__init__()
