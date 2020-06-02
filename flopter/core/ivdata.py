@@ -183,7 +183,7 @@ class IVData(dict):
         else:
             plot_func = ax.plot
 
-        plot_func(self[c.POTENTIAL], self[c.CURRENT], **kwargs)
+        handle = plot_func(self[c.POTENTIAL], self[c.CURRENT], **kwargs)
         ax.axhline(y=0.0, **c.AX_LINE_DEFAULTS)
 
         if trim_lines_fl:
@@ -194,12 +194,14 @@ class IVData(dict):
             ax.axvline(x=self[c.POTENTIAL][stop], label='trim stop', **c.AX_LINE_DEFAULTS)
 
         if axes_labels is True:
-            ax.set_xlabel(r'$I_P$ (A)')
-            ax.set_ylabel(r'$V_P$ (V)')
+            ax.set_ylabel(r'$I_P$ (A)')
+            ax.set_xlabel(r'$V_P$ (V)')
         elif axes_labels is not None:
             xlabel, ylabel = axes_labels
             ax.set_xlabel(xlabel)
             ax.set_ylabel(ylabel)
+
+        return handle
 
     def copy(self):
         """
@@ -400,7 +402,7 @@ class IVData(dict):
             plt.show()
         return iv_data_corrected, fit_data_corrected
 
-    def fit_to_min_temperature(self, initial_vals=None, fitter=None, plot_fl=False):
+    def fit_to_min_temperature(self, initial_vals=None, fitter=None, plot_fl=False, print_fl=False):
         """
         A fitting function which minimises the fitted temperature of the IV
         characteristic by varying how many values around the floating potential
@@ -438,7 +440,7 @@ class IVData(dict):
         # field shot.
         # TODO: (2020-05-19) Make this configurable
         upper_dist_frac = 0.2  # 10/50
-        lower_dist_frac = 0.1  # 5/50
+        lower_dist_frac = 0.04  # 2/50
         step_frac = 0.02  # 1/50
 
         trim_range_updist = int(upper_dist_frac * len(self['t']))
@@ -470,13 +472,21 @@ class IVData(dict):
             if plot_fl:
                 trim_iv.plot(ax=ax[0])
 
-            trim_fit = fitter.fit_iv_data(trim_iv, sigma=trim_iv['sigma'], initial_vals=initial_vals)
+            try:
+                trim_fit = fitter.fit_iv_data(trim_iv, sigma=trim_iv['sigma'], initial_vals=initial_vals)
 
-            trim_fits.append(trim_fit)
-            temps.append(trim_fit.get_temp())
+                trim_fits.append(trim_fit)
+                temps.append(trim_fit.get_temp())
 
-            # The voltages are only extracted for plotting purposes
-            volts.append(np.max(trim_fit.raw_x))
+                # The voltages are only extracted for plotting purposes
+                volts.append(np.max(trim_fit.raw_x))
+            except RuntimeError as e:
+                if print_fl:
+                    print(f'Temp-minimisation fit failed on index {i}\n:'
+                          f'{e}')
+
+        if len(temps) == 0:
+            raise RuntimeError('All temperature minimisation fits failed. ')
 
         if plot_fl:
             ax[1].plot(volts, temps)
