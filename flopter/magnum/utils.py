@@ -9,6 +9,7 @@ import flopter.core.lputils as lpu
 import flopter.core.ivdata as iv
 import flopter.core.fitters as fts
 import flopter.core.constants as c
+import matplotlib as mpl
 
 
 shot_metadata_ds = xr.open_dataset('/home/jleland/data/external/magnum/all_meta_data.nc')
@@ -428,3 +429,42 @@ def fit_by_upper_index(iv_data_ds, upper_index, ax=None, multi_fit_fl=False, plo
         ax.legend()
 
     return shot_fit
+
+
+def plot_densscan_multi_ts(densscan_ds, ax=None, sup_title=None):
+    ts_temp = densscan_ds['ts_temperature']
+    ts_d_temp = densscan_ds['ts_d_temperature']
+    ts_dens = densscan_ds['ts_density']
+    ts_d_dens = densscan_ds['ts_d_density']
+
+    if ax is None:
+        fig, ax = plt.subplots(2)
+
+    colourmap = plt.get_cmap('nipy_spectral')
+    cycler = mpl.cycler(color=[colourmap(k) for k in np.linspace(0, 1, len(densscan_ds['shot_number'].values))])
+
+    ax[0].set_title('Temperature')
+    ax[0].set_prop_cycle(cycler)
+    ax[1].set_title('Density')
+    ax[1].set_prop_cycle(cycler)
+
+    ts_temp.plot.line(hue='shot_number', ax=ax[0])
+    ts_dens.plot.line(hue='shot_number', ax=ax[1])
+
+    for i in [0, 1]:
+        for probe_pos in [-6, 4, 14, 24]:
+            ax[i].axvline(x=probe_pos, color='black', linewidth=1, linestyle='dashed')
+    plt.show()
+
+    plt.suptitle(f'Thomson Scattering profiles for {sup_title}')
+
+
+def plot_densscan_paramspace(densscan_ds, ax=None, sup_title=None):
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    densscan_ds.set_coords(['ts_temp_max', 'ts_dens_max']).plot.scatter(x='ts_temp_max', y='ts_dens_max', ax=ax)
+
+    plt.show()
+    math_str = r'$T_e n_e$'
+    plt.suptitle(f'Thomson Scattering {math_str} parameter space for {sup_title}')
