@@ -1,10 +1,11 @@
 import glob
 import os
 import pathlib as pth
+import re
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import interpolate
+
 from scipy.io import loadmat
 from scipy.signal import argrelmax, savgol_filter
 
@@ -12,7 +13,6 @@ from flopter.core.ivanalyser import IVAnalyser
 from flopter.core.ivdata import IVData
 from flopter.core import constants as c
 from flopter.core.fitters import IVFitter, FullIVFitter, GaussianFitter
-from flopter.spice.homogenise import Spice2Homogeniser
 from flopter.spice.inputparser import InputParser
 from flopter.spice.normalise import Denormaliser
 import flopter.spice.utils as ut
@@ -29,15 +29,18 @@ class Splopter(IVAnalyser):
     DUMP_SUFFIX = '.2d.'
 
     DEFAULT_SPICE_REPO = pth.Path.home() / 'Spice' / 'spice2'
+    COMPLETION_VOLTAGE = 9.95
 
-    def __init__(self, spice_data_dir, run_name=None, reduce=False):
+    def __init__(self, spice_data_dir, run_name=None, reduce=False, check_completion_fl=False,
+                 check_voltage_error_fl=True):
         self.data_dir = pth.Path(spice_data_dir)
 
         if not self.is_code_output_dir(self.data_dir):
             print('Spice data directory is not valid, attempting to auto-fix.')
-            self.data_dir = self.DEFAULT_SPICE_REPO / self.data_dir
-            if not self.is_code_output_dir(self.data_dir):
-                raise ValueError(f'Passed Spice directory ({spice_data_dir}) is not valid.')
+            test_data_dir = self.DEFAULT_SPICE_REPO / self.data_dir
+            if not self.is_code_output_dir(test_data_dir):
+                print(f'Passed Spice directory ({spice_data_dir}) doesn\'t seem to be valid.\n'
+                      f'Continuing anyway.')
 
         # Make list of backup folders made for this simulation, if any
         self.backup_folders = [] + list(self.data_dir.glob('backup_*'))
@@ -90,6 +93,11 @@ class Splopter(IVAnalyser):
                 self.tdata.reduce(sd.DEFAULT_REDUCED_DATASET)
             else:
                 self.tdata = sd.Spice2TData(self.tfile_path, variable_names=reduce)
+
+            if check_voltage_error_fl \
+                    and np.min(np.squeeze(self.tdata.diagnostics[c.DIAG_PROBE_POT])) > c.SWEEP_LOWER * 0.99:
+                raise FailedSimulationException('Voltage data is malformed.')
+
         else:
             raise ValueError('No t-file found in directory')
 
@@ -100,6 +108,21 @@ class Splopter(IVAnalyser):
             print('No a-file given, continuing without')
             self.afile = None
 
+        if check_completion_fl:
+            self.parser = InputParser(input_filename=self.input_filename)
+            self.COMPLETION_VOLTAGE = 5
+            log_files = list(self.data_dir.glob('log.ongoing.out'))
+            if len(log_files) > 0:
+                self.log_file = log_files[0]
+                final_percentage = self.get_percentage_completed(self.log_file)
+                if not self.parser.has_sufficient_sweep(final_percentage, voltage_threshold=self.COMPLETION_VOLTAGE):
+                    raise FailedSimulationException('Simulation has not reached the required percentage through the '
+                                                    'sweep (60%) to be analysed')
+            else:
+                print('No log files found, cannot check if simulation is sufficiently completed.')
+        else:
+            self.log_file = None
+
         self.parser = None
         self.denormaliser = None
         self.homogeniser = None
@@ -109,10 +132,11 @@ class Splopter(IVAnalyser):
     def prepare(self, homogenise_fl=True, denormaliser_fl=True, find_se_temp_fl=True, backup_concat_fl=True):
         """
             Check existence of, and then populate, the main flopter objects:
-            inputparser, denormaliser and homogeniser.
+            inputparser, denormaliser. Homogeniser has now been rolled into the
+            single function 'homogenise()'
 
             Default behaviour is to populate all, mandatory behaviour is only to
-            create input parser. Homogeniser and Denormaliser creation is
+            create input parser. Denormaliser creation is
             controlled through the appropriate boolean kwargs. Specifying
             denormaliser_fl does not automatically denormalise all data,
             it merely initialises the denormaliser object.
@@ -153,6 +177,100 @@ class Splopter(IVAnalyser):
         probe_bias = np.squeeze(tdata.diagnostics[c.DIAG_PROBE_POT])
         return time, probe_bias, probe_current_e, probe_current_i
 
+    @staticmethod
+    def get_h_remaining_lines(log_file):
+        time_left_lines = []
+        with open(str(log_file), 'r') as f:
+            for line in f.readlines():
+                if re.search('% done', line):
+                    time_left_lines.append(line.strip())
+        return time_left_lines
+
+    @staticmethod
+    def get_percentage_completed(log_file):
+        return int(Splopter.get_h_remaining_lines(log_file)[-1].split()[0]) / 100
+
+    @staticmethod
+    def strip_head(current, prev_current, print_fl=False):
+        # Primary method - find first point roughly equal to previous end value
+        start_points = np.where(np.logical_and(current >= prev_current * 0.8, current <= prev_current * 1.2))
+        if len(start_points[0]) > 0:
+            for start_point in start_points[0]:
+                if not any(current[start_point:] == 0.0):
+                    if print_fl:
+                        print('Successfully used primary method')
+                    return current[start_point:], start_point
+
+        # Secondary method - find last zero in current array and take the succeeding value
+        zero_indices = np.where(current == 0.0)[0]
+        if current[-1] != 0.0 and len(zero_indices) > 0:
+            # Take start point to be the value one place along from the final 0
+            start_point = np.max(zero_indices + 1)
+            if print_fl:
+                print('Successfully used secondary method')
+            return current[start_point:], start_point
+
+        return None, None
+
+    @staticmethod
+    def strip_tail(current, threshold=10000, print_fl=False):
+        # Strip tail section if present
+        big_spikes = np.where(np.abs(current) > threshold)
+        if len(big_spikes[0]) == 0:
+            if print_fl:
+                print('No spikes found on tail.')
+            return current, len(current)
+        elif len(big_spikes[0]) >= 1:
+            end_spike = big_spikes[0][np.argmax(np.abs(current[big_spikes]))]
+            current = current[:end_spike]
+            return current, end_spike
+        return None, None
+
+    @staticmethod
+    def group_spikes(voltage, tolerance=3):
+        # Determine location of start and end points of the spikes by locating values >3 sigma from mean difference
+        bias_diff = np.diff(voltage)
+        diff_outliers = np.where(np.abs(bias_diff) >= 0.06)[0]
+
+        if len(diff_outliers) % 2 != 0:
+            print('Found an odd number of spike transitions')
+
+            start_spike = 0
+            end_spike = 1
+            pairs = []
+            # Group by diffs where there is a change of sign
+            while end_spike < len(diff_outliers):
+                if np.sign(bias_diff[diff_outliers][start_spike]) != np.sign(bias_diff[diff_outliers][end_spike]):
+                    pairs.append([diff_outliers[start_spike], diff_outliers[end_spike]])
+                    start_spike = end_spike + 1
+                    end_spike = start_spike + 1
+                else:
+                    end_spike += 1
+            return pairs
+        else:
+            return list(zip(diff_outliers[::2], diff_outliers[1::2]))
+
+    @staticmethod
+    def prune_voltage(voltage):
+        # Find consecutive problem values and group them
+        edges = Splopter.group_spikes(voltage)
+
+        # Construct a replacement array to replace each spike
+        # TODO: (2020-01-05) This doesn't look ideal when looking closely at a high resolution voltage trace, but
+        #  should be good enough for the time being.
+        if len(edges) > 0:
+            for start_spike, end_spike in edges:
+                if start_spike == 0 or end_spike == len(voltage) - 1:
+                    raise NotImplementedError('Edge cases not accounted for yet')
+
+                start_v = voltage[start_spike]
+                end_v = voltage[end_spike + 1]
+                length = end_spike - start_spike
+                replacement = np.linspace(start_v, end_v, length + 2)
+
+                voltage[start_spike:end_spike + 2] = replacement
+        return voltage
+
     def homogenise(self, backups=None):
         """
         Homogenise function for creation of IVData objects for use in SPICE simulation analysis. Uses stored
@@ -170,11 +288,23 @@ class Splopter(IVAnalyser):
             concatted_current_i = np.array([])
             concatted_current_e = np.array([])
             concatted_bias = np.array([])
+            prev_current = 0.0
 
-            # Loop through backups and stitch them together
             for i, bu_folder in enumerate(backups):
-                print(f'Loading backup {bu_folder} ({i + 1} of {len(backups)}) for current and bias concatenation')
+                # Loop through backups and stitch them together
+                bu_probe_current = np.array([])
+
+                print(f'Loading backup {bu_folder.name} ({i + 1} of {len(backups)}) for current and bias concatenation')
                 bu_tfile_path, _ = self.get_ta_filenames(bu_folder)
+
+                # Check whether log is completed
+                bu_log_files = list(bu_folder.glob('log.ongoing.out'))
+                if len(bu_log_files) > 0:
+                    bu_log_file = bu_log_files[0]
+                    final_percentage = self.get_percentage_completed(bu_log_file)
+                else:
+                    final_percentage = 0.0
+
                 bu_tdata = sd.Spice2TData(bu_folder / bu_tfile_path, variable_names=[sd.T,
                                                                                      c.DIAG_PROBE_POT,
                                                                                      sd.OBJECTSCURRENTE,
@@ -182,26 +312,43 @@ class Splopter(IVAnalyser):
                                                                                      sd.OBJECTSENUM,
                                                                                      sd.OBJECTS])
                 bu_time, bu_probe_bias, bu_probe_current_e, bu_probe_current_i = self.get_tdata_raw_iv(bu_tdata)
-                bu_probe_current_tot = bu_probe_current_e + bu_probe_current_i
+                bu_probe_current = bu_probe_current_e + bu_probe_current_i
 
-                if len(concatted_time) > 0:
-                    offset = concatted_time[-1]
-                else:
-                    offset = 0
+                finished_fl = False
 
-                # filter out spice current artifacts
-                # TODO: this should be refined and maybe put in a separate function
-                indices_oi = np.where(
-                    (bu_probe_current_tot != 0.0) & (bu_probe_current_tot <= 100.0) & (bu_probe_current_tot >= -500.0))
+                if i == 0:
+                    # If first step then whole current array is left for concatting and final current value is stored
+                    # for next iteration to assist in stripping
+                    prev_current = bu_probe_current[-1]
 
-                concatted_current = np.concatenate([concatted_current, bu_probe_current_tot[indices_oi]])
-                concatted_current_e = np.concatenate([concatted_current_e, bu_probe_current_e[indices_oi]])
-                concatted_current_i = np.concatenate([concatted_current_i, bu_probe_current_i[indices_oi]])
-                concatted_time = np.concatenate([concatted_time, offset + np.arange(len(bu_time[indices_oi]))])
+                if round(np.max(bu_probe_bias), 2) >= self.COMPLETION_VOLTAGE \
+                        or self.parser.has_sufficient_sweep(final_percentage,
+                                                            voltage_threshold=self.COMPLETION_VOLTAGE) \
+                        or i + 1 == len(backups):
+                    # If completed, or final backup, then strip off the end spike, zeroes and appended IV, if present
+                    print(f'Detected finish, stripping tail for backup {i+1} of {len(backups)}')
+                    finished_fl = True
+                    bu_probe_current, end_point = self.strip_tail(bu_probe_current)
+                    bu_probe_current_e = bu_probe_current_e[:end_point]
+                    bu_probe_current_i = bu_probe_current_i[:end_point]
 
-                # Voltage can be plainly concatenated together
-                # TODO: this should also be refined to get rid of spikes upon switch between backups
-                concatted_bias = np.concatenate([concatted_bias, bu_probe_bias[len(concatted_bias):]])
+                if i >= 1:
+                    # If not the first step then strip the leading zeroes/spikes
+                    print(f'Stripping head for backup {i+1} of {len(backups)}')
+                    bu_probe_current, start_point = self.strip_head(bu_probe_current, prev_current)
+                    prev_current = bu_probe_current[-1]
+                    bu_probe_current_i = bu_probe_current_i[start_point:]
+                    bu_probe_current_e = bu_probe_current_e[start_point:]
+
+                concatted_current = np.append(concatted_current, bu_probe_current)
+                concatted_current_e = np.append(concatted_current_e, bu_probe_current_e)
+                concatted_current_i = np.append(concatted_current_i, bu_probe_current_i)
+
+                if finished_fl:
+                    # Final version of voltage is stored in completed run, may need some minor pruning
+                    concatted_bias = self.prune_voltage(bu_probe_bias)
+                    concatted_time = np.arange(len(concatted_current))
+                    break
 
             probe_current_tot = concatted_current
             probe_current_e = concatted_current_e
@@ -302,9 +449,7 @@ class Splopter(IVAnalyser):
         if not iv_data:
             iv_data = self.iv_data
 
-        iv_interp = interpolate.interp1d(iv_data[c.CURRENT], iv_data[c.POTENTIAL])
-        v_float = iv_interp([0.0])
-        return v_float
+        return iv_data.get_vf()
 
     def get_plasma_potential(self, iv_data=None):
         if not iv_data:
@@ -634,3 +779,7 @@ class Splopter(IVAnalyser):
         self.plot_iv(plot_vf=True, plot_tot=True, show_fl=True)
         if show_fl:
             plt.show()
+
+
+class FailedSimulationException(Exception):
+    pass
