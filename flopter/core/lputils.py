@@ -1,6 +1,6 @@
 import numpy as np
 
-import flopter.core.constants
+import flopter.core.constants as c
 from flopter.core import normalise as nrm
 from abc import ABC, abstractmethod
 
@@ -31,6 +31,10 @@ class LangmuirProbe(ABC):
         pass
 
     @abstractmethod
+    def get_3d_probe_depth(self):
+        pass
+
+    @abstractmethod
     def get_2d_collection_length(self, alpha):
         pass
 
@@ -53,6 +57,11 @@ class LangmuirProbe(ABC):
 
         return d_electron_density(n_e, c_s, d_c_s, A_coll, d_A_coll, sat_current, d_sat_current)
 
+    def get_isat(self, temperature, density, alpha, gamma_i=1, mass=1):
+        c_s = sound_speed(temperature, gamma_i=gamma_i, mass=mass)
+        A_coll = self.get_collection_area(alpha)
+        return density * c.ELEM_CHARGE * c_s * A_coll
+
 
 class AngledTipProbe(LangmuirProbe):
     def __init__(self, a, b, L, g, d_perp, theta_f, theta_p):
@@ -64,7 +73,8 @@ class AngledTipProbe(LangmuirProbe):
         self.theta_p = theta_p
 
     def get_collection_area(self, alpha):
-        return calc_probe_collection_area(self.a, self.b, self.L, self.g, self.d_perp, alpha, self.theta_p, self.theta_f)
+        return calc_probe_collection_area(self.a, self.b, self.L, self.g, self.d_perp, alpha, self.theta_p,
+                                          self.theta_f)
 
     def get_2d_collection_length(self, alpha):
         d, h_coll = self.calc_exposed_lengths(alpha)
@@ -85,8 +95,15 @@ class AngledTipProbe(LangmuirProbe):
     def get_2d_probe_height(self):
         return self.L * np.tan(self.theta_p)
 
+    def get_3d_probe_depth(self):
+        return max(self.b, self.a)
+
     def calc_exposed_lengths(self, alpha):
         return calc_probe_exposed_lengths(self.g, self.d_perp, alpha, self.theta_p)
+
+    def get_sheath_exp_param(self, temp, dens, alpha, c_1=0.4, c_2=0.5):
+        return calc_new_sheath_expansion_param(temp, dens, self.L, self.g, alpha, self.d_perp, self.theta_p,
+                                               c_1=c_1, c_2=c_2)
 
 
 class FlushCylindricalProbe(LangmuirProbe):
@@ -100,9 +117,15 @@ class FlushCylindricalProbe(LangmuirProbe):
         return False
 
     def get_collection_area(self, alpha):
-        d = (self.d_perp / np.sin(alpha)) - self.g
-        theta_c = 2 * np.arccos((self.radius - d) / self.radius)
-        A_coll = np.sin(alpha) * ((np.pi * self.radius**2) - (self.radius**2 / 2)) * (theta_c - 2 * np.sin(theta_c))
+        d, h_coll = self.calc_exposed_lengths(alpha)
+        theta_c = max(2 * np.arccos((self.radius - d) / self.radius), 0)
+        l_arc_eff = (1 - np.cos((np.pi / 2) - theta_c)) * self.radius
+        h_r = (self.radius - d) * np.sin(alpha)
+        A_coll = (
+            ((np.sin(alpha) * self.radius**2) * (np.pi - theta_c + (2 * np.sin(theta_c))))
+            + (2 * h_coll * np.cos(alpha) * l_arc_eff)
+            + (l_arc_eff * h_r)
+        )
         return A_coll
 
     def get_2d_collection_length(self, alpha):
@@ -119,6 +142,9 @@ class FlushCylindricalProbe(LangmuirProbe):
 
     def get_2d_probe_height(self):
         return 0
+
+    def get_3d_probe_depth(self):
+        return 2 * self.radius
 
     def calc_exposed_lengths(self, alpha):
         return calc_probe_exposed_lengths(self.g, self.d_perp, alpha, 0.0)
@@ -150,11 +176,10 @@ def analytical_iv_curve(voltage, v_f, temp, dens, alpha, A_coll, c_1=0.9, c_2=0.
                         print_fl=False):
     T_i = temp
     T_e = temp
-    lambda_D = np.sqrt((flopter.core.constants.EPSILON_0 * T_e)
-                       / (flopter.core.constants.ELEM_CHARGE * dens))
-    c_s = np.sqrt((flopter.core.constants.ELEM_CHARGE * (T_e + (gamma_i * T_i)))
-                  / (flopter.core.constants.PROTON_MASS * mass))
-    I_0 = dens * flopter.core.constants.ELEM_CHARGE * c_s * A_coll
+    lambda_D = debye_length(T_e, dens)
+    c_s = np.sqrt((c.ELEM_CHARGE * (T_e + (gamma_i * T_i)))
+                  / (c.PROTON_MASS * mass))
+    I_0 = dens * c.ELEM_CHARGE * c_s * A_coll
     a = ((c_1 + (c_2 / np.tan(alpha))) / np.sqrt(np.sin(alpha))) * (lambda_D / (L + g))
     if print_fl:
         print("a = {}, c_s = {}, lambda_d = {}, I_0 = {}".format(a, c_s, lambda_D, I_0))
@@ -164,14 +189,25 @@ def analytical_iv_curve(voltage, v_f, temp, dens, alpha, A_coll, c_1=0.9, c_2=0.
 
 
 def calc_sheath_expansion_coeff(temp, density, L, g, alpha, c_1=0.9, c_2=0.6):
-    lambda_D = np.sqrt((flopter.core.constants.EPSILON_0 * temp) / (flopter.core.constants.ELEM_CHARGE * density))
+    lambda_D = debye_length(temp, density)
     a = ((c_1 + (c_2 / np.tan(alpha))) / np.sqrt(np.sin(alpha))) * (lambda_D / (L + g))
     return a
 
 
+def calc_new_sheath_expansion_param(temp, density, L, g, alpha, d_perp, theta_p, c_1=0.4, c_2=0.5):
+    lambda_D = debye_length(temp, density)
+    a = ((((c_1 * (np.tan(alpha) + np.tan(theta_p))) + c_2) * lambda_D)
+         / ((((L + g) * np.tan(alpha)) + (L * np.tan(theta_p)) - d_perp) * np.sqrt(np.sin(alpha))))
+    return a
+
+
+def debye_length(temp, density):
+    return np.sqrt((c.EPSILON_0 * temp) / (c.ELEM_CHARGE * density))
+
+
 def sound_speed(T_e, gamma_i=1, mass=1):
-    return np.sqrt((flopter.core.constants.ELEM_CHARGE * (T_e + (gamma_i * T_e))) / (
-                flopter.core.constants.PROTON_MASS * mass))
+    return np.sqrt((c.ELEM_CHARGE * (T_e + (gamma_i * T_e))) / (
+                c.PROTON_MASS * mass))
 
 
 def d_sound_speed(c_s, T_e, d_T_e):
@@ -179,7 +215,7 @@ def d_sound_speed(c_s, T_e, d_T_e):
 
 
 def electron_density(I_sat, c_s, A_coll):
-    return I_sat / (flopter.core.constants.ELEM_CHARGE * c_s * A_coll)
+    return I_sat / (c.ELEM_CHARGE * c_s * A_coll)
 
 
 def d_electron_density(n_e, c_s, d_c_s, A_coll, d_A_coll, I_sat, d_I_sat):
@@ -210,7 +246,7 @@ class MagnumProbes(object):
         theta_f_reg = np.radians(75)
 
         L_round = 4e-3          # m
-        g_round = 5e-4          # m
+        g_round = 1.5e-3          # m
         d_perp_round = 1e-4     # m
 
         theta_p = np.radians(10)
