@@ -140,6 +140,9 @@ class GenericCurveFitter(ABC):
     def unset_fixed_values(self):
         self.fixed_values = None
 
+    def __contains__(self, label):
+        return label in self._param_labels
+
 
 # --- IV Fitters --- #
 
@@ -760,7 +763,7 @@ class StraightLineFitter(GenericCurveFitter):
             [-np.inf, -np.inf],
             [ np.inf,  np.inf]
         ]
-        self.name = 'Straight Line'
+        self.name = 'Straight Line Fit'
 
     def fit_function(self, v, *parameters):
         m = parameters[self._param_labels[c.GRADIENT]]
@@ -782,7 +785,7 @@ class ExponentialFitter(GenericCurveFitter):
             [-np.inf, -np.inf, -np.inf, -np.inf],
             [ np.inf,  np.inf,  np.inf,  np.inf]
         ]
-        self.name = 'Exponential Line'
+        self.name = 'Exponential Fit'
 
     def fit_function(self, v, *parameters):
         A = parameters[self._param_labels[c.AMPLITUDE]]
@@ -807,7 +810,7 @@ class TriangleWaveFitter(GenericCurveFitter):
             [   0, -np.inf,      0],
             [1000,  np.inf, np.inf]
         ]
-        self.name = 'Triangle Wave'
+        self.name = 'Triangle Wave Fit'
 
     def fit(self, x_data, y_data, freq=None, initial_vals=None, bounds=None, sigma=None, calc_guess_fl=True):
         """

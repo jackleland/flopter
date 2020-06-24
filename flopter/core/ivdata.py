@@ -1,6 +1,7 @@
 from flopter.core import constants as c
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import collections as coll
 import pandas as pd
 import xarray as xr
@@ -229,8 +230,8 @@ class IVData(dict):
         copied_iv_data.untrimmed_items = self.untrimmed_items
         return copied_iv_data
 
-    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, fitter=None, fix_vf_fl=False, plot_fl=False,
-                  print_fl=False, minimise_temp_fl=True):
+    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, iv_fitter=None, sat_fitter=None, fix_vf_fl=False,
+                  plot_fl=False, print_fl=False, minimise_temp_fl=True, trim_to_floating_fl=True, **kwargs):
         """
         Multi-stage fitting method using an initial straight line fit to the
         saturation region of the IV curve (decided by the sat_region kwarg). The
@@ -242,7 +243,9 @@ class IVData(dict):
                             'Straight section' is defined. The straight section
                             is fitted to get an initial value of saturation
                             current for subsequent fits.
-        :param fitter:      Fitter object to be used for the fixed-I_sat fit and
+        :param sat_fitter:  Fitter object to be used for the initial saturation
+                            region fit
+        :param iv_fitter:   Fitter object to be used for the fixed-I_sat fit and
                             the final, full, free fit.
         :param plot_fl:     (Boolean) If true, plots the output of all 3 stages
                             of fitting. Default is False.
@@ -262,62 +265,90 @@ class IVData(dict):
         """
         import flopter.core.fitters as f
 
-        if fitter is None or not isinstance(fitter, f.IVFitter):
-            fitter = f.FullIVFitter()
+        if iv_fitter is None or not isinstance(iv_fitter, f.IVFitter):
+            iv_fitter = f.FullIVFitter()
+        if not isinstance(sat_fitter, f.GenericCurveFitter):
+            if sat_fitter is not None and print_fl:
+                print('Provided sat_fitter is not a valid child of GenericCurveFitter, continuing with the default \n'
+                      'straight line fitter.')
+            sat_fitter = f.StraightLineFitter()
 
         if print_fl:
-            print('Running fit with {}'.format(fitter.name))
+            print(f'Running saturation region fit with {sat_fitter.name}, \n'
+                  f'running subsequent IV fits with {iv_fitter.name}')
 
         # find floating potential and max potential
         v_f = f.IVFitter.find_floating_pot_iv_data(self)
 
-        iv_data_trim = self.get_below_floating(v_f=v_f, print_fl=print_fl)
+        if trim_to_floating_fl:
+            iv_data_trim = self.get_below_floating(v_f=v_f, print_fl=print_fl)
+        else:
+            iv_data_trim = self.copy()
 
         # Find and fit straight section
         str_sec = np.where(iv_data_trim[c.POTENTIAL] <= sat_region)
         iv_data_ss = IVData.non_contiguous_trim(iv_data_trim, str_sec)
-        siv_f = f.StraightIVFitter()
-        if fix_vf_fl:
-            siv_f.set_fixed_values({c.FLOAT_POT: v_f})
-        siv_f_data = siv_f.fit_iv_data(iv_data_ss, sigma=iv_data_ss[c.SIGMA])
+        if fix_vf_fl and c.FLOAT_POT in sat_fitter:
+            sat_fitter.set_fixed_values({c.FLOAT_POT: v_f})
+
+        # Attempt first stage fit
+        try:
+            stage1_f_data = sat_fitter.fit(iv_data_ss[c.POTENTIAL], iv_data_ss[c.CURRENT], sigma=iv_data_ss[c.SIGMA])
+        except RuntimeError as e:
+            raise MultiFitError(f'RuntimeError occured in stage 1. \n'
+                                f'Original error: {e}')
 
         # Use I_sat value to fit a fixed_value 4-parameter IV fit
-        I_sat_guess = siv_f_data.get_isat()
-        if fix_vf_fl:
-            fitter.set_fixed_values({c.FLOAT_POT: v_f, c.ION_SAT: I_sat_guess})
+        if c.ION_SAT in sat_fitter:
+            isat_guess = stage1_f_data.get_isat()
         else:
-            fitter.set_fixed_values({c.ION_SAT: I_sat_guess})
-        first_fit_data = fitter.fit_iv_data(iv_data_trim, sigma=iv_data_trim[c.SIGMA])
+            isat_guess = stage1_f_data.fit_function(sat_region)
+        if fix_vf_fl:
+            iv_fitter.set_fixed_values({c.FLOAT_POT: v_f, c.ION_SAT: isat_guess})
+        else:
+            iv_fitter.set_fixed_values({c.ION_SAT: isat_guess})
+        
+        # Attempt second stage fit
+        try:
+            stage2_f_data = iv_fitter.fit_iv_data(iv_data_trim, sigma=iv_data_trim[c.SIGMA])
+        except RuntimeError as e:
+            raise MultiFitError(f'RuntimeError occured in stage 2. \n'
+                                f'Original error: {e}')
 
         # Do a full 4 parameter fit with initial guess params taken from previous fit
-        params = first_fit_data.fit_params.get_values()
-        fitter.unset_fixed_values()
+        params = stage2_f_data.fit_params.get_values()
+        iv_fitter.unset_fixed_values()
         if fix_vf_fl:
-            fitter.set_fixed_values({c.FLOAT_POT: v_f})
+            iv_fitter.set_fixed_values({c.FLOAT_POT: v_f})
 
-        # Option to fit to multiple values past the floating potential to minimise the temperature of the fit.
-        if minimise_temp_fl:
-            ff_data = self.fit_to_min_temperature(initial_vals=params, fitter=fitter, plot_fl=plot_fl)
-        else:
-            ff_data = fitter.fit_iv_data(iv_data_trim, initial_vals=params, sigma=iv_data_trim[c.SIGMA])
+        # Attempt third stage fit. Option to fit to multiple values past the floating potential to minimise the
+        # temperature of the fit or just to the floating potential.
+        try:
+            if minimise_temp_fl:
+                stage3_f_data = self.fit_to_minimum(initial_vals=params, fitter=iv_fitter, plot_fl=plot_fl, **kwargs)
+            else:
+                stage3_f_data = iv_fitter.fit_iv_data(iv_data_trim, initial_vals=params, sigma=iv_data_trim[c.SIGMA])
+        except RuntimeError as e:
+            raise MultiFitError(f'RuntimeError occured in stage 3. \n'
+                                f'Original error: {e}')
 
         if plot_fl:
             fig, ax = plt.subplots(3, sharex=True, sharey=True)
-            siv_f_data.plot(ax=ax[0])
+            stage1_f_data.plot(ax=ax[0])
             ax[0].set_xlabel('')
             ax[0].set_ylabel('Current (A)')
 
-            first_fit_data.plot(ax=ax[1])
+            stage2_f_data.plot(ax=ax[1])
             ax[1].set_xlabel('')
             ax[1].set_ylabel('Current (A)')
 
-            ff_data.plot(ax=ax[2])
+            stage3_f_data.plot(ax=ax[2])
             ax[2].set_xlabel('Voltage (V)')
             ax[2].set_ylabel('Current (A)')
 
             fig.suptitle('lower_offset = {}, upper_offset = {}'.format(self.trim_beg, self.trim_end))
 
-        return ff_data
+        return stage3_f_data
 
     def gunn_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, plot_fl=False):
         """
@@ -355,7 +386,7 @@ class IVData(dict):
         iv_data_corrected['I'] = iv_data_corrected['I'] - (fit_data_ss.get_param('m') * iv_data_corrected['V'])
 
         simple_iv_fitter = fts.SimpleIVFitter()
-        fit_data_corrected = iv_data_corrected.multi_fit(sat_region=sat_region, fitter=simple_iv_fitter,
+        fit_data_corrected = iv_data_corrected.multi_fit(sat_region=sat_region, iv_fitter=simple_iv_fitter,
                                                          plot_fl=plot_fl)
 
         if plot_fl:
@@ -402,7 +433,10 @@ class IVData(dict):
             plt.show()
         return iv_data_corrected, fit_data_corrected
 
-    def fit_to_min_temperature(self, initial_vals=None, fitter=None, plot_fl=False, print_fl=False):
+    MINFIT_TRIM_VALS = (0.3, 0.3, 0.02)
+    MINFIT_ERR_RATIO = 10
+
+    def fit_to_minimum(self, initial_vals=None, fitter=None, trimming_vals=None, mode=0, plot_fl=False, print_fl=False):
         """
         A fitting function which minimises the fitted temperature of the IV
         characteristic by varying how many values around the floating potential
@@ -416,11 +450,33 @@ class IVData(dict):
         :param initial_vals:    (tuple) The initial parameters for the fit.
                                 Default's to the fitter's preset starting params
                                 if left as None.
+        :param trimming_vals:   (tuple) The trimming fractions used to control
+                                the range of values minimised over. Each value
+                                should be the distance from the floating
+                                potential as a fraction of the total IV
+                                characteristic.The first value determines the
+                                upper limit (>V_f), the second value determines
+                                the lower limit (<V_f) and the third value
+                                determines how big the steps should be. Default
+                                values are (0.3, 0.3, 0.02), which for an IV
+                                of length 50 would give ~31 total points (15
+                                above V_f, 15 points below V_f, and V_f itself).
+        :param mode:            (int) Choice of minimisation parameter. Choices
+                                currently implemented:
+                                > 0 = T_e · dT_e · (|chi² - 1| + 1)
+                                > 1 = T_e · dT_e · |chi² - 1|
+                                > 2 = |chi² - 1| + 1
+                                > 3 = T_e · dT_e
+                                > 4 = T_e
+                                Prototyping for these parameters was created in
+                                a jupyter notebook, see that for more details.
         :param plot_fl:         (Boolean) Flag to control whether the process is
                                 plotted while running. Current configuration is
                                 to plot the full IV, overlaid with each of the
                                 trimmed IVs, and below that a separate plot of
                                 temperature as a function of upper trim voltage.
+        :param print_fl:        (Boolean) Flag to control whether information is
+                                printed to terminal during the fitting process.
         :return:                (IVFitData) FitData object for lowest
                                 temperature fit performed.
 
@@ -430,18 +486,14 @@ class IVData(dict):
         if fitter is None or not isinstance(fitter, f.IVFitter):
             fitter = f.FullIVFitter()
 
-        if plot_fl:
-            fig, ax = plt.subplots(2, sharex=True)
-            self.plot(ax=ax[0])
-
         vf_index = self.get_vf_index()
+        v_f = self['V'][vf_index]
 
-        # Define how far from the floating potential we want to trim. These values are taken from a test case for a low
-        # field shot.
-        # TODO: (2020-05-19) Make this configurable
-        upper_dist_frac = 0.2  # 10/50
-        lower_dist_frac = 0.04  # 2/50
-        step_frac = 0.02  # 1/50
+        # Select how far from the floating potential we want to iterate
+        if trimming_vals is None:
+            trimming_vals = self.MINFIT_TRIM_VALS
+
+        upper_dist_frac, lower_dist_frac, step_frac = trimming_vals
 
         trim_range_updist = int(upper_dist_frac * len(self['t']))
         trim_range_dndist = int(lower_dist_frac * len(self['t']))
@@ -457,10 +509,33 @@ class IVData(dict):
                                    min(vf_index + trim_range_dndist, len(self['t'])),
                                    trim_range_step)
 
+        if plot_fl:
+            height_ratios = [2.5, 1, 1, 1, 1]
+            fig = plt.figure(constrained_layout=True)
+            gs = fig.add_gridspec(ncols=2, nrows=5, height_ratios=height_ratios)
+
+            ax = []
+
+            ax_big = fig.add_subplot(gs[0, :])
+            # ax_big.errorbar('voltage', 'current', yerr='stderr_current', data=sweep_avg_ds)
+            self.plot(ax=ax_big)
+
+            ax_big.axvline(x=v_f, **c.AX_LINE_DEFAULTS, label=r'$V_f$')
+            ax_big.axvline(x=self['V'][max(trim_range)], linewidth=0.7, color='black', label='trim min/max')
+            ax_big.axvline(x=self['V'][min(trim_range)], linewidth=0.7, color='black')
+            ax_big.legend()
+
+            for row in range(1, 5):
+                ax_left = fig.add_subplot(gs[row, 0])
+                ax_right = fig.add_subplot(gs[row, 1])
+                ax.append([ax_left, ax_right])
+
         # Fit for each value of trim around the floating potential
-        trim_fits = []
-        temps = []
-        volts = []
+        trimmed_fits = []
+        temps = np.array([])
+        d_temps = np.array([])
+        chis = np.array([])
+        volts = np.array([])
         for i in trim_range:
             # Trim is defined as: from the 0th element to the ith element, or from the ith element to the last element
             # depending on the direction of sweep.
@@ -470,31 +545,113 @@ class IVData(dict):
                 trim_iv = self.lower_trim(i)
 
             if plot_fl:
-                trim_iv.plot(ax=ax[0])
+                trim_iv.plot(ax=ax_big, zorder=i)
 
             try:
                 trim_fit = fitter.fit_iv_data(trim_iv, sigma=trim_iv['sigma'], initial_vals=initial_vals)
+                for fp in trim_fit.fit_params:
+                    error_ratio = fp.error / fp.value
+                    if error_ratio > self.MINFIT_ERR_RATIO:
+                        raise RuntimeError(f'Fit produced parameter with unacceptable error ratio ({error_ratio})')
 
-                trim_fits.append(trim_fit)
-                temps.append(trim_fit.get_temp())
+                trimmed_fits.append(trim_fit)
 
-                # The voltages are only extracted for plotting purposes
-                volts.append(np.max(trim_fit.raw_x))
+                # Append values relevant to minimisation param to their respective arrays
+                temps = np.append(temps, trim_fit.get_temp())
+                volts = np.append(volts, np.max(trim_fit.raw_x))
+                d_temps = np.append(d_temps, trim_fit.get_temp_err())
+                chis = np.append(chis, trim_fit.reduced_chi2)
             except RuntimeError as e:
                 if print_fl:
                     print(f'Temp-minimisation fit failed on index {i}\n:'
                           f'{e}')
 
         if len(temps) == 0:
-            raise RuntimeError('All temperature minimisation fits failed. ')
+            raise RuntimeError('All temperature minimisation fits failed. Try using different trimming_vals.')
+
+        temp_param = temps * d_temps
+        chi_param = np.abs(chis - 1) + 1
+        alt_chi_param = np.abs(chis - 1)
+        goodness_param = temp_param * chi_param
+        alt_goodness_param = temp_param * alt_chi_param
+
+        # Get the indices for the minimum values for each of the parameters
+        minimisable_params = [
+            goodness_param,
+            alt_goodness_param,
+            chi_param,
+            temp_param,
+            temps,
+        ]
 
         if plot_fl:
-            ax[1].plot(volts, temps)
+            t_minv = volts[np.argmin(temps)]
+            t_dt_minv = volts[np.argmin(temp_param)]
+            chi_param_minv = volts[np.argmin(chi_param)]
+            alt_chi_param_minv = volts[np.argmin(alt_chi_param)]
+            alt_goodness_minv = volts[np.argmin(alt_goodness_param)]
+            goodness_minv = volts[np.argmin(goodness_param)]
 
-        # Get the index for the minimum value of temperature
-        min_temp_index = int(np.argmin(temps, axis=None))
+            chi2_str = r'$\chi^{2}_{\nu}$'
+            temp_str = r'$T_e$'
+            d_temp_str = r'$\Delta T_e$'
+            chi_param_str = r'$|\chi^{2}_{\nu} - 1| + 1$'
+            alt_chi_param_str = r'$|\chi^{2}_{\nu} - 1|$'
+            d_temps_ratio_str = r'$\frac{\Delta T_e}{T_e}$'
 
-        return trim_fits[min_temp_index]
+            ax[0][0].errorbar(volts, temps, yerr=d_temps)
+            ax[0][0].set_ylabel(temp_str)
+            ax[0][0].axvline(x=t_minv, color='blue', linestyle='--', label='T min')
+            ax[0][0].axvline(x=t_dt_minv, color='purple', linestyle='--', )
+            ax[0][0].axvline(x=chi_param_minv, color='green', linestyle='--', )
+            ax[0][0].axvline(x=goodness_minv, color='red', linestyle='--', )
+
+            ax[0][1].plot(volts, chis, label=chi2_str)
+            ax[0][1].axhline(y=1, **c.AX_LINE_DEFAULTS)
+            ax[0][1].set_yscale('log')
+            ax[0][1].set_ylabel(chi2_str)
+            ax[0][1].axvline(x=t_minv, color='blue', linestyle='--', )
+            ax[0][1].axvline(x=t_dt_minv, color='purple', linestyle='--', )
+            ax[0][1].axvline(x=chi_param_minv, color='green', linestyle='--', )
+            ax[0][1].axvline(x=goodness_minv, color='red', linestyle='--', )
+
+            ax[1][0].plot(volts, temp_param)
+            ax[1][0].set_ylabel(temp_str + r'$\cdot$' + d_temp_str)
+            ax[1][0].set_yscale('log')
+            ax[1][0].axvline(x=t_dt_minv, color='purple', linestyle='--', label=r'$T \cdot \Delta T$')
+
+            ax[1][1].plot(volts, d_temps / temps)
+            ax[1][1].set_ylabel(d_temps_ratio_str)
+            ax[1][1].set_yscale('log')
+            ax[1][1].axhline(y=self.MINFIT_ERR_RATIO, color='black', linewidth=0.75, label='Threshold')
+
+            ax[2][0].plot(volts, chi_param)
+            ax[2][0].set_yscale('log')
+            ax[2][0].set_ylabel(chi_param_str)
+            ax[2][0].axvline(x=chi_param_minv, color='green', linestyle='--', label=chi_param_str)
+
+            ax[2][1].plot(volts, alt_chi_param)
+            ax[2][1].set_yscale('log')
+            ax[2][1].set_ylabel(alt_chi_param_str)
+            ax[2][1].axvline(x=alt_chi_param_minv, color='green', linestyle='--', label=alt_chi_param_str)
+
+            ax[3][0].plot(volts, goodness_param)
+            ax[3][0].set_yscale('log')
+            ax[3][0].set_ylabel(r'$T_e \cdot \Delta T_e \cdot (|\chi^{2}_{\nu} - 1| + 1)$')
+            ax[3][0].axvline(x=goodness_minv, color='red', linestyle='--', label='goodness')
+
+            ax[3][1].plot(volts, alt_goodness_param)
+            ax[3][1].set_yscale('log')
+            ax[3][1].set_ylabel(r'$T_e \cdot \Delta T_e \cdot |\chi^{2}_{\nu} - 1|$')
+            ax[3][1].axvline(x=alt_goodness_minv, color='gold', linestyle='--', label='alt_goodness')
+
+            for col in ax:
+                for axis in col:
+                    axis.axvline(x=v_f, **c.AX_LINE_DEFAULTS)
+                    axis.legend()
+
+        minimised_param_index = int(np.argmin(minimisable_params[mode], axis=None))
+        return trimmed_fits[minimised_param_index]
 
     @staticmethod
     def fractional_trim(iv_data, trim_beg=0.0, trim_end=1.0):
@@ -586,3 +743,7 @@ class IVData(dict):
                 data = np.array(data)
             new_iv_data[label] = data[selection]
         return new_iv_data
+
+
+class MultiFitError(RuntimeError):
+    pass
