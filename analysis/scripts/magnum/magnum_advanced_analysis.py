@@ -89,6 +89,7 @@ os.chdir(DATA_DIRECTORY)
 all_dataset = xr.open_dataset('all_meta_data.nc').max('ts_radial_pos')
 shot_numbers = all_dataset.where(np.isfinite(all_dataset['adc_index']), drop=True)['shot_number'].values
 shot_dataset = all_dataset.sel(shot_number=shot_numbers)
+shunt10_shot_numbers = shot_dataset.where(shot_dataset.adc_4_shunt_resistance == 10.0)['shot_number'].values
 
 CABLE_RESISTANCES = [1.7, 1.7, 1.7, 1.6]
 PROBE_RESISTANCES = {
@@ -174,8 +175,13 @@ def multi_file_analysis(shots):
 
 
 if __name__ == '__main__':
-    # test_shots = [215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 370, 371, 395, 399, 400, 401, 402, 404, 405, 406, 407, 409, 410, 411, 412, 413, 414, 415, 416, 423, 424, 432, 433, 434, 435, 436, 438, 439, 440, 441, 442, 443, 444, 445, 446, 447, 448, 449, 450, 451]
+    # test_shots = [215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
+    # 235, 236, 237, 238, 239, 240, 241, 242, 243, 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 370, 371, 395,
+    # 399, 400, 401, 402, 404, 405, 406, 407, 409, 410, 411, 412, 413, 414, 415, 416, 423, 424, 432, 433, 434, 435, 436,
+    # 438, 439, 440, 441, 442, 443, 444, 445, 446, 447, 448, 449, 450, 451]
     # multi_file_analysis(test_shots)
-    multi_file_analysis(shot_numbers)
+    # multi_file_analysis(shot_numbers)
+    multi_file_analysis(shunt10_shot_numbers)
+    
     # aia_mapping_wrapper(shot_numbers[0])
     # aia_mapping_wrapper(157)
