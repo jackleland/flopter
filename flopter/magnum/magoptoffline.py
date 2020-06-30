@@ -125,7 +125,7 @@ class Magoptoffline(IVAnalyser):
         else:
             adc_voltage_offset = 0.0
             adc_voltage_multiplier = 10
-            adc_current_offset = [0.0, 0.0]
+            adc_current_offset = [-0.000925, 0.001166]
 
         # Read in raw values from adc file - these are the time and the voltages measured on each channel of the ADC
         # These must be offset and scaled to the appropriate values
