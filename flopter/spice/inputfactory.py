@@ -203,7 +203,7 @@ class Simulation2DGeometry:
         else:
             self.tip_points = None
 
-    def plot(self, ax=None, plot_arrows_fl=True, probe_colour='b'):
+    def plot(self, ax=None, plot_arrows_fl=True, probe_colour='b', line_colour='r'):
         if ax is None:
             _, ax = plt.subplots()
 
@@ -220,20 +220,20 @@ class Simulation2DGeometry:
         sim_objects.append(rear_wall)
 
         probe_body = plt.Rectangle((self.wall_width + self.g_hat, 0), self.L_hat,
-                                   self.leading_edge_height, fc=probe_colour, ec='b', zorder=5)
+                                   self.leading_edge_height, fc=probe_colour, ec=probe_colour, zorder=5)
         sim_objects.append(probe_body)
 
         if self.tip_points is not None:
-            probe_tip = plt.Polygon(self.tip_points, fc=probe_colour, ec='b', zorder=5)
+            probe_tip = plt.Polygon(self.tip_points, fc=probe_colour, ec=probe_colour, zorder=5)
             sim_objects.append(probe_tip)
 
         # Draw the magnetic field lines for the leading and trailing edges
         if plot_arrows_fl:
             ww_arrow = self.wall_width
-            ax.arrow(ww_arrow, self.wall_height, self.L_hat, -self.L_hat * np.tan(self.sim_params.alpha_yz), color='r',
-                     zorder=-1)
-            ax.arrow(ww_arrow, self.wall_height, -ww_arrow, ww_arrow * np.tan(self.sim_params.alpha_yz), color='r',
-                     zorder=-1)
+            ax.arrow(ww_arrow, self.wall_height, self.L_hat, -self.L_hat * np.tan(self.sim_params.alpha_yz),
+                     color=line_colour, zorder=-1)
+            ax.arrow(ww_arrow, self.wall_height, -ww_arrow, ww_arrow * np.tan(self.sim_params.alpha_yz),
+                     color=line_colour, zorder=-1)
 
             trailing_edge_width = self.wall_width + self.g_hat + self.L_hat
             te_to_wall = self.sim_width - trailing_edge_width
@@ -243,10 +243,10 @@ class Simulation2DGeometry:
             else:
                 trailing_edge_height = self.leading_edge_height
 
-            ax.arrow(trailing_edge_width, trailing_edge_height, te_to_wall, -te_to_wall * np.tan(self.sim_params.alpha_yz),
-                     color='r', zorder=-1)
+            ax.arrow(trailing_edge_width, trailing_edge_height, te_to_wall,
+                     -te_to_wall * np.tan(self.sim_params.alpha_yz), color=line_colour, zorder=-1)
             ax.arrow(trailing_edge_width, trailing_edge_height, -trailing_edge_width,
-                     trailing_edge_width * np.tan(self.sim_params.alpha_yz), color='r', zorder=-1)
+                     trailing_edge_width * np.tan(self.sim_params.alpha_yz), color=line_colour, zorder=-1)
 
         for so in sim_objects:
             ax.add_patch(so)
@@ -387,10 +387,13 @@ if __name__ == "__main__":
     s_probe = lpu.MagnumProbes().probe_s
     l_probe = lpu.MagnumProbes().probe_l    # rearwall probe
 
+    half_flush_probe = lpu.AngledTipProbe(a=2.5e-3, b=2.5e-3, L=5e-4, g=5e-4, d_perp=0.0, theta_f=0.,
+                                          theta_p=np.radians(0.0))
+
     # simulation_parameters = SimulationParameters(1e17, 5, 1836, 1, 0.8, np.radians(1))
-    simulation_parameters = SimulationParameters(1e17, 5, 1836, 1, 0.8, np.radians(1))
+    # simulation_parameters = SimulationParameters(1e17, 5, 1836, 1, 0.8, np.radians(1))
     pad = True
-    # simulation_parameters = SimulationParameters(1e18, 7.5, 1836, 1, 0.8, np.radians(10))
+    simulation_parameters = SimulationParameters(1e18, 7.5, 1836, 1, 0.8, np.radians(8))
     simulation_parameters.calculate_plasma_params(flush_probe, print_fl=True)
 
     # simulation_parameters = SimulationParameters(5e18, 5, 1836, 1, 0.8, np.radians(3))
@@ -403,39 +406,38 @@ if __name__ == "__main__":
     # angled_probe_sim.print_objects_sizes()
 
     # noinspection PyTypeChecker
-    fig, ax = plt.subplots(2, 2, sharex=True, sharey=True)
-
-    flush_probe_sim = Simulation2DGeometry(flush_probe, simulation_parameters, padded_fl=pad, rearwall=False)
-    flush_probe_sim.plot(ax[0][0])
-    print('Flush Probe: ')
-    flush_probe_sim.print_objects_sizes()
-
-    angled_probe_sim = Simulation2DGeometry(angled_probe, simulation_parameters, padded_fl=pad, rearwall=False)
-    print('Angled Probe: ')
-    angled_probe_sim.plot(ax[0][1])
-    angled_probe_sim.print_objects_sizes()
-
-    recessed_probe_sim = Simulation2DGeometry(recessed_probe, simulation_parameters, padded_fl=pad, rearwall=True)
-    recessed_probe_sim.plot(ax[1][0])
-    print('Recessed Probe: ')
-    recessed_probe_sim.print_objects_sizes()
-
-    sprobe_probe_sim = Simulation2DGeometry(s_probe, simulation_parameters, padded_fl=pad, rearwall=True)
-    sprobe_probe_sim.plot(ax[1][1])
-    print('S Probe: ')
-    sprobe_probe_sim.print_objects_sizes()
-
-    # fig, axes = plt.subplots(2, sharex=True, sharey=True)
+    # fig, ax = plt.subplots(2, 2, sharex=True, sharey=True)
     #
-    # bpprobe_probe_sim = Simulation2DGeometry(r_probe, simulation_parameters, padded_fl=False, rearwall=False)
-    # # rprobe_probe_sim.plot(ax[1][1])
-    # bpprobe_probe_sim.plot(axes[0])
-    # bpprobe_probe_sim.print_objects_sizes()
+    # flush_probe_sim = Simulation2DGeometry(flush_probe, simulation_parameters, padded_fl=pad, rearwall=False)
+    # flush_probe_sim.plot(ax[0][0])
+    # print('Flush Probe: ')
+    # flush_probe_sim.print_objects_sizes()
     #
-    # rprobe_probe_sim = Simulation2DGeometry(r_probe, simulation_parameters, padded_fl=False, rearwall=True)
-    # rprobe_probe_sim.plot(axes[1])
-    # simulation_parameters.calculate_plasma_params(r_probe, print_fl=True)
-    # rprobe_probe_sim.print_objects_sizes()
+    # angled_probe_sim = Simulation2DGeometry(angled_probe, simulation_parameters, padded_fl=pad, rearwall=False)
+    # print('Angled Probe: ')
+    # angled_probe_sim.plot(ax[0][1])
+    # angled_probe_sim.print_objects_sizes()
+    #
+    # recessed_probe_sim = Simulation2DGeometry(recessed_probe, simulation_parameters, padded_fl=pad, rearwall=True)
+    # recessed_probe_sim.plot(ax[1][0])
+    # print('Recessed Probe: ')
+    # recessed_probe_sim.print_objects_sizes()
+    #
+    # sprobe_probe_sim = Simulation2DGeometry(s_probe, simulation_parameters, padded_fl=pad, rearwall=True)
+    # sprobe_probe_sim.plot(ax[1][1])
+    # print('S Probe: ')
+    # sprobe_probe_sim.print_objects_sizes()
+
+    fig, axes = plt.subplots(2, sharex=True, sharey=True)
+
+    l_probe_sim = Simulation2DGeometry(l_probe, simulation_parameters, padded_fl=True, rearwall=True)
+    l_probe_sim.plot(axes[0], probe_colour='b', line_colour='k')
+    l_probe_sim.print_objects_sizes()
+
+    s_probe_sim = Simulation2DGeometry(s_probe, simulation_parameters, padded_fl=True, rearwall=True)
+    s_probe_sim.plot(axes[1], probe_colour='r', line_colour='k')
+    simulation_parameters.calculate_plasma_params(s_probe, print_fl=True)
+    s_probe_sim.print_objects_sizes()
 
     plt.show()
 
