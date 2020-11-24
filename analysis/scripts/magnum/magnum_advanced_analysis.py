@@ -182,6 +182,6 @@ if __name__ == '__main__':
     # multi_file_analysis(test_shots)
     # multi_file_analysis(shot_numbers)
     multi_file_analysis(shunt10_shot_numbers)
-    
+
     # aia_mapping_wrapper(shot_numbers[0])
     # aia_mapping_wrapper(157)

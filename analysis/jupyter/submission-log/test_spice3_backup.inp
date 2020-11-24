@@ -1,0 +1,177 @@
+$plasma
+	ksi = 17.179735801877086,
+	tau = 1.0,
+	mu = 1836,
+	p0 = 0.0,
+	pl = 0.0,
+	alpha_xz = 90.0,
+	alpha_yz = -2.0,
+$end
+
+$geom
+	lx = 512,
+	ly = 512,
+	lz = 256,
+	dx = 1.0,
+	dy = 1.0,
+	dz = 1.0,
+	npc = 50,
+	npts_ratio = 1.0,
+	scenario = 1,
+	decompose_x = 6,
+	decompose_y = 8,
+$end
+
+$time
+	ta = 2.0,
+	tc = 1.0,
+	tp = 3.0,
+$end
+
+$control
+	psolver = 2,
+	diag_ntimes = 1000,
+	dump_period = 500,
+	history_ntimes = 10000,
+	zero_e_field = .false.,
+$end
+
+$optional
+	param1 = 500.0,
+	param2 = 0.0,
+	param3 = 0.0,
+	param4 = 100.0,
+	param5 = 0.0,
+$end
+
+$num_blocks
+	block = 3,
+	sphere = 0,
+	cylinder = 0,
+	cone = 0,
+	triangle = 0,
+$end
+
+$cuboid
+	name = 'forewall',
+	group = 1,
+	xlow = 0,
+	ylow = 0,
+	zlow = 0,
+	xhigh = 512,
+	yhigh = 84,
+	zhigh = 59,
+	pot = 0.0,
+	negative = 0,
+	param1 = 2.0,
+	param2 = 0.0,
+	param3 = 0.0,
+$end
+
+$cuboid1
+	name = 'rearwall',
+	group = 2,
+	xlow = 0,
+	ylow = 428,
+	zlow = 0,
+	xhigh = 512,
+	yhigh = 512,
+	zhigh = 59,
+	pot = 0.0,
+	negative = 0,
+	param1 = 2.0,
+	param2 = 0.0,
+	param3 = 0.0,
+$end
+
+$cuboid2
+	name = 'probe',
+	group = 3,
+	xlow = 133,
+	ylow = 133,
+	zlow = 0,
+	xhigh = 378,
+	yhigh = 378,
+	zhigh = 59,
+	pot = -9.9,
+	negative = 0,
+	param1 = 3.0,
+	param2 = 0.0,
+	param3 = 0.0,
+$end
+
+$num_spec
+	no_species = 2,
+$end
+
+$specie
+	name = 'ions-top',
+	t = 1.0,
+	m = 1.0,
+	q = 1.0,
+	w = 1.0,
+	mpi_rank = 0,
+	motion_method = 0,
+	mono = .false.,
+	umono = 0,
+	injection_file = 'DF/fu_iz_TAU10.dat',
+	injection_method = 0,
+	injection_rate = 1.0,
+$end
+
+$specie
+	name = 'electrons-top',
+	t = 1.0,
+	m = 0.000544662,
+	q = -1.0,
+	w = 1.0,
+	mpi_rank = 0,
+	motion_method = 0,
+	mono = .false.,
+	umono = 0,
+	injection_file = 'fu_ez.dat',
+	injection_method = 0,
+	injection_rate = 0.5,
+$end
+
+$num_diag
+	no_diag = 2,
+$end
+
+$diag
+	name = 'QnPot',
+	type = 1,
+	xlow = 10,
+	ylow = 10,
+	zlow = 244,
+	xhigh = 12,
+	yhigh = 12,
+	zhigh = 246,
+	start_time = 0.0,
+	nbins = 100,
+	param1 = 0.0,
+	param2 = 0.0,
+	param3 = 0.0,
+$end
+
+$diag1
+	name = 'ProbePot',
+	type = 1,
+	xlow = 134,
+	ylow = 134,
+	zlow = 0,
+	xhigh = 136,
+	yhigh = 136,
+	zhigh = 2,
+	start_time = 0.0,
+	nbins = 100,
+	param1 = 0.0,
+	param2 = 0.0,
+	param3 = 0.0,
+$end
+
+! n  		=	1.0E+18	m^-3 
+! Te 		=	7.5 	eV 
+! B 		= 	0.8 	T 
+! L_probe 	= 	5		mm 
+! Flush probe in mast-like conditions 

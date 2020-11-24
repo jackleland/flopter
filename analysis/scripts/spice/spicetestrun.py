@@ -67,7 +67,7 @@ print(synth_t - np.squeeze(prel_tfile['t']))
 splopters = {}
 
 for i in range(len(scans)):
-    #     ax = axes[i]
+    #     axes = axes[i]
     scan = scans[i]
 
     for angle_dir in all_run_dirs[scan]:
@@ -75,4 +75,4 @@ for i in range(len(scans)):
         splopter = spl.Splopter(lowdens_dir / angle_dir, reduce=desired_variables)
         splopter.prepare(denormaliser_fl=False, homogenise_fl=True, find_se_temp_fl=False)
         splopters[angle_dir] = splopter
-#         ax.plot(splopter.iv_data['V'][:320], splopter.iv_data['I'][:320])
+#         axes.plot(splopter.iv_data['V'][:320], splopter.iv_data['I'][:320])

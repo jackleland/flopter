@@ -128,11 +128,10 @@ def main_magopter_analysis():
     probe_c = lp.FlushCylindricalProbe(L_cyl / 2, g_cyl, d_perp)
 
     A_coll_s = lp.calc_probe_collection_area(a_small, b_small, L_small, g_small, d_perp, theta_perp, theta_p,
-                                             theta_f_small, print_fl=False)
-    A_coll_l = lp.calc_probe_collection_area(a_large, b_large, L_large, g_large, d_perp, theta_perp, theta_p,
-                                             theta_f_large, print_fl=False)
-    A_coll_r = lp.calc_probe_collection_area(a_reg, b_reg, L_reg, g_reg, d_perp, theta_perp, theta_p, theta_f_reg,
                                              print_fl=False)
+    A_coll_l = lp.calc_probe_collection_area(a_large, b_large, L_large, g_large, d_perp, theta_perp, theta_p,
+                                             print_fl=False)
+    A_coll_r = lp.calc_probe_collection_area(a_reg, b_reg, L_reg, g_reg, d_perp, theta_perp, theta_p, print_fl=False)
     A_coll_c = probe_c.get_collection_area(theta_perp)
 
     print('Small area: {}, Large area: {}, Regular area: {}, Cylindrical area: {}'.format(A_coll_s, A_coll_l, A_coll_r,
@@ -729,11 +728,11 @@ def multifit_trim_filter_analysis(probe_0, folder, file):
         index = int(0.5 * len(magopter.iv_arrs[0]))
         iv_data = magopter.iv_arrs[0][index]
 
-        fitdata = iv_data.multi_fit(fitter=fitter)
+        fitdata = iv_data.multi_fit(iv_fitter=fitter)
 
         iv_data.trim_beg = 0.01
         iv_data.trim_end = 0.45
-        fitdata_1 = iv_data.multi_fit(fitter=fitter)
+        fitdata_1 = iv_data.multi_fit(iv_fitter=fitter)
         print('{}:{}'.format(iv_data.trim_beg, iv_data.trim_end))
         fitdata_1.print_fit_params()
         # fitdata_1_fvf = iv_data.multi_fit(plot_fl=False, fix_vf_fl=True)
@@ -765,7 +764,7 @@ def multifit_trim_filter_analysis(probe_0, folder, file):
         # Trim and plot again
         iv_data.trim_beg = -0.05
         iv_data.trim_end = 0.45
-        fitdata_2 = iv_data.multi_fit(fitter=fitter)
+        fitdata_2 = iv_data.multi_fit(iv_fitter=fitter)
         print('{}:{}'.format(iv_data.trim_beg, iv_data.trim_end))
         fitdata_2.print_fit_params()
         # fitdata_2_fvf = iv_data.multi_fit(fix_vf_fl=True)
@@ -780,7 +779,7 @@ def multifit_trim_filter_analysis(probe_0, folder, file):
         # Trim and plot again
         iv_data.trim_beg = -0.1
         iv_data.trim_end = 0.45
-        fitdata_3 = iv_data.multi_fit(fitter=fitter)
+        fitdata_3 = iv_data.multi_fit(iv_fitter=fitter)
         print('{}:{}'.format(iv_data.trim_beg, iv_data.trim_end))
         fitdata_3.print_fit_params()
         # fitdata_3_fvf = iv_data.multi_fit(fix_vf_fl=True)
@@ -978,7 +977,7 @@ def multifit_trim_iv_analysis(probe_0, folder, file, trim_upper_fl=False, trim_l
 
 
 def multifit_std_err_scale_analysis(folder, file):
-    # fig, ax = plt.subplots(2, 1, sharex='all', sharey='all')
+    # fig, axes = plt.subplots(2, 1, sharex='all', sharey='all')
     magopter = Magopter(folder, file, ts_filename=ts_file)
     magopter.prepare(down_sampling_rate=1, roi_b_plasma=True, crit_freq=4000, crit_ampl=None)
 
@@ -994,7 +993,7 @@ def multifit_std_err_scale_analysis(folder, file):
 
         for j, scaler in enumerate(scales):
             raw_iv_data[c.SIGMA] = sigma * scaler
-            fitdata = raw_iv_data.multi_fit(fitter=fitter)
+            fitdata = raw_iv_data.multi_fit(iv_fitter=fitter)
             print('Sigma * {}'.format(scaler))
             fitdata.print_fit_params()
             chis[j] = fitdata.reduced_chi2
