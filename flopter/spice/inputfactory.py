@@ -79,6 +79,33 @@ class SimulationParameters:
         pre_sheath = 5 * larmor
         return debye, larmor, exposed_h, pre_sheath
 
+    def plot_angular_dependence(self, probe, ax=None, angles=None, **kwargs):
+        if ax is None:
+            fig, ax = plt.subplots(2, sharex=True)
+        else:
+            fig = ax[0].figure
+
+        if angles is None:
+            angles = np.linspace(0, 15, 1000)
+
+        ion_mass = c.ELECTRON_MASS * self.mu
+        debye = su.get_lambda_d(self.density, self.temperature)
+        larmor = su.get_larmor_r(self.temperature, self.b_field, ion_mass, self.ion_charge)
+        L_coll = probe.get_2d_collection_length(np.radians(angles))
+
+        ax[0].plot(angles, L_coll / larmor, **kwargs)
+        ax[0].axhline(y=1.0, **c.AX_LINE_DEFAULTS)
+
+        ax[1].plot(angles, L_coll / debye, **kwargs)
+        ax[1].axhline(y=1.0, **c.AX_LINE_DEFAULTS)
+
+        ax[0].set_ylabel(r'$L_{coll} \; / \; r_{L} \; [unitless]$')
+        ax[1].set_ylabel(r'$L_{coll} \; / \; \lambda_{D} \; [unitless]$')
+
+        ax[1].set_xlabel(r'$\theta \; [\degree]$')
+
+        fig.show()
+
 
 class Simulation2DGeometry:
     """
@@ -123,7 +150,7 @@ class Simulation2DGeometry:
             raise ValueError('Argument "probe" needs to be an instance of LangmuirProbe')
 
         self.probe = probe
-        self.sim_params = simulation_parameters
+        self.sim_params = sim_params
         self.angled_fl = probe.is_angled()
         self.debye, self.larmor, exposed_h, pre_sheath = sim_params.calculate_plasma_params(probe)
 
@@ -161,10 +188,11 @@ class Simulation2DGeometry:
 
         # Width calculations
         self.wall_width = max(4 * larmor_hat, self.wall_height)
-        if rearwall_shadow_fl:
+        protrusion = rearwall_recess_hat + wedge_h_hat - self.d_perp_hat
+        if rearwall_shadow_fl and protrusion > 0:
             larmor_smear = int(larmor_hat / np.sin(sim_params.alpha_yz))
-            rearwall_top_shadow = int(((rearwall_recess_hat + wedge_h_hat - self.d_perp_hat)
-                                       / np.tan(sim_params.alpha_yz)) - self.g_hat) + larmor_smear
+            rearwall_top_shadow = int((protrusion / np.tan(sim_params.alpha_yz)) - self.g_hat - self.wall_width) \
+                                  + larmor_smear
             self.rearwall_w = max(self.wall_width, rearwall_top_shadow)
         else:
             self.rearwall_w = self.wall_width
@@ -203,7 +231,7 @@ class Simulation2DGeometry:
         else:
             self.tip_points = None
 
-    def plot(self, ax=None, plot_arrows_fl=True, probe_colour='b', line_colour='r'):
+    def plot(self, ax=None, plot_arrows_fl=True, plot_flux_tube=True, probe_colour='b', line_colour='r'):
         if ax is None:
             _, ax = plt.subplots()
 
@@ -248,10 +276,25 @@ class Simulation2DGeometry:
             ax.arrow(trailing_edge_width, trailing_edge_height, -trailing_edge_width,
                      trailing_edge_width * np.tan(self.sim_params.alpha_yz), color=line_colour, zorder=-1)
 
+            if plot_flux_tube:
+                ax.arrow(self.sim_width, self.wall_height + (ww_arrow * np.tan(self.sim_params.alpha_yz)),
+                         -self.sim_width, self.sim_width * np.tan(self.sim_params.alpha_yz),
+                         color=line_colour, zorder=-1, alpha=0.5, linestyle='--')
+                ax.arrow(self.sim_width,
+                         trailing_edge_height + (trailing_edge_width * np.tan(self.sim_params.alpha_yz)),
+                         -self.sim_width, self.sim_width * np.tan(self.sim_params.alpha_yz),
+                         color=line_colour, zorder=-1, alpha=0.5, linestyle='--')
+
+                # plot a faint connecting line!
+                ax.arrow(0, self.wall_height + (ww_arrow * np.tan(self.sim_params.alpha_yz)), self.sim_width, 0,
+                         color=line_colour, zorder=-1, linestyle=':', alpha=0.1)
+
         for so in sim_objects:
             ax.add_patch(so)
         ax.axis('scaled')
         ax.autoscale()
+        ax.set_xlim(0, self.sim_width)
+        ax.set_ylim(0, self.sim_height)
 
         return ax, sim_objects
 
@@ -377,67 +420,3 @@ def find_next_power(length):
     while x < length:
         x *= 2
     return x
-
-
-if __name__ == "__main__":
-    flush_probe = lpu.AngledTipProbe(a=5e-3, b=5e-3, L=5e-3, g=1e-3, d_perp=0.0, theta_f=0., theta_p=np.radians(0.0))
-    angled_probe = lpu.AngledTipProbe(a=5e-3, b=5e-3, L=5e-3, g=1e-3, d_perp=0.0, theta_f=0., theta_p=np.radians(10.0))
-    recessed_probe = lpu.AngledTipProbe(a=5e-3, b=5e-3, L=5e-3, g=1e-3, d_perp=3e-4, theta_f=0., theta_p=np.radians(10.0))
-    r_probe = lpu.MagnumProbes().probe_r
-    s_probe = lpu.MagnumProbes().probe_s
-    l_probe = lpu.MagnumProbes().probe_l    # rearwall probe
-
-    half_flush_probe = lpu.AngledTipProbe(a=2.5e-3, b=2.5e-3, L=5e-4, g=5e-4, d_perp=0.0, theta_f=0.,
-                                          theta_p=np.radians(0.0))
-
-    # simulation_parameters = SimulationParameters(1e17, 5, 1836, 1, 0.8, np.radians(1))
-    # simulation_parameters = SimulationParameters(1e17, 5, 1836, 1, 0.8, np.radians(1))
-    pad = True
-    simulation_parameters = SimulationParameters(1e18, 7.5, 1836, 1, 0.8, np.radians(8))
-    simulation_parameters.calculate_plasma_params(flush_probe, print_fl=True)
-
-    # simulation_parameters = SimulationParameters(5e18, 5, 1836, 1, 0.8, np.radians(3))
-    # simulation_parameters = SimulationParameters(1e19, 5, 1836, 1, 0.8, np.radians(1))
-    # simulation_parameters = SimulationParameters(1e20, 5, 1836, 1, 0.8, np.radians(1))
-
-    # fig, axes = plt.subplots()
-    # angled_probe_sim = Simulation2DGeometry(angled_probe, simulation_parameters, padded_fl=False, rearwall=False)
-    # angled_probe_sim.plot(axes, plot_arrows_fl=False)
-    # angled_probe_sim.print_objects_sizes()
-
-    # noinspection PyTypeChecker
-    # fig, ax = plt.subplots(2, 2, sharex=True, sharey=True)
-    #
-    # flush_probe_sim = Simulation2DGeometry(flush_probe, simulation_parameters, padded_fl=pad, rearwall=False)
-    # flush_probe_sim.plot(ax[0][0])
-    # print('Flush Probe: ')
-    # flush_probe_sim.print_objects_sizes()
-    #
-    # angled_probe_sim = Simulation2DGeometry(angled_probe, simulation_parameters, padded_fl=pad, rearwall=False)
-    # print('Angled Probe: ')
-    # angled_probe_sim.plot(ax[0][1])
-    # angled_probe_sim.print_objects_sizes()
-    #
-    # recessed_probe_sim = Simulation2DGeometry(recessed_probe, simulation_parameters, padded_fl=pad, rearwall=True)
-    # recessed_probe_sim.plot(ax[1][0])
-    # print('Recessed Probe: ')
-    # recessed_probe_sim.print_objects_sizes()
-    #
-    # sprobe_probe_sim = Simulation2DGeometry(s_probe, simulation_parameters, padded_fl=pad, rearwall=True)
-    # sprobe_probe_sim.plot(ax[1][1])
-    # print('S Probe: ')
-    # sprobe_probe_sim.print_objects_sizes()
-
-    fig, axes = plt.subplots(2, sharex=True, sharey=True)
-
-    l_probe_sim = Simulation2DGeometry(l_probe, simulation_parameters, padded_fl=True, rearwall=True)
-    l_probe_sim.plot(axes[0], probe_colour='b', line_colour='k')
-    l_probe_sim.print_objects_sizes()
-
-    s_probe_sim = Simulation2DGeometry(s_probe, simulation_parameters, padded_fl=True, rearwall=True)
-    s_probe_sim.plot(axes[1], probe_colour='r', line_colour='k')
-    simulation_parameters.calculate_plasma_params(s_probe, print_fl=True)
-    s_probe_sim.print_objects_sizes()
-
-    plt.show()
-
