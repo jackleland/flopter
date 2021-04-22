@@ -1,5 +1,6 @@
 from configparser import *
 from collections import defaultdict
+import math
 import re
 import sys
 from flopter.core import constants as c
@@ -377,6 +378,34 @@ class InputParser(ConfigParser):
 
         return diag_regions
 
+    def get_probe_obj_sections(self):
+        """
+        Returns the section headers of the objects within the simulation which
+        are acting as a probe i.e. has 'param1' set to 3.
+
+        :return: [string]   List of sections of simulation objects set to swept
+                            potential mode.
+
+        """
+        num_blocks_section = self[c.INF_SEC_SHAPES]
+        probe_sections = []
+
+        # Iterate over the block count section to find out how many of each shape to iterate over.
+        for shape in num_blocks_section:
+            n_shape = self.getint(c.INF_SEC_SHAPES, shape)
+            if n_shape > 0:
+                # Shave off the trailing s from the label (usually appended with an 's')
+                shape_name = shape[:-1]
+                for i in range(n_shape):
+                    section = self[shape_name + str(i)]
+                    if int(section[c.INF_SWEEP_PARAM]) == c.PROBE_PARAMETER:
+                        probe_sections.append(section)
+
+        if len(probe_sections) > 0:
+            return probe_sections
+        else:
+            raise ValueError('Could not find a shape set to sweep voltage')
+
     def get_probe_obj_indices(self):
         """
         Returns the index (or indices if the probe is a compound shape) of the
@@ -496,9 +525,11 @@ class InputParser(ConfigParser):
         # t_a as a fraction of whole time
         t = t_a / t_p
 
-        sweep_length = int(t * len_builtin)
+        sweep_length = math.ceil(t * len_builtin)
 
-        initial_v = raw_voltage[0]
+        probe_sections = self.get_probe_obj_sections()
+        initial_v = self.getfloat(probe_sections[0].name, c.INF_OBJECT_POT)
+
         if not self._is_within_bounds(initial_v, c.SWEEP_LOWER):
             corr_sweep_length = sweep_length
             while raw_voltage[corr_sweep_length] == initial_v and corr_sweep_length < len(raw_voltage) - 1:
