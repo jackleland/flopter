@@ -51,6 +51,9 @@ class FitData2(object):
         self.chi2 = chi2
         self.reduced_chi2 = reduced_chi2
 
+    def __contains__(self, item):
+        return item in self.fitter
+
     def plot(self, ax=None, show_fl=False, x_label=c.RAW_X, y_label=None):
         if ax is None:
             fig, ax = plt.subplots()
@@ -78,6 +81,9 @@ class FitData2(object):
 
     def get_param(self, label, errors_fl=False):
         index = self.fitter.get_param_index(label)
+        if index is None:
+            return None
+
         if errors_fl:
             return self.fit_params[index]
         else:
@@ -85,10 +91,16 @@ class FitData2(object):
 
     def get_param_val(self, label):
         index = self.fitter.get_param_index(label)
+        if index is None:
+            return None
+
         return self.fit_params[index].value
 
     def get_param_err(self, label):
         index = self.fitter.get_param_index(label)
+        if index is None:
+            return None
+
         return self.fit_params[index].error
 
     def get_fitter(self):
@@ -149,25 +161,25 @@ class IVFitData(FitData2):
         return self.get_param(c.ELEC_TEMP, errors_fl)
 
     def get_temp_err(self):
-        return self.get_param(c.ELEC_TEMP, True).error
+        return self.get_param_err(c.ELEC_TEMP)
 
     def get_isat(self, errors_fl=False):
         return self.get_param(c.ION_SAT, errors_fl)
 
     def get_isat_err(self):
-        return self.get_param(c.ION_SAT, True).error
+        return self.get_param_err(c.ION_SAT)
 
     def get_sheath_exp(self, errors_fl=False):
         return self.get_param(c.SHEATH_EXP, errors_fl)
 
     def get_sheath_exp_err(self):
-        return self.get_param(c.SHEATH_EXP, True).error
+        return self.get_param_err(c.SHEATH_EXP)
 
     def get_floating_pot(self, errors_fl=False):
         return self.get_param(c.FLOAT_POT, errors_fl)
 
     def get_floating_pot_err(self):
-        return self.get_param(c.FLOAT_POT, True).error
+        return self.get_param_err(c.FLOAT_POT)
 
     @classmethod
     def from_fit_data(cls, fit_data_instance):
