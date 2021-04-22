@@ -11,6 +11,8 @@ XCURRENT = 'current'
 XVOLTAGE = 'voltage'
 XTIME = 'time'
 XSIGMA = 'd_current'
+XECURRENT = 'current_e'
+XICURRENT = 'current_i'
 
 
 # Fit Variable Labels
@@ -65,7 +67,11 @@ INF_TIME_END = 'tp'
 INF_TIME_AV = 'ta'
 INF_TIME_SWEEP = 'tc'
 INF_PART_PER_CELL = 'Npc'
+INF_DZ = 'dz'
+INF_DY = 'dy'
+INF_DX = 'dx'
 INF_SWEEP_PARAM = 'param1'
+INF_OBJECT_POT = 'pot'
 INF_SHAPE_NAMES = ['rectangle', 'triangle', 'circle']    # Indexed in order listed in input file
 INF_DIAGS_NUM = 'no_diag_reg'
 
@@ -129,10 +135,10 @@ MAGADC_CH_NAME = 'name'
 # TODO: Replace with scipy
 BOLTZMANN = 1.38064852e-23  # m^2 kg s^-2 K^-1
 EPSILON_0 = 8.85418782e-12  # m^-3 kg^-1 s^4 A^2
-ELEM_CHARGE = 1.60217662e-19 # C
-PROTON_MASS = 1.6726219e-27 # kg
-DEUTERIUM_MASS = 2.01410178 * PROTON_MASS # kg
-ELECTRON_MASS = 9.10938356e-31 # kg
+ELEM_CHARGE = 1.60217662e-19  # C
+PROTON_MASS = 1.6726219e-27  # kg
+DEUTERIUM_MASS = 2.01410178 * PROTON_MASS  # kg
+ELECTRON_MASS = 9.10938356e-31  # kg
 ATOMIC_MASS_UNIT = ELECTRON_MASS * 1822.888486
 P_E_MASS_RATIO = PROTON_MASS / ELECTRON_MASS
 I_E_MASS_RATIO = DEUTERIUM_MASS / ELECTRON_MASS
