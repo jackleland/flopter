@@ -97,19 +97,41 @@ class GenericCurveFitter(ABC):
         return FitData2(x_data, y_data, fit_y_data, fit_vals, fit_sterrs, self, sigma=sigma, chi2=fit_chi2,
                         reduced_chi2=fit_reduced_chi2)
 
+    def clip_guess(self, guess):
+        """
+        Filter the values in a given guess (i.e. array of initial parameter
+        values) to make them suitable for the default bounds of a CurveFitter
+        instantiation. Guess must already be in the correct order as per
+        self._param_labels.
+
+        :param guess:   (list-like) List of values desired to be used as
+                        initial_vals
+        :return:        (list-like) List of values clipped to the default bounds
+                        defined.
+
+        """
+        assert len(guess) == len(self.default_values)
+        output_guess = []
+        for i, value in enumerate(guess):
+            if value is None or not np.isfinite(value):
+                value = self.default_values[i]
+            else:
+                value = np.clip(value, self.default_bounds[0][i], self.default_bounds[1][i])
+            output_guess.append(value)
+        return output_guess
+
     def get_param_labels(self):
         return list(self._param_labels.keys())
 
-    def get_param_index(self, label):
+    def get_param_index(self, label, silent_fail_fl=True):
         if label in self._param_labels.keys():
             return self._param_labels[label]
         else:
-            print('Param described by \'label\' not found')
-            if len(self._param_labels.keys()) > 0:
-                print('Params in {} are: \n {}'.format(self.name, self._param_labels.keys()))
+            if silent_fail_fl:
+                return None
             else:
-                print('No params, IVFitter class not properly implemented')
-            return None
+                raise ValueError('Param described by \'label\' not found. \n'
+                                 'Params in {} are: \n {}'.format(self.name, self._param_labels.keys()))
 
     def get_default_values(self):
         return self.default_values
@@ -177,9 +199,10 @@ class IVFitter(GenericCurveFitter, ABC):
             v_f = iv_interp([0.0]).mean()
         except ValueError as e:
             if print_fl:
-                print('V_f could not be found effectively, returning default value.')
+                print('V_f could not be found effectively, returning approximate value.')
                 print('Error: {}'.format(str(e)))
-            v_f = cls._DEFAULT_V_F
+            # Estimate based on the voltage at the current value closest to 0.
+            v_f = potential[np.argmin(np.abs(current))]
         return v_f
 
     def get_temp_index(self):
@@ -190,6 +213,9 @@ class IVFitter(GenericCurveFitter, ABC):
 
     def get_vf_index(self):
         return self._param_labels[c.FLOAT_POT]
+
+    def generate_guess(self, temperature=None, floating_potential=None, isat=None, sheath_exp_param=None):
+        return self.clip_guess([isat, temperature, floating_potential])
 
 
 class FullIVFitter(IVFitter):
@@ -217,10 +243,114 @@ class FullIVFitter(IVFitter):
         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
         v_f = parameters[self._param_labels[c.FLOAT_POT]]
         V = (v_f - v) / T_e
-        return I_0 * (1 - np.exp(-V) + (a * np.float_power(np.absolute(V), [0.75])))
+
+        return I_0 * (1 - np.exp(-V) + np.where(v <= v_f, (a * np.float_power(np.absolute(V), [0.75])), 0))
 
     def get_a_index(self):
         return self._param_labels[c.SHEATH_EXP]
+
+    def generate_guess(self, temperature=None, floating_potential=None, isat=None, sheath_exp_param=None):
+        return self.clip_guess([isat, sheath_exp_param, temperature, floating_potential])
+
+
+DEFAULT_DENS_CALC_OPTIONS = {
+    'gamma_i': 1,
+    'mass': 1,
+    'Z': 1,
+}
+
+
+class ExperimentalIVFitter(IVFitter):
+    """
+    IV Fitter implementation using an experimental, 4 parameter IV Curve fitting method.
+    """
+    def __init__(self, probe=None, theta=10.0, dens_calc_opts=None, sheath_exp_form='rotated'):
+        super().__init__()
+        self._param_labels = {
+            c.ION_SAT: 0,
+            c.ELEC_TEMP: 1,
+            c.FLOAT_POT: 2,
+            'c_1': 3,
+            'c_2': 4,
+        }
+        self.default_values = (30.0, 1, -1, 2.0, 1.0)
+        self.default_bounds = (
+            (-np.inf,       0, -np.inf,       0,       0),
+            ( np.inf,  np.inf,  np.inf,  np.inf,  np.inf)
+        )
+        self.probe = probe
+        self.theta = np.radians(theta)
+        self.sheath_exp_form = sheath_exp_form
+        if dens_calc_opts is None:
+            self.dens_calc_opts = DEFAULT_DENS_CALC_OPTIONS
+        else:
+            self.dens_calc_opts = dens_calc_opts
+        self.name = '5 Parameter Fit'
+
+    def fit_function(self, v, *parameters):
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        c_1 = parameters[self._param_labels['c_1']]
+        c_2 = parameters[self._param_labels['c_2']]
+        V = (v_f - v) / T_e
+
+        n_e = self.probe.get_density(np.abs(I_0), T_e, self.theta, **self.dens_calc_opts)
+        a = self.probe.get_sheath_exp_param(T_e, n_e, self.theta, c_1=c_1, c_2=c_2, form=self.sheath_exp_form)
+        print(a, n_e)
+        # return I_0 * (1 - np.exp(-V)) * (1 + (np.where(v <= v_f, (a * np.float_power(np.absolute(V), [0.75])), 0)))
+        return I_0 * (1 - np.exp(-V)) * (1 + (a * np.float_power(np.absolute(V), [0.75])))
+
+    def get_a_index(self):
+        return self._param_labels[c.SHEATH_EXP]
+
+    def generate_guess(self, temperature=None, floating_potential=None, isat=None, sheath_exp_param=None):
+        return self.clip_guess([isat, sheath_exp_param, temperature, floating_potential])
+
+
+class Experimental3IVFitter(IVFitter):
+    """
+    IV Fitter implementation using an experimental, 4 parameter IV Curve fitting method.
+    """
+    def __init__(self, probe=None, theta=10.0, dens_calc_opts=None, sheath_exp_form='rotated', c_1=2.0, c_2=1.0):
+        super().__init__()
+        self._param_labels = {
+            c.ION_SAT: 0,
+            c.ELEC_TEMP: 1,
+            c.FLOAT_POT: 2,
+        }
+        self.default_values = (30.0, 1, -1)
+        self.default_bounds = (
+            (-np.inf,       0, -np.inf),
+            ( np.inf,  np.inf,  np.inf)
+        )
+        self.probe = probe
+        self.theta = np.radians(theta)
+        self.sheath_exp_form = sheath_exp_form
+        self.c_1 = c_1
+        self.c_2 = c_2
+        if dens_calc_opts is None:
+            self.dens_calc_opts = DEFAULT_DENS_CALC_OPTIONS
+        else:
+            self.dens_calc_opts = dens_calc_opts
+        self.name = 'Experimental 3 Parameter Fit'
+
+    def fit_function(self, v, *parameters):
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        V = (v_f - v) / T_e
+
+        n_e = self.probe.get_density(np.abs(I_0), T_e, self.theta, **self.dens_calc_opts)
+        a = self.probe.get_sheath_exp_param(T_e, n_e, self.theta, c_1=self.c_1, c_2=self.c_2, form=self.sheath_exp_form)
+
+        return I_0 * (1 - np.exp(-V)) * (1 + (a * np.float_power(np.absolute(V), [0.75])))
+
+    def get_a_index(self):
+        return self._param_labels[c.SHEATH_EXP]
+
+    def generate_guess(self, temperature=None, floating_potential=None, isat=None, sheath_exp_param=None):
+        return self.clip_guess([isat, sheath_exp_param, temperature, floating_potential])
 
 
 class SimpleIVFitter(IVFitter):
@@ -234,7 +364,7 @@ class SimpleIVFitter(IVFitter):
             c.ELEC_TEMP: 1,
             c.FLOAT_POT: 2
         }
-        self.default_values = (30.0,  1, -1)
+        self.default_values = (1.0,  5, -1)
         self.default_bounds = (
             (-np.inf,       0, -np.inf),
             ( np.inf,  np.inf,  np.inf)
@@ -246,7 +376,11 @@ class SimpleIVFitter(IVFitter):
         T_e = parameters[self._param_labels[c.ELEC_TEMP]]
         v_f = parameters[self._param_labels[c.FLOAT_POT]]
         V = (v_f - v) / T_e
+
         return I_0 * (1 - np.exp(-V))
+
+    def generate_guess(self, temperature=None, floating_potential=None, isat=None, sheath_exp_param=None):
+        return self.clip_guess([isat, temperature, floating_potential])
 
 
 class StraightIVFitter(IVFitter):
@@ -275,6 +409,9 @@ class StraightIVFitter(IVFitter):
 
     def get_a_index(self):
         return self._param_labels[c.SHEATH_EXP]
+
+    def generate_guess(self, temperature=None, floating_potential=None, isat=None, sheath_exp_param=None):
+        return self.clip_guess([isat, sheath_exp_param, temperature, floating_potential])
 
 
 class IonCurrentSEFitter(IVFitter):
@@ -307,6 +444,131 @@ class IonCurrentSEFitter(IVFitter):
 
     def get_a_index(self):
         return self._param_labels[c.SHEATH_EXP]
+
+    def generate_guess(self, temperature=None, floating_potential=None, isat=None, sheath_exp_param=None):
+        return self.clip_guess([isat, sheath_exp_param])
+
+
+class ElectronCurrentFitter(IVFitter):
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.ELEC_TEMP: 0,
+            # c.FLOAT_POT: 1,
+            c.ION_SAT: 1,
+        }
+        self.default_values = (1.0, 500.0)
+        self.default_bounds = (
+            (      0, -np.inf),
+            ( np.inf,  np.inf),
+        )
+        self.name = 'Electron Current Fit'
+
+    def fit_function(self, v, *parameters):
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        # V_f = parameters[self._param_labels[c.FLOAT_POT]]
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+
+        return I_0 * np.exp(v / T_e)
+
+    def generate_guess(self, temperature=None, floating_potential=None, isat=None, sheath_exp_param=None):
+        return self.clip_guess([isat, sheath_exp_param])
+
+
+class ElectronCurrentSEFitter(IVFitter):
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.ELEC_TEMP: 0,
+            c.FLOAT_POT: 1,
+            c.ION_SAT: 2,
+            c.SHEATH_EXP: 3
+        }
+        self.default_values = (1.0, 30.0, -1, 0.0204)
+        self.default_bounds = (
+            (      0, -np.inf, -np.inf,      0),
+            ( np.inf,  np.inf,  np.inf, np.inf),
+        )
+        self.name = 'Electron Current Fit'
+
+    def fit_function(self, v, *parameters):
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        v_f = parameters[self._param_labels[c.FLOAT_POT]]
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        a = parameters[self._param_labels[c.SHEATH_EXP]]
+        V = (v + v_f) / T_e
+
+        return I_0 * np.exp(V) * (1 + (a * np.float_power(np.absolute(V), [0.75])))
+
+    def generate_guess(self, temperature=None, floating_potential=None, isat=None, sheath_exp_param=None):
+        return self.clip_guess([temperature, floating_potential, isat, sheath_exp_param])
+
+
+class PartialIVFitter(IVFitter):
+    """
+    IV Fitter implementation utilising a partial, 4 parameter IV Curve fitting method.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.ION_SAT: 0,
+            c.SHEATH_EXP: 1,
+            c.ELEC_TEMP: 2,
+        }
+        self.default_values = (30.0, 0.0204, 1)
+        self.default_bounds = (
+            (-np.inf, 0, 0),
+            (np.inf, 1.5, np.inf)
+        )
+        self.name = 'Partial 4 Parameter Fit'
+
+    def fit_function(self, v, *parameters):
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        a = parameters[self._param_labels[c.SHEATH_EXP]]
+        T_e = parameters[self._param_labels[c.ELEC_TEMP]]
+        V = -v / T_e
+
+        return I_0 * (1 - np.exp(-V) + np.where(v <= 0, (a * np.float_power(np.absolute(V), [0.75])), 0))
+
+    def get_a_index(self):
+        return self._param_labels[c.SHEATH_EXP]
+
+    def generate_guess(self, temperature=None, floating_potential=None, isat=None, sheath_exp_param=None):
+        return self.clip_guess([isat, sheath_exp_param, temperature])
+
+
+class NormalisedIVFitter(IVFitter):
+    """
+    IV Fitter implementation utilising a normalised 2 parameter IV Curve fitting
+    method. Voltage is already normalised to V = (V_probe - V_wall) / T_e
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._param_labels = {
+            c.ION_SAT: 0,
+            c.SHEATH_EXP: 1,
+        }
+        self.default_values = (30.0, 0.0204)
+        self.default_bounds = (
+            (-np.inf, 0),
+            (np.inf, 1.5)
+        )
+        self.name = 'Normalised Parameter Fit'
+
+    def fit_function(self, v, *parameters):
+        I_0 = parameters[self._param_labels[c.ION_SAT]]
+        a = parameters[self._param_labels[c.SHEATH_EXP]]
+
+        return I_0 * (1 - np.exp(v) + np.where(v <= 0, (a * np.float_power(np.absolute(v), [0.75])), 0))
+
+    def get_a_index(self):
+        return self._param_labels[c.SHEATH_EXP]
+
+    def generate_guess(self, temperature=None, floating_potential=None, isat=None, sheath_exp_param=None):
+        return self.clip_guess([isat, sheath_exp_param])
+
 
 
 # --- Two Temperature IV Fitters --- #
