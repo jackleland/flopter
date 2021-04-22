@@ -1,8 +1,7 @@
-import flopter.core.constants
 import numpy as np
 import pathlib as pth
 import flopter.spice.inputparser as inp
-import matplotlib.pyplot as plt
+import flopter.core.constants as c
 
 
 def get_ksi(density, temp, q, m_i, B):
@@ -12,11 +11,11 @@ def get_ksi(density, temp, q, m_i, B):
 
 
 def get_lambda_d(density, temp):
-    return np.sqrt((flopter.core.constants.EPSILON_0 * temp) / (flopter.core.constants.ELEM_CHARGE * density))
+    return np.sqrt((c.EPSILON_0 * temp) / (c.ELEM_CHARGE * density))
 
 
 def get_larmor_r(temp, B, m_i, q):
-    return np.sqrt((flopter.core.constants.ELEM_CHARGE * temp * m_i)) / (q * flopter.core.constants.ELEM_CHARGE * B)
+    return np.sqrt((c.ELEM_CHARGE * temp * m_i)) / (q * c.ELEM_CHARGE * B)
 
 
 def get_mu(m_i, m_e):
@@ -42,6 +41,8 @@ def is_code_output_dir(directory):
 
 
 def plot_2d_sim_window(input_file, ax=None, colour='red'):
+    import matplotlib.pyplot as plt
+
     return_ax = False
     if ax is None:
         fig, ax = plt.subplots()
@@ -82,8 +83,8 @@ def plot_2d_sim_window(input_file, ax=None, colour='red'):
         ax.add_patch(so)
 
     ax.axis('scaled')
-    ax.set_xlabel(r'z ($\lambda_D$)')
-    ax.set_ylabel(r'y ($\lambda_D$)')
+    ax.set_xlabel(r'$z$ [$\lambda_D$]')
+    ax.set_ylabel(r'$y$ [$\lambda_D$]')
     ax.autoscale()
 
     if return_ax:
