@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 class LangmuirProbe(ABC):
     def __init__(self, g, d_perp):
         self.g = g
-        self.d_perp = d_perp,
+        self.d_perp = d_perp
 
     @abstractmethod
     def is_angled(self):
@@ -42,15 +42,19 @@ class LangmuirProbe(ABC):
     def calc_exposed_lengths(self, alpha):
         pass
 
-    def get_density(self, sat_current, temperature, alpha, gamma_i=1, mass=1):
-        c_s = sound_speed(temperature, gamma_i=gamma_i, mass=mass)
-        A_coll = self.get_collection_area(alpha)
-        return electron_density(sat_current, c_s, A_coll)
+    @abstractmethod
+    def get_sheath_exp_param(self, temp, dens, alpha, c_1=0.4, c_2=0.5):
+        pass
 
-    def get_d_density(self, sat_current, d_sat_current, temperature, d_temperature, alpha, gamma_i=1, mass=1):
-        c_s = sound_speed(temperature, gamma_i=gamma_i, mass=mass)
+    def get_density(self, sat_current, temperature, alpha, gamma_i=1, mass=1, Z=1):
+        c_s = sound_speed(temperature, gamma_i=gamma_i, mass=mass, Z=Z)
         A_coll = self.get_collection_area(alpha)
-        n_e = electron_density(sat_current, c_s, A_coll)
+        return electron_density(sat_current, c_s, A_coll, Z=Z)
+
+    def get_d_density(self, sat_current, d_sat_current, temperature, d_temperature, alpha, gamma_i=1, mass=1, Z=1):
+        c_s = sound_speed(temperature, gamma_i=gamma_i, mass=mass, Z=Z)
+        A_coll = self.get_collection_area(alpha)
+        n_e = electron_density(sat_current, c_s, A_coll, Z=Z)
 
         d_c_s = d_sound_speed(c_s, temperature, d_temperature)
         d_A_coll = np.abs(self.get_collection_area(alpha + np.radians(0.8)) - A_coll)
@@ -73,8 +77,7 @@ class AngledTipProbe(LangmuirProbe):
         self.theta_p = theta_p
 
     def get_collection_area(self, alpha):
-        return calc_probe_collection_area(self.a, self.b, self.L, self.g, self.d_perp, alpha, self.theta_p,
-                                          self.theta_f)
+        return calc_probe_collection_area(self.a, self.b, self.L, self.g, self.d_perp, alpha, self.theta_p)
 
     def get_2d_collection_length(self, alpha):
         d, h_coll = self.calc_exposed_lengths(alpha)
@@ -101,17 +104,22 @@ class AngledTipProbe(LangmuirProbe):
     def calc_exposed_lengths(self, alpha):
         return calc_probe_exposed_lengths(self.g, self.d_perp, alpha, self.theta_p)
 
-    def get_sheath_exp_param(self, temp, dens, alpha, c_1=0.4, c_2=0.5):
-        return calc_new_sheath_expansion_param(temp, dens, self.L, self.g, alpha, self.d_perp, self.theta_p,
-                                               c_1=c_1, c_2=c_2)
+    def get_sheath_exp_param(self, temp, dens, alpha, c_1=0.4, c_2=0.5, form='bergmann'):
+        if form == 'bergmann':
+            return calc_sheath_expansion_param(temp, dens, self.L, self.g, alpha, c_1=c_1, c_2=c_2)
+        elif form == 'leland':
+            return calc_new_sheath_expansion_param(temp, dens, self.L, self.g, alpha, self.d_perp, self.theta_p,
+                                                   c_1=c_1, c_2=c_2)
+        elif form == 'rotated':
+            return calc_2d_box_sheath_expansion_param(temp, dens, self.L, self.g, alpha, self.d_perp, self.theta_p,
+                                                      c_1=c_1, c_2=c_2)
 
 
 class FlushCylindricalProbe(LangmuirProbe):
     def __init__(self, radius, g, d_perp):
         super().__init__(g, d_perp)
         self.radius = radius
-        self.d_perp = d_perp
-        self.g = g
+        self.theta_p = 0.0
 
     def is_angled(self):
         return False
@@ -149,8 +157,11 @@ class FlushCylindricalProbe(LangmuirProbe):
     def calc_exposed_lengths(self, alpha):
         return calc_probe_exposed_lengths(self.g, self.d_perp, alpha, 0.0)
 
+    def get_sheath_exp_param(self, temp, dens, alpha, c_1=0.4, c_2=0.5):
+        return calc_sheath_expansion_param(temp, dens, self.get_2d_probe_length(), self.g, alpha, c_1=c_1, c_2=c_2)
 
-def calc_probe_collection_area(a, b, L, g, d_perp, theta_perp, theta_p, theta_f, print_fl=False):
+
+def calc_probe_collection_area(a, b, L, g, d_perp, theta_perp, theta_p, print_fl=False):
     # d = max(0, ((d_perp - (g * np.tan(theta_perp)))
     #         / (np.sin(theta_p) + (np.tan(theta_perp) * np.cos(theta_p)))))
     # h_coll = max(0, (g * np.tan(theta_perp) - d_perp) * np.cos(theta_perp))
@@ -158,7 +169,7 @@ def calc_probe_collection_area(a, b, L, g, d_perp, theta_perp, theta_p, theta_f,
     if print_fl:
         print("d = {}, h_coll = {}".format(d, h_coll))
     L_exp = (L / np.cos(theta_p)) - d
-    return (0.5 * (a + b - (d / np.tan(theta_f))) * L_exp * np.sin(theta_perp + theta_p)) + (h_coll * b)
+    return ((a + (0.5 * (b - a) * (L_exp / L))) * L_exp * np.sin(theta_perp + theta_p)) + (h_coll * b)
 
 
 def calc_probe_exposed_lengths(g, d_perp, theta_perp, theta_p):
@@ -188,7 +199,64 @@ def analytical_iv_curve(voltage, v_f, temp, dens, alpha, A_coll, c_1=0.9, c_2=0.
     return I
 
 
-def calc_sheath_expansion_coeff(temp, density, L, g, alpha, c_1=0.9, c_2=0.6):
+def debye_length(temp, density):
+    return np.sqrt((c.EPSILON_0 * temp) / (c.ELEM_CHARGE * density))
+
+
+def thermal_velocity(T_e, mass=1):
+    return np.sqrt(c.ELEM_CHARGE * T_e / (c.PROTON_MASS * mass))
+
+
+def sound_speed(T_e, T_i=None, gamma_i=1, mass=1, Z=1):
+    if T_i is None:
+        T_i = T_e
+    return np.sqrt((Z * c.ELEM_CHARGE * (T_e + (gamma_i * T_i))) / (c.PROTON_MASS * mass))
+
+
+def d_sound_speed(c_s, T_e, d_T_e):
+    return np.abs((c_s * d_T_e) / (2 * T_e))
+
+
+def electron_density(I_sat, c_s, A_coll, k=0.5, Z=1.0):
+    return I_sat / (k * Z * c.ELEM_CHARGE * c_s * A_coll)
+
+
+def d_electron_density(n_e, c_s, d_c_s, A_coll, d_A_coll, I_sat, d_I_sat):
+    return np.abs(n_e) * np.sqrt((d_c_s / c_s)**2 + (d_A_coll / A_coll)**2 + (d_I_sat / I_sat)**2)
+
+
+def ion_larmor_radius(T_e, B, mu=1, Z=1):
+    v_therm = thermal_velocity(T_e, mass=mu)
+    omega = ion_gyrofrequency(B, mu=mu, Z=Z)
+    return v_therm / omega
+
+
+def ion_gyrofrequency(B, mu=1, Z=1):
+    return gyrofrequency(B, mu * c.PROTON_MASS, Z * c.ELEM_CHARGE)
+
+
+def electron_gyrofrequency(B):
+    return gyrofrequency(B, c.ELECTRON_MASS, c.ELEM_CHARGE)
+
+
+def gyrofrequency(B, mass, charge):
+    return (np.abs(charge) * B) / mass
+
+
+def estimate_temperature(float_pot, plasma_pot, m_e=1.0, m_i=c.P_E_MASS_RATIO):
+    """
+    Estimates temperature using the differece between the floating and plasma
+    potentials using standard equation (not OML).
+    :param float_pot:   Floating potential (in V)
+    :param plasma_pot:  Plasma potential (in V)
+    :param m_e:         electron mass (in kg)
+    :param m_i:         ion mass (in kg)
+    :return:            Estimate of temperature (in eV)
+    """
+    return (float_pot - plasma_pot) / (np.log(0.6 * np.sqrt(2 * np.pi * m_e / m_i)))
+
+
+def calc_sheath_expansion_param(temp, density, L, g, alpha, c_1=0.9, c_2=0.6):
     lambda_D = debye_length(temp, density)
     a = ((c_1 + (c_2 / np.tan(alpha))) / np.sqrt(np.sin(alpha))) * (lambda_D / (L + g))
     return a
@@ -196,30 +264,50 @@ def calc_sheath_expansion_coeff(temp, density, L, g, alpha, c_1=0.9, c_2=0.6):
 
 def calc_new_sheath_expansion_param(temp, density, L, g, alpha, d_perp, theta_p, c_1=0.4, c_2=0.5):
     lambda_D = debye_length(temp, density)
-    a = ((((c_1 * (np.tan(alpha) + np.tan(theta_p))) + c_2) * lambda_D)
+    a = ((((c_1 * (np.tan(alpha) + (np.tan(theta_p)))) + c_2) * lambda_D)
          / ((((L + g) * np.tan(alpha)) + (L * np.tan(theta_p)) - d_perp) * np.sqrt(np.sin(alpha))))
     return a
 
 
-def debye_length(temp, density):
-    return np.sqrt((c.EPSILON_0 * temp) / (c.ELEM_CHARGE * density))
+def calc_2d_box_sheath_expansion_param(temp, density, L, g, theta, d_perp, theta_p, c_1=0.4, c_2=0.5, delta_0=0.0):
+    lambda_D = debye_length(temp, density)
+    L_eff = (L/np.cos(theta_p)) - ((d_perp + delta_0 - (g * np.tan(theta)))
+                                   / ((np.cos(theta_p) * np.tan(theta)) + np.sin(theta_p)))
+    theta_tot = theta_p + theta
+
+    a = ((c_1 + c_2 * (1 / np.tan(theta_tot))) * lambda_D) / (np.sqrt(np.sin(theta_tot)) * (L_eff + (delta_0 / np.tan(theta_tot))))
+    return a
 
 
-def sound_speed(T_e, gamma_i=1, mass=1):
-    return np.sqrt((c.ELEM_CHARGE * (T_e + (gamma_i * T_e))) / (
-                c.PROTON_MASS * mass))
+def decompose_sheath_exp_param(a, theta, L, g, d_perp=0, theta_p=0):
+    y = a * (L + g) * np.sqrt(np.sin(theta))
+    x = np.cos(theta) / np.sin(theta)
+    return x, y
 
 
-def d_sound_speed(c_s, T_e, d_T_e):
-    return np.abs((c_s * d_T_e) / (2 * T_e))
+def decompose_new_sheath_exp_param(a, theta, L, g, d_perp, theta_p):
+    y = (a * np.sqrt(np.sin(theta)) * (((L + g) * np.tan(theta))
+                                       + (L * np.tan(theta_p)) - d_perp))
+    x = np.tan(theta) + np.tan(theta_p)
+
+    return x, y
 
 
-def electron_density(I_sat, c_s, A_coll):
-    return I_sat / (c.ELEM_CHARGE * c_s * A_coll)
+def decompose_alt_new_sheath_exp_param(a, theta, L, g, d_perp, theta_p):
+    theta_tot = theta + theta_p
+    y = (a * np.sqrt(np.sin(theta))
+         * (L + ((np.cos(theta_p) / np.sin(theta_tot)) * ((g * np.sin(theta)) - (d_perp * np.cos(theta))))))
+    x = (np.cos(theta_p) * np.cos(theta)) / np.sin(theta_tot)
+    return x, y
 
 
-def d_electron_density(n_e, c_s, d_c_s, A_coll, d_A_coll, I_sat, d_I_sat):
-    return np.abs(n_e) * np.sqrt((d_c_s / c_s)**2 + (d_A_coll / A_coll)**2 + (d_I_sat / I_sat)**2)
+def decompose_2d_box_sheath_exp_param(a, theta, L, g, d_perp, theta_p, delta_0=0.0):
+    L_eff = (L / np.cos(theta_p)) - ((d_perp + delta_0 - (g * np.tan(theta)))
+                                     / ((np.cos(theta_p) * np.tan(theta)) + np.sin(theta_p)))
+
+    y = a * np.sqrt(np.sin(theta + theta_p)) * (L_eff + (delta_0 / np.tan(theta + theta_p)))
+    x = np.cos(theta + theta_p) / np.sin(theta + theta_p)
+    return x, y
 
 
 class MagnumProbes(object):
@@ -246,7 +334,7 @@ class MagnumProbes(object):
         theta_f_reg = np.radians(75)
 
         L_round = 4e-3          # m
-        g_round = 1.5e-3          # m
+        g_round = 1.5e-3        # m
         d_perp_round = 1e-4     # m
 
         theta_p = np.radians(10)
@@ -256,10 +344,10 @@ class MagnumProbes(object):
         self.probe_l = AngledTipProbe(a_lang, b_lang, L_lang, g_lang, d_perp_lang, theta_f_reg, theta_p)
         self.probe_r = FlushCylindricalProbe(L_round / 2, g_round, d_perp_round)
         self.probe_position = {
-            'l': -6,
-            's': 4,
-            'b': 14,
-            'r': 24
+            'l': 6,
+            's': -4,
+            'b': -14,
+            'r': -24
         }
         self.position_ind = ['l', 's', 'b', 'r']
 

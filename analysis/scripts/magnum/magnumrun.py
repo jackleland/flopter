@@ -220,8 +220,8 @@ def main_magopter_analysis():
     plt.axhline(y=n_e, linestyle='dashed', linewidth=1, color='r', label='TS')
     plt.legend()
 
-    a_s = lp.calc_sheath_expansion_coeff(T_e, n_e, L_small, g_small, theta_perp)
-    a_c = lp.calc_sheath_expansion_coeff(T_e, n_e, L_cyl, g_cyl, theta_perp)
+    a_s = lp.calc_sheath_expansion_param(T_e, n_e, L_small, g_small, theta_perp)
+    a_c = lp.calc_sheath_expansion_param(T_e, n_e, L_cyl, g_cyl, theta_perp)
     print(a_s, a_c)
 
     plt.subplot(224)
