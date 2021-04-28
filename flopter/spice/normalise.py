@@ -61,12 +61,22 @@ class Denormaliser(Converter):
         self.mu = float(parser.get(c.INF_SEC_PLASMA, c.INF_MU))
         self.tau = float(parser.get(c.INF_SEC_PLASMA, c.INF_TAU))
 
+        # Calculate the number of particles in a whole Debye-cell
+        self.N_pc = parser.getfloat(c.INF_SEC_GEOMETRY, c.INF_PART_PER_CELL)
+        if self.dimensions == 3:
+            dx = parser.getfloat(c.INF_SEC_GEOMETRY, c.INF_DX)
+        else:
+            dx = 1.0
+        dy = parser.getfloat(c.INF_SEC_GEOMETRY, c.INF_DZ)
+        dz = parser.getfloat(c.INF_SEC_GEOMETRY, c.INF_DZ)
+
+        self.N_pdc = self.N_pc / (dx * dy * dz)
+
         self.debye_length = np.sqrt((EPSILON_0 * self.temperature)
                                     / (ELEM_CHARGE * self.simulation_params[c.ELEC_DENS]))
         self.omega_i = ((ELEM_CHARGE * self.simulation_params[c.INF_MAGNETIC_FIELD])
                         / (self.mu * ELECTRON_MASS))
-        self.K = ((self.simulation_params[c.ELEC_DENS] * self.debye_length**self.dimensions)
-                  / float(parser.get(c.INF_SEC_GEOMETRY, c.INF_PART_PER_CELL)[:-1]))
+        self.K = ((self.simulation_params[c.ELEC_DENS] * self.debye_length**self.dimensions) / self.N_pdc)
 
         self.CONVERSION_TYPES[c.CONV_IV] = self._convert_iv_data
         self.CONVERSION_TYPES[c.CONV_DIST_FUNCTION] = self._convert_distribution_function
