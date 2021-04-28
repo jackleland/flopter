@@ -33,7 +33,7 @@ class Magoptoffline(IVAnalyser):
     _ARCING_THRESHOLD = 15
     _ACCEPTED_FREQS = np.array([10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 1.0e4, 2.0e4])
     _SHUNT_RESISTANCE = 1
-    _CABLING_RESISTANCE = 0
+    _CABLING_RESISTANCE = (0.0, 0.0)
     _FIT_FILE_STRING = 'fit{}_{}.csv'
     _FIT_FILE_GLOBSTR = '*fit*.csv'
 
