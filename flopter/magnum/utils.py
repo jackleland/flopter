@@ -10,6 +10,7 @@ import flopter.core.ivdata as iv
 import flopter.core.fitters as fts
 import flopter.core.constants as c
 import matplotlib as mpl
+import collections
 
 
 shot_metadata_ds = xr.open_dataset('/home/jleland/data/external/magnum/all_meta_data.nc')
@@ -52,7 +53,7 @@ def get_dataset_metadata(path_to_analysed_datasets):
     # Loading the metadata .csv file into a pandas dataframe
     try:
         analysed_infos_df = pd.read_csv(metadata_filename).set_index('adc_index')
-    except:
+    except FileNotFoundError:
         # If the .csv file doesn't exist, create it and save it to where we would expect it to be
         analysed_infos_df = create_analysed_ds_metadata(path_to_analysed_datasets)
         analysed_infos_df.to_csv(metadata_filename)
@@ -79,14 +80,19 @@ def preprocess_autosel(ds):
 #     ds_avg = ds_avg.assign({'d_current': ds.std('sweep')['current']})
 #     return ds_avg
 
-def preprocess_average(ds, dims_to_avg=('sweep', 'direction')):
+def preprocess_average(ds, dims_to_avg=('sweep', 'direction'), sweep_lims_fl=True):
     ds = ds.reset_index('time', drop=True).load()
-    sweep_min, sweep_max = find_sweep_limit(ds)
-    ds_trimmed = ds.sel(sweep=slice(sweep_min, sweep_max))
+
+    if sweep_lims_fl:
+        sweep_min, sweep_max = find_sweep_limit(ds)
+        ds_trimmed = ds.sel(sweep=slice(sweep_min, sweep_max))
+    else:
+        ds_trimmed = ds.sel(sweep=find_allowed_sweeps(ds))
 
     ds_avg = ds_trimmed.mean(dims_to_avg)
     ds_avg = ds_avg.assign({
-        'd_current': ds_trimmed.std(dims_to_avg)['current'] / np.sqrt(ds_avg['current'].size),
+        'd_current': (ds_trimmed.std(dims_to_avg)['current']
+                      / np.sqrt(np.prod([ds_trimmed[dim].size for dim in dims_to_avg]))),
         'std_current': ds_trimmed.std(dims_to_avg)['current']
     })
     return ds_avg
@@ -99,6 +105,13 @@ def preprocess_average_downsample(ds, downsample_to=500, dims_to_avg=('sweep', '
     return ds
 
 
+def preprocess_average_coarsen(ds, coarsen_to=500, dims_to_avg=('sweep', 'direction')):
+    ds = preprocess_average(ds, dims_to_avg=dims_to_avg)
+    cf = int(len(ds.time) / coarsen_to)
+    ds = ds.coarsen(time=cf).mean()
+    return ds
+
+
 def preprocess_average_downsample_old(ds, downsample_to=500):
     ds = ds.reset_index('time', drop=True).load()
     dsf = int(len(ds.time) / downsample_to)
@@ -108,8 +121,10 @@ def preprocess_average_downsample_old(ds, downsample_to=500):
     return ds_avg
 
 
-def find_sweep_limit(ds, probe=0):
-    max_current = ds['current'].mean('direction').max('time').isel(probe=probe)
+def find_sweep_limit(ds, probe=None):
+    if probe is None:
+        probe = 'S' if 'S' in ds.probe.values else 'B'
+    max_current = ds['current'].mean('direction').max('time').sel(probe=probe)
 
     max_current_trim = max_current.where(exclude_outliers_cond(max_current, 1.5), drop=True)
     max_current_trim_2 = max_current_trim.where(exclude_outliers_cond(max_current_trim, 2.5), drop=True)
@@ -117,12 +132,41 @@ def find_sweep_limit(ds, probe=0):
     return max_current_trim_2["sweep"].min().values, max_current_trim_2["sweep"].max().values
 
 
-def exclude_outliers_cond(da, n=2):
+def find_allowed_sweeps(ds, min_fl=True, probes=None):
+    """
+    This is a tweak to 'find_sweep_limit' to filter out arcs as well as the
+    end of the shot.
+    """
+    if probes is None:
+        probes = ds.probe.values
+
+    allowed_sweeps = None
+
+    for probe in probes:
+        if min_fl:
+            sweep_current = ds['current'].mean('direction').min('time').sel(probe=probe)
+        else:
+            sweep_current = ds['current'].mean('direction').max('time').sel(probe=probe)
+
+        # Create entirely True array of same length = n_sweeps
+        if allowed_sweeps is None:
+            allowed_sweeps = np.full(sweep_current.size, True)
+
+        current_filter_1 = sweep_current.where(exclude_outliers_cond(sweep_current, 1.5))
+        current_filter_2 = current_filter_1.where(exclude_outliers_cond(current_filter_1, 2.5))
+
+        allowed_sweeps = np.logical_and(allowed_sweeps, np.isfinite(current_filter_2))
+
+    return allowed_sweeps
+
+
+def exclude_outliers_cond(da, n=2.0):
     return np.abs(da - da.median()) < n * da.std()
 
 
 def get_dataset_from_indices(indices, parallel=True, preprocess='average', load_fl=True, anglescan_fl=True,
-                             average_direction_fl=True, path_to_analysed_datasets='analysed_2'):
+                             average_direction_fl=True, path_to_analysed_datasets='analysed_2',
+                             check_sweep_trim_fl=False):
     # Create a dataframe of relevant metadata about the analysed datasets
     analysed_metadata_df = get_dataset_metadata(path_to_analysed_datasets)
     analysed_metadata_oi = analysed_metadata_df.loc[indices]
@@ -132,6 +176,13 @@ def get_dataset_from_indices(indices, parallel=True, preprocess='average', load_
     shot_numbers = analysed_metadata_oi['shot_number'].values
     shot_numbers_da = xr.DataArray(shot_numbers, dims=['shot_number'], name='shot_number')
     min_sweep_len = analysed_metadata_oi['sweep_len'].min()
+    min_time_len = analysed_metadata_oi['time_len'].min()
+
+    if check_sweep_trim_fl:
+        print('Plotting sweep trimming for all shots and probes.')
+        for filename in files_oi:
+            downsampling = 100 if 'downsampled' not in path_to_analysed_datasets else 1
+            plot_shot_trimming(filename, downsample=downsampling)
 
     # Select meta data for shots of interest
     shot_metadata_oi = shot_metadata_ds.sel(shot_number=shot_numbers)
@@ -146,6 +197,9 @@ def get_dataset_from_indices(indices, parallel=True, preprocess='average', load_
     elif preprocess == 'average_downsample':
         combined_ds = xr.open_mfdataset(files_oi, concat_dim=shot_numbers_da, preprocess=preprocess_average_downsample,
                                         parallel=parallel, combine='nested')
+    elif preprocess == 'average_coarsen':
+        combined_ds = xr.open_mfdataset(files_oi, concat_dim=shot_numbers_da, parallel=parallel, combine='nested',
+                                        preprocess=lambda x: preprocess_average_coarsen(x, min_time_len))
     elif preprocess == 'autosel':
         combined_ds = xr.open_mfdataset(files_oi, concat_dim=shot_numbers_da, preprocess=preprocess_autosel,
                                         parallel=parallel, combine='nested')
@@ -163,7 +217,7 @@ def get_dataset_from_indices(indices, parallel=True, preprocess='average', load_
         tilt=tilt_da['shot_tilt'])
 
     if anglescan_fl:
-        anglescan_ds = combined_ds.swap_dims({'shot_number': 'tilt'})  # .mean('direction')
+        anglescan_ds = combined_ds.swap_dims({'shot_number': 'tilt'}).reset_coords()
 
         # Reorganise to make tilt and probe dimensions
         probes_1 = anglescan_ds.sel(probe=['S', 'L']).groupby(
@@ -178,15 +232,42 @@ def get_dataset_from_indices(indices, parallel=True, preprocess='average', load_
 
     return combined_ds
 
+
+def plot_shot_trimming(filename, probes=None, downsample=100):
+    analysis_ds = xr.open_dataset(filename)
+    swp_lim_dn, swp_lim_up = find_sweep_limit(analysis_ds)
+
+    if probes is None:
+        probes = analysis_ds['probe'].values
+
+    fig, ax = plt.subplots(len(probes), sharex=True)
+
+    if len(probes) == 1:
+        ax = [ax]
+
+    for i, probe in enumerate(probes):
+        semi_coarse_ds = analysis_ds.coarsen(time=downsample).mean().mean('direction')
+        semi_coarse_ds.sel(probe=probe)['current'].max('time').plot.line(x='sweep', ax=ax[i], label='raw')
+        semi_coarse_ds.sel(probe=probe).isel(sweep=slice(swp_lim_dn, swp_lim_up))['current'].max('time')\
+            .plot.line(x='sweep', ax=ax[i], label='trimmed')
+        ax[i].legend()
+
+    return fig
+
+
 ###############################################################
 #                           Fitting                           #
 ###############################################################
 
 
-def fit_magnum_ds(magnum_subset_ds, probes=('L', 'S', 'B', 'R'), ax=True, scan_param='tilt', threshold='auto',
-                  fitter=None):
+def fit_magnum_ds(magnum_subset_ds, probes=('L', 'S', 'B', 'R'), ax=True, scan_param='tilt', scan_selection=None,
+                  threshold='auto', fitter=None, print_fl=False, temp_from_phi_fl=True, multi_fit_fl=True, mass=1, Z=1,
+                  **kwargs):
     if fitter is None:
         fitter = fts.FullIVFitter()
+
+    if scan_selection is not None:
+        magnum_subset_ds = magnum_subset_ds.sel(scan_selection)
 
     metadata_labels = [
         scan_param,
@@ -210,11 +291,22 @@ def fit_magnum_ds(magnum_subset_ds, probes=('L', 'S', 'B', 'R'), ax=True, scan_p
         'chi2',
         'reduced_chi2'
     ]
+    phi_labels = [
+        'phi',
+        'temp_phi',
+        'temp_fit_phi'
+    ]
+    if temp_from_phi_fl:
+        fit_param_labels += phi_labels
+
     all_labels = metadata_labels + fit_param_labels
+
     fit_df = pd.DataFrame(columns=all_labels)
 
     for scan_param_value in magnum_subset_ds[scan_param].values:
         scan_param_ds = magnum_subset_ds.sel(**{scan_param: scan_param_value})
+        if print_fl:
+            print(f'\n\n -- ({scan_param_ds.shot_number.values}) Running fit on {scan_param} with {scan_param_value} -- \n')
         for probe in probes:
             probe_paramscan_ds = scan_param_ds.sel(probe=probe)
             probe_paramscan_ds = probe_paramscan_ds.where(np.isfinite(probe_paramscan_ds['voltage']), drop=True)
@@ -237,16 +329,18 @@ def fit_magnum_ds(magnum_subset_ds, probes=('L', 'S', 'B', 'R'), ax=True, scan_p
                 probe_paramscan_ds = probe_paramscan_ds.isel(time=ext_iv_indices)
             elif isinstance(threshold, float):
                 probe_paramscan_ds = probe_paramscan_ds.where(probe_paramscan_ds.current < threshold, drop=True)
-            else:
+            elif print_fl:
                 print('No threshold set, continuing with full sweep.')
 
             if scan_param == 'tilt':
-                alpha = scan_param_value
+                tilt = scan_param_value
             else:
-                alpha = np.radians(probe_paramscan_ds['tilt'].values[0])
+                tilt = np.array(probe_paramscan_ds['tilt'].values, ndmin=1)[0]
+            alpha = np.radians(tilt)
 
             if len(probe_paramscan_ds.time) == 0:
-                print('Time has no length, continuing...')
+                if print_fl:
+                    print('Time has no length, continuing...')
                 continue
 
             shot_iv = iv.IVData(probe_paramscan_ds['voltage'].values,
@@ -254,18 +348,44 @@ def fit_magnum_ds(magnum_subset_ds, probes=('L', 'S', 'B', 'R'), ax=True, scan_p
                                 probe_paramscan_ds['shot_time'].values,
                                 sigma=probe_paramscan_ds['d_current'].values)
 
-            try:
-                #             shot_fit = shot_iv.multi_fit(sat_region=-40)
-                shot_fit = fitter.fit_iv_data(shot_iv, sigma=shot_iv['sigma'])
+            # Generate a guess for a 4-parameter IV characteristic
+            temp_guess = probe_paramscan_ds['ts_temperature'].mean().values
+            dens_guess = probe_paramscan_ds['ts_density'].mean().values
+            a_guess = magnum_probes[probe].get_sheath_exp_param(temp_guess, dens_guess, alpha)
+            isat_guess = probe_paramscan_ds['current'].min('time').values
+            v_f_guess = fitter.find_floating_pot_iv_data(shot_iv)
 
-                dens = magnum_probes[probe].get_density(shot_fit.get_isat(), shot_fit.get_temp(), alpha=alpha)
+            initial_params = fitter.generate_guess(
+                temperature=temp_guess,
+                floating_potential=v_f_guess,
+                isat=isat_guess,
+                sheath_exp_param=a_guess
+            )
+            if print_fl:
+                print(f"First guess initial_params: {[temp_guess, dens_guess, isat_guess, v_f_guess]}")
+                print(f"Generated initial_params: {initial_params}")
+
+            try:
+                if multi_fit_fl:
+                    shot_fit = shot_iv.multi_fit(print_fl=print_fl, stage_2_guess=initial_params, iv_fitter=fitter,
+                                                 **kwargs)
+                else:
+                    shot_fit = fitter.fit_iv_data(shot_iv, sigma=shot_iv['sigma'], initial_vals=initial_params)
+
+                dens = magnum_probes[probe].get_density(shot_fit.get_isat(), shot_fit.get_temp(), alpha=alpha,
+                                                        mass=mass, Z=Z)
                 d_dens = magnum_probes[probe].get_d_density(
                     shot_fit.get_isat(),
                     shot_fit.get_isat_err(),
                     shot_fit.get_temp(),
                     shot_fit.get_temp_err(),
-                    alpha=alpha
+                    alpha=alpha,
+                    mass=mass,
+                    Z=Z,
                 )
+                if isinstance(dens, collections.Iterable):
+                    dens = dens[0]
+                    d_dens = d_dens[0]
 
                 fit_params = {
                     'fit_success_fl': True,
@@ -282,6 +402,17 @@ def fit_magnum_ds(magnum_subset_ds, probes=('L', 'S', 'B', 'R'), ax=True, scan_p
                     'chi2': shot_fit.chi2,
                     'reduced_chi2': shot_fit.reduced_chi2,
                 }
+
+                if temp_from_phi_fl:
+                    phi = shot_iv.estimate_phi()
+                    temp_phi = lpu.estimate_temperature(shot_iv.get_vf(), phi)
+                    temp_fit_phi = lpu.estimate_temperature(shot_fit.get_floating_pot(), phi)
+                    fit_params.update({
+                        'phi': phi,
+                        'temp_phi': temp_phi,
+                        'temp_fit_phi': temp_fit_phi
+                    })
+
                 if ax is not None:
                     if ax is True:
                         fig, ax = plt.subplots()
@@ -290,6 +421,7 @@ def fit_magnum_ds(magnum_subset_ds, probes=('L', 'S', 'B', 'R'), ax=True, scan_p
                     ax.plot(*shot_fit.get_fit_plottables())
             except RuntimeError as e:
                 print(f'WARNING: Failed on {scan_param}={scan_param_value} with probe {probe}')
+                print(e)
                 fit_params = {label: np.NaN for label in fit_param_labels}
                 fit_params['fit_success_fl'] = False
 
@@ -297,13 +429,79 @@ def fit_magnum_ds(magnum_subset_ds, probes=('L', 'S', 'B', 'R'), ax=True, scan_p
                 scan_param: scan_param_value,
                 'probe': probe,
                 'B': np.around(probe_paramscan_ds['shot_b_field'].mean().values, decimals=1),
-                'ts_temp': probe_paramscan_ds['ts_temperature'].mean().values,
-                'ts_dens': probe_paramscan_ds['ts_density'].mean().values,
+                'ts_temp': probe_paramscan_ds['ts_temperature'].max().values,
+                'ts_dens': probe_paramscan_ds['ts_density'].max().values,
                 **fit_params,
             }, ignore_index=True)
 
     return fit_df
 
+
+DEFAULT_PROBES = ('S', 'L', 'B')
+DEFAULT_SETTINGS = {'mode': 3, 'trimming_vals': (0.3, 0.02, 0.02), 'sat_region': -30}
+DEFAULT_PROBES_SETTINGS = ((DEFAULT_PROBES, DEFAULT_SETTINGS), )
+
+
+def fit_multi_magnum_ds(angle_scan_ds, probes_settings=DEFAULT_PROBES_SETTINGS, **kwargs):
+    fit_dfs = []
+    if not isinstance(probes_settings, dict):
+        probes_settings = dict(probes_settings)
+
+    for probes, settings in probes_settings.items():
+        if not isinstance(probes, collections.Iterable):
+            probes = tuple(probes)
+        fit_df = fit_magnum_ds(angle_scan_ds, probes=probes, **settings, **kwargs)
+        fit_dfs.append(fit_df)
+
+    return pd.concat(fit_dfs)
+
+
+def combine_fit_ds(fit_df, magnum_subset_ds, probes=('L', 'S', 'B', 'R'), index_dim='tilt'):
+    fit_ds = fit_df.to_xarray().set_coords(['probe', index_dim]).swap_dims({'index': index_dim}).drop('index')
+
+    probe_datasets = []
+    for i, probe in enumerate(probes):
+        probe_datasets.append(fit_ds.where(fit_ds.probe == probe, drop=True).drop('probe'))
+
+    probe_da = xr.DataArray(list(probes), dims=['probe'], name='probe')
+    restacked_fit_ds = xr.concat(probe_datasets, dim=probe_da)
+
+    combined_ds = xr.merge([magnum_subset_ds, restacked_fit_ds])
+    combined_ds['normal_tilt'] = 90 - combined_ds['tilt']
+    return combined_ds
+
+
+def interpolate_ts_position(dataset, uncertainty=1.5, offset=0, aggregate_dims=('probe', 'tilt'), probes=None,
+                            print_fl=True):
+    if probes is None:
+        probes = lpu.MagnumProbes()
+
+    if aggregate_dims is None:
+        ts_temp = dataset.ts_temperature
+        ts_d_temp = dataset.ts_d_temperature
+        ts_dens = dataset.ts_density
+        ts_d_dens = dataset.ts_d_density
+    else:
+        ts_temp = dataset.ts_temperature.mean(aggregate_dims)
+        ts_d_temp = dataset.ts_temperature.std(aggregate_dims)
+        ts_dens = dataset.ts_density.mean(aggregate_dims)
+        ts_d_dens = dataset.ts_density.std(aggregate_dims)
+
+    ts_probe_temps = {}
+    ts_probe_denss = {}
+    ts_probe_d_temps = {}
+    ts_probe_d_denss = {}
+    for probe, probe_pos in probes.probe_position.items():
+        probe_pos += offset
+        probe_pos_limits = [probe_pos, probe_pos - uncertainty, probe_pos + uncertainty]
+        if print_fl:
+            print(probe, probe_pos)
+        ts_probe_temps[probe.upper()] = ts_temp.interp(ts_radial_pos=probe_pos_limits).values
+        ts_probe_denss[probe.upper()] = ts_dens.interp(ts_radial_pos=probe_pos_limits).values
+        ts_probe_d_temps[probe.upper()] = ts_d_temp.interp(ts_radial_pos=probe_pos_limits).values
+        ts_probe_d_denss[probe.upper()] = ts_d_dens.interp(ts_radial_pos=probe_pos_limits).values
+
+    return ts_probe_temps, ts_probe_denss, ts_probe_d_temps, ts_probe_d_denss
 
 # ############ Plotting routines ############ #
 
@@ -378,6 +576,9 @@ def plot_anglescan_multi_ts(anglescan_ds, ax=None, sup_title=None, probe='S'):
 
 
 def fit_by_upper_index(iv_data_ds, upper_index, ax=None, multi_fit_fl=False, plot_fl=True):
+    """
+    This has been superceded by the IVData method fit_to_minimum()
+    """
     import flopter.core.fitters as f
 
     # Determine which way round the sweep goes
@@ -430,6 +631,7 @@ def fit_by_upper_index(iv_data_ds, upper_index, ax=None, multi_fit_fl=False, plo
 
     return shot_fit
 
+# Density scan / non-tilt-indexed scan plotting functions
 
 def plot_densscan_multi_ts(densscan_ds, ax=None, sup_title=None):
     ts_temp = densscan_ds['ts_temperature']
@@ -468,3 +670,36 @@ def plot_densscan_paramspace(densscan_ds, ax=None, sup_title=None):
     plt.show()
     math_str = r'$T_e n_e$'
     plt.suptitle(f'Thomson Scattering {math_str} parameter space for {sup_title}')
+
+
+def plot_densscan_ivs(densscan_ds):
+    probes = np.array(densscan_ds.probe.values, ndmin=1)
+
+    if len(probes) == 1:
+        fig, ax = plt.subplots()
+        densscan_ds.set_coords('voltage')['current'].plot.line(x='voltage', hue='shot_number', ax=ax)
+    else:
+        fig, ax = plt.subplots(len(probes))
+        for i, probe in enumerate(probes):
+            ds = densscan_ds.sel(probe=probe)
+            ds.set_coords('voltage')['current'].plot.line(x='voltage', hue='shot_number', ax=ax[i])
+
+    return fig, ax
+
+
+def plot_densscan_timeseries(densscan_ds):
+    probes = np.array(densscan_ds.probe.values, ndmin=1)
+
+    if len(probes) == 1:
+        fig, ax = plt.subplots(2, sharex=True)
+        densscan_ds['current'].plot.line(x='time', hue='shot_number', ax=ax[0])
+        densscan_ds['voltage'].plot.line(x='time', hue='shot_number', ax=ax[1])
+
+    else:
+        fig, ax = plt.subplots(2, len(probes), sharex=True)
+        for i, probe in enumerate(probes):
+            ds = densscan_ds.sel(probe=probe)
+            ds['current'].plot.line(x='time', hue='shot_number', ax=ax[i][0])
+            ds['voltage'].plot.line(x='time', hue='shot_number', ax=ax[i][1])
+
+    return fig, ax
