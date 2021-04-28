@@ -273,6 +273,13 @@ class SpiceTData(object):
         if convert:
             self._convert(self.converter.__class__)
 
+    def get_size_estimate(self):
+        nbytes_tot = 0
+        for value in self.t_dict.values():
+            if hasattr(value, 'nbytes'):
+                nbytes_tot += value.nbytes
+        return nbytes_tot
+
     def deallocate(self):
         # Deallocate the t_dict dictionary if deemed unnecessary to keep the data in dict form.
         del self.t_dict
