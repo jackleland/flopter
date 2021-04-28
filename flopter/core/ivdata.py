@@ -47,6 +47,8 @@ class IVData(dict):
 
         if isinstance(sigma, coll.Sized) and len(sigma) == len(voltage):
             self[c.SIGMA] = sigma
+        else:
+            raise ValueError(f'Sigma passed is wrong length ({len(sigma)} != {len(voltage)})')
 
         if estimate_error_fl and c.SIGMA not in self:
             str_sec = np.where(self[c.POTENTIAL] <= sat_region)
@@ -58,19 +60,29 @@ class IVData(dict):
             self.untrimmed_items[k] = v
 
     @classmethod
-    def from_dataset(cls, ds, sigma=c.XSIGMA):
+    def from_dataset(cls, ds, sigma=c.XSIGMA, separate_current_fl=False):
         """
         Pseudo constructor to create an IVData object from an xarray dataset.
         The data_var to use as the error in the current value can be specified.
 
-        :param ds:      Dataset containing data relating to an IV characteristc
-                        to be made into an IVData object
-        :param sigma:   Label for the data_var to be used as sigma in the IVData
-        :return:        IVData object
+        :param ds:          Dataset containing data relating to an IV
+                            characteristic to be made into an IVData object
+        :param sigma:       Label for the data_var to be used as sigma in the
+                            IVData
+        :param e_current:   Label for the data_var to be used as e_current in
+                            the IVData. Default is None, which adds nothing.
+        :param i_current:   Label for the data_var to be used as i_current in
+                            the IVData. Default is None, which adds nothing.
+        :return:            IVData object
 
         """
+        e_current = None
+        i_current = None
+        if separate_current_fl:
+            e_current = ds[c.XECURRENT].values
+            i_current = ds[c.XICURRENT].values
         return cls(ds[c.XVOLTAGE].values, ds[c.XCURRENT].values, ds[c.XTIME].values, sigma=ds[sigma].values,
-                   estimate_error_fl=False)
+                   i_current=i_current, e_current=e_current, estimate_error_fl=False)
 
     def split(self):
         """
@@ -149,13 +161,46 @@ class IVData(dict):
         df.to_csv(filename)
 
     def get_vf(self):
-        iv_interp = interpolate.interp1d(self[c.CURRENT], self[c.POTENTIAL])
-        v_float = iv_interp([0.0])
+        import flopter.core.fitters as f
+        v_float = f.IVFitter.find_floating_pot_iv_data(self)
         return v_float
 
     def get_vf_index(self):
         iv_interp = interpolate.interp1d(self[c.CURRENT], np.arange(len(self[c.CURRENT])))
         return int(iv_interp(0.0).round())
+
+    def estimate_phi(self, plot_fl=False, method='gradient'):
+        if plot_fl:
+            fig, ax = plt.subplots(2, sharex=True)
+            self.plot(ax=ax[0])
+
+        if method == 'gradient':
+            current_grad = np.gradient(self['I'])
+            voltage_interp = self['V']
+
+        elif method == 'spline':
+            current_spl = interpolate.UnivariateSpline(self['V'], self['I'], s=1e-6, k=4)
+            voltage_interp = np.linspace(self['V'][0], self['V'][-1], 100000)
+            if plot_fl:
+                ax[0].plot(voltage_interp, current_spl(voltage_interp), zorder=10)
+
+            current_grad_spl = current_spl.derivative(n=1)
+            current_grad = current_grad_spl(voltage_interp)
+        else:
+            raise ValueError(f'Given value for method ({method}) not valid. Please use "gradient" or "spline".')
+
+        if self['I'][0] > self['I'][-1]:
+            phi = voltage_interp[np.argmin(current_grad)]
+        else:
+            phi = voltage_interp[np.argmax(current_grad)]
+
+        if plot_fl:
+            ax[1].plot(voltage_interp, current_grad)
+            ax[1].axvline(x=phi, color='red', linewidth=0.5)
+            ax[1].set_ylabel(r'\prime{I}')
+
+        # TODO: Output an error estimate
+        return phi
 
     def get_below_floating(self, v_f=None, print_fl=False):
         if v_f is None:
@@ -230,8 +275,9 @@ class IVData(dict):
         copied_iv_data.untrimmed_items = self.untrimmed_items
         return copied_iv_data
 
-    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, iv_fitter=None, sat_fitter=None, fix_vf_fl=False,
-                  plot_fl=False, print_fl=False, minimise_temp_fl=True, trim_to_floating_fl=True, **kwargs):
+    def multi_fit(self, sat_region=_DEFAULT_STRAIGHT_CUTOFF, stage_2_guess=None, iv_fitter=None, sat_fitter=None,
+                  fix_vf_fl=False, plot_fl=False, print_fl=False, minimise_temp_fl=True, trim_to_floating_fl=True,
+                  **kwargs):
         """
         Multi-stage fitting method using an initial straight line fit to the
         saturation region of the IV curve (decided by the sat_region kwarg). The
@@ -245,6 +291,17 @@ class IVData(dict):
                             current for subsequent fits.
         :param sat_fitter:  Fitter object to be used for the initial saturation
                             region fit
+        :param stage_2_guess:
+                            Tuple-like containing starting values for all
+                            parameters in iv_fitter, to be used as initial
+                            parameters in the second stage fit. Note that only
+                            the temperature (and optionally sheath expansion
+                            parameter) will be used, as the isat will
+                            already have a value (by design) and the floating
+                            potential is set at the interpolated value. These
+                            will be overwritten if present. Default behaviour
+                            (stage_2_guess=None) is to use the defaults on the
+                            iv_fitter object.
         :param iv_fitter:   Fitter object to be used for the fixed-I_sat fit and
                             the final, full, free fit.
         :param plot_fl:     (Boolean) If true, plots the output of all 3 stages
@@ -260,6 +317,12 @@ class IVData(dict):
                             fits are performed at a range of upper indices past
                             the floating potential, with the fit producing the
                             lowest temperature returned.
+        :param trim_to_floating_fl:
+                            (Boolean) Flag to control whether to truncate the IV
+                            characteristic to values strictly below the floating
+                            potential before fitting. This is ignored by the
+                            minimisation routine, so the full IV will be used in
+                            that case.
         :return:            (IVFitData) Full 4-parameter IVFitData object
 
         """
@@ -303,14 +366,24 @@ class IVData(dict):
             isat_guess = stage1_f_data.get_isat()
         else:
             isat_guess = stage1_f_data.fit_function(sat_region)
+
         if fix_vf_fl:
             iv_fitter.set_fixed_values({c.FLOAT_POT: v_f, c.ION_SAT: isat_guess})
         else:
             iv_fitter.set_fixed_values({c.ION_SAT: isat_guess})
+
+        if stage_2_guess is None:
+            stage_2_guess = list(iv_fitter.default_values)
+        elif len(stage_2_guess) != len(iv_fitter.default_values):
+            raise ValueError(f'stage_2_guess is not of the appropriate length ({len(stage_2_guess)}) for use as initial '
+                             f'parameters in the given iv_fitter (should be length {len(iv_fitter.default_values)}).')
+        stage_2_guess[iv_fitter.get_isat_index()] = isat_guess
+        stage_2_guess[iv_fitter.get_vf_index()] = v_f
         
         # Attempt second stage fit
         try:
-            stage2_f_data = iv_fitter.fit_iv_data(iv_data_trim, sigma=iv_data_trim[c.SIGMA])
+            stage2_f_data = iv_fitter.fit_iv_data(iv_data_trim, sigma=iv_data_trim[c.SIGMA],
+                                                  initial_vals=stage_2_guess)
         except RuntimeError as e:
             raise MultiFitError(f'RuntimeError occured in stage 2. \n'
                                 f'Original error: {e}')
@@ -468,6 +541,7 @@ class IVData(dict):
                                 > 2 = |chi² - 1| + 1
                                 > 3 = T_e · dT_e
                                 > 4 = T_e
+                                > 5 = |T_e - 1|
                                 Prototyping for these parameters was created in
                                 a jupyter notebook, see that for more details.
         :param plot_fl:         (Boolean) Flag to control whether the process is
@@ -509,10 +583,11 @@ class IVData(dict):
                                    min(vf_index + trim_range_dndist, len(self['t'])),
                                    trim_range_step)
 
+        ax_big = None
         if plot_fl:
-            height_ratios = [2.5, 1, 1, 1, 1]
+            height_ratios = [2.5, 1, 1, 1, 1, 1]
             fig = plt.figure(constrained_layout=True)
-            gs = fig.add_gridspec(ncols=2, nrows=5, height_ratios=height_ratios)
+            gs = fig.add_gridspec(ncols=2, nrows=6, height_ratios=height_ratios)
 
             ax = []
 
@@ -525,7 +600,7 @@ class IVData(dict):
             ax_big.axvline(x=self['V'][min(trim_range)], linewidth=0.7, color='black')
             ax_big.legend()
 
-            for row in range(1, 5):
+            for row in range(1, 6):
                 ax_left = fig.add_subplot(gs[row, 0])
                 ax_right = fig.add_subplot(gs[row, 1])
                 ax.append([ax_left, ax_right])
@@ -534,6 +609,10 @@ class IVData(dict):
         trimmed_fits = []
         temps = np.array([])
         d_temps = np.array([])
+        isats = np.array([])
+        d_isats = np.array([])
+        sheathexps = np.array([])
+        d_sheathexps = np.array([])
         chis = np.array([])
         volts = np.array([])
         for i in trim_range:
@@ -552,15 +631,27 @@ class IVData(dict):
                 for fp in trim_fit.fit_params:
                     error_ratio = fp.error / fp.value
                     if error_ratio > self.MINFIT_ERR_RATIO:
-                        raise RuntimeError(f'Fit produced parameter with unacceptable error ratio ({error_ratio})')
+                        raise RuntimeError(f'Fit produced a parameter with an unacceptable error ratio ({error_ratio})')
 
                 trimmed_fits.append(trim_fit)
 
                 # Append values relevant to minimisation param to their respective arrays
-                temps = np.append(temps, trim_fit.get_temp())
                 volts = np.append(volts, np.max(trim_fit.raw_x))
+                temps = np.append(temps, trim_fit.get_temp())
                 d_temps = np.append(d_temps, trim_fit.get_temp_err())
+                isats = np.append(isats, trim_fit.get_isat())
+                d_isats = np.append(d_isats, trim_fit.get_isat_err())
                 chis = np.append(chis, trim_fit.reduced_chi2)
+
+                # Check if sheath expansion parameter is present and append zeros if not. This would happen if using a
+                # 3-parameter fit.
+                if c.SHEATH_EXP in trim_fit:
+                    sheathexps = np.append(sheathexps, trim_fit.get_sheath_exp())
+                    d_sheathexps = np.append(d_sheathexps, trim_fit.get_sheath_exp_err())
+                else:
+                    sheathexps = np.append(sheathexps, 0.0)
+                    d_sheathexps = np.append(d_sheathexps, 0.0)
+
             except RuntimeError as e:
                 if print_fl:
                     print(f'Temp-minimisation fit failed on index {i}\n:'
@@ -574,6 +665,7 @@ class IVData(dict):
         alt_chi_param = np.abs(chis - 1)
         goodness_param = temp_param * chi_param
         alt_goodness_param = temp_param * alt_chi_param
+        alt_temp_param = np.abs(temps - 1)
 
         # Get the indices for the minimum values for each of the parameters
         minimisable_params = [
@@ -582,6 +674,7 @@ class IVData(dict):
             chi_param,
             temp_param,
             temps,
+            alt_temp_param,
         ]
 
         if plot_fl:
@@ -591,20 +684,26 @@ class IVData(dict):
             alt_chi_param_minv = volts[np.argmin(alt_chi_param)]
             alt_goodness_minv = volts[np.argmin(alt_goodness_param)]
             goodness_minv = volts[np.argmin(goodness_param)]
+            t_param_minv = volts[np.argmin(alt_temp_param)]
 
             chi2_str = r'$\chi^{2}_{\nu}$'
             temp_str = r'$T_e$'
             d_temp_str = r'$\Delta T_e$'
+            isat_str = r'$I_{sat}$'
+            a_str = r'$a$'
             chi_param_str = r'$|\chi^{2}_{\nu} - 1| + 1$'
             alt_chi_param_str = r'$|\chi^{2}_{\nu} - 1|$'
             d_temps_ratio_str = r'$\frac{\Delta T_e}{T_e}$'
+            alt_temp_param_str = r'$|T_e - 1|$'
 
             ax[0][0].errorbar(volts, temps, yerr=d_temps)
+            ax[0][0].plot(volts, alt_temp_param, label=alt_temp_param_str)
             ax[0][0].set_ylabel(temp_str)
             ax[0][0].axvline(x=t_minv, color='blue', linestyle='--', label='T min')
             ax[0][0].axvline(x=t_dt_minv, color='purple', linestyle='--', )
             ax[0][0].axvline(x=chi_param_minv, color='green', linestyle='--', )
             ax[0][0].axvline(x=goodness_minv, color='red', linestyle='--', )
+            ax[0][0].axvline(x=t_param_minv, color='pink', linestyle=':', label=alt_temp_param_str)
 
             ax[0][1].plot(volts, chis, label=chi2_str)
             ax[0][1].axhline(y=1, **c.AX_LINE_DEFAULTS)
@@ -615,35 +714,41 @@ class IVData(dict):
             ax[0][1].axvline(x=chi_param_minv, color='green', linestyle='--', )
             ax[0][1].axvline(x=goodness_minv, color='red', linestyle='--', )
 
-            ax[1][0].plot(volts, temp_param)
-            ax[1][0].set_ylabel(temp_str + r'$\cdot$' + d_temp_str)
-            ax[1][0].set_yscale('log')
-            ax[1][0].axvline(x=t_dt_minv, color='purple', linestyle='--', label=r'$T \cdot \Delta T$')
+            ax[1][0].errorbar(volts, isats, yerr=d_isats, label=isat_str)
+            ax[1][0].set_ylabel(isat_str)
 
-            ax[1][1].plot(volts, d_temps / temps)
-            ax[1][1].set_ylabel(d_temps_ratio_str)
-            ax[1][1].set_yscale('log')
-            ax[1][1].axhline(y=self.MINFIT_ERR_RATIO, color='black', linewidth=0.75, label='Threshold')
+            ax[1][1].errorbar(volts, sheathexps, yerr=d_sheathexps, label='a')
+            ax[1][1].set_ylabel(a_str)
 
-            ax[2][0].plot(volts, chi_param)
+            ax[2][0].plot(volts, temp_param)
+            ax[2][0].set_ylabel(temp_str + r'$\cdot$' + d_temp_str)
             ax[2][0].set_yscale('log')
-            ax[2][0].set_ylabel(chi_param_str)
-            ax[2][0].axvline(x=chi_param_minv, color='green', linestyle='--', label=chi_param_str)
+            ax[2][0].axvline(x=t_dt_minv, color='purple', linestyle='--', label=r'$T \cdot \Delta T$')
 
-            ax[2][1].plot(volts, alt_chi_param)
+            ax[2][1].plot(volts, d_temps / temps)
+            ax[2][1].set_ylabel(d_temps_ratio_str)
             ax[2][1].set_yscale('log')
-            ax[2][1].set_ylabel(alt_chi_param_str)
-            ax[2][1].axvline(x=alt_chi_param_minv, color='green', linestyle='--', label=alt_chi_param_str)
+            ax[2][1].axhline(y=self.MINFIT_ERR_RATIO, color='black', linewidth=0.75, label='Threshold')
 
-            ax[3][0].plot(volts, goodness_param)
+            ax[3][0].plot(volts, chi_param)
             ax[3][0].set_yscale('log')
-            ax[3][0].set_ylabel(r'$T_e \cdot \Delta T_e \cdot (|\chi^{2}_{\nu} - 1| + 1)$')
-            ax[3][0].axvline(x=goodness_minv, color='red', linestyle='--', label='goodness')
+            ax[3][0].set_ylabel(chi_param_str)
+            ax[3][0].axvline(x=chi_param_minv, color='green', linestyle='--', label=chi_param_str)
 
-            ax[3][1].plot(volts, alt_goodness_param)
+            ax[3][1].plot(volts, alt_chi_param)
             ax[3][1].set_yscale('log')
-            ax[3][1].set_ylabel(r'$T_e \cdot \Delta T_e \cdot |\chi^{2}_{\nu} - 1|$')
-            ax[3][1].axvline(x=alt_goodness_minv, color='gold', linestyle='--', label='alt_goodness')
+            ax[3][1].set_ylabel(alt_chi_param_str)
+            ax[3][1].axvline(x=alt_chi_param_minv, color='green', linestyle='--', label=alt_chi_param_str)
+
+            ax[4][0].plot(volts, goodness_param)
+            ax[4][0].set_yscale('log')
+            ax[4][0].set_ylabel(r'$T_e \cdot \Delta T_e \cdot (|\chi^{2}_{\nu} - 1| + 1)$')
+            ax[4][0].axvline(x=goodness_minv, color='red', linestyle='--', label='goodness')
+
+            ax[4][1].plot(volts, alt_goodness_param)
+            ax[4][1].set_yscale('log')
+            ax[4][1].set_ylabel(r'$T_e \cdot \Delta T_e \cdot |\chi^{2}_{\nu} - 1|$')
+            ax[4][1].axvline(x=alt_goodness_minv, color='gold', linestyle='--', label='alt_goodness')
 
             for col in ax:
                 for axis in col:
@@ -651,6 +756,10 @@ class IVData(dict):
                     axis.legend()
 
         minimised_param_index = int(np.argmin(minimisable_params[mode], axis=None))
+        if plot_fl:
+            ax_big.axvline(x=volts[np.argmin(minimisable_params[mode])], linewidth=0.7, color='red', linestyle=':',
+                           label='Chosen')
+
         return trimmed_fits[minimised_param_index]
 
     @staticmethod
